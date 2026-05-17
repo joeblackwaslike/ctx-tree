@@ -11,7 +11,12 @@
 
 LLM context windows are a scarce, expensive, write-once resource. Tool outputs (Read, Grep, Bash) flood the window with low-signal data that compounds across turns; the model must then carry that ballast through every subsequent inference. Compaction helps but is lossy and not deterministic.
 
-**memtree** is an external, persistent, tree- and graph-shaped context store with surgical recall. Native tool outputs are captured to it via hooks. The agent then retrieves only the bytes it needs through MCP tools — leaving raw outputs in the store, not in the window.
+**memtree** is an external, persistent, tree- and graph-shaped context store with surgical recall. There are two paths into it:
+
+1. **Wrapped tools** (`memtree.read`, `memtree.grep`, `memtree.bash`) — the full output goes to the store; only a budget-bounded slice returns to the window. This is how raw outputs are kept *out* of context.
+2. **Passive capture** via a `PostToolUse` hook on the native Read/Grep/Bash — the model has already seen those outputs, so the hook can only index them for *future* recall (it cannot rewrite a tool result Claude already received).
+
+Retrieval happens through MCP tools (`search`, `compose`, `neighbors`) and pulls only the bytes needed.
 
 ### Goals (v1)
 
@@ -53,7 +58,7 @@ Single-file embedded DB with:
 
 The hash is cached in memory for the lifetime of the server process.
 
-Rationale: stable across moves, renames, and clones; degrades gracefully for non-git directories.
+Rationale: path-dependent by design — moving or re-cloning the repo to a different absolute path yields a new hash and a fresh store. Including the first-commit SHA reduces collision risk between unrelated repos that happen to share a path. If clone-stable IDs are needed later, swap `git_root_path` for the canonical remote URL; this is deferred because it's brittle for repos without a remote.
 
 ### Sidecar config: `~/.memtree/config.json`
 
@@ -94,6 +99,8 @@ memtree is a **tree-spined graph**: every node has exactly one `parent_id` (the 
 | `mtime`        | INTEGER  | Source mtime (for `file_chunk`); 0 otherwise                   |
 | `created_at`   | INTEGER  | Epoch ms                                                       |
 | `updated_at`   | INTEGER  | Epoch ms                                                       |
+| `truncated`    | INTEGER  | 1 if content was truncated at `capture.maxBytes`; 0 otherwise  |
+| `original_bytes`| INTEGER | Pre-truncation byte count (for callers deciding whether to re-fetch) |
 | `metadata`     | TEXT     | JSON blob (token counts, tool name, line ranges, etc.)         |
 
 ### `edges` table
@@ -107,11 +114,15 @@ memtree is a **tree-spined graph**: every node has exactly one `parent_id` (the 
 
 ### `nodes_fts` (FTS5)
 
-Mirrors `id` + `content` for keyword search.
+Mirrors `id` + `content` for keyword search. Kept in sync by `AFTER INSERT`, `AFTER UPDATE`, and `AFTER DELETE` triggers on `nodes` so callers never touch it manually.
 
 ### `nodes_vec` (sqlite-vec)
 
-`(id, embedding BLOB)`; populated lazily by `embedding_indexer` walker.
+`(id, embedding BLOB, embedding_model TEXT, embedding_dim INTEGER, embedded_at INTEGER)`; populated lazily by `embedding_indexer` walker. Model name + dim are stored per-row so a mid-project embedding-model change is detected at query time — mixed-model searches are rejected with a clear error rather than returning silently bad results.
+
+### Default retrieval filter
+
+All MCP-exposed retrieval queries (`search`, `neighbors`, `path_to_root`, `recent`, `compose`) default to `WHERE status = 'live'`. Callers can opt into other statuses explicitly (e.g. for auditing or debugging), but the default is "what's currently useful."
 
 ### Status state machine
 
@@ -131,7 +142,9 @@ pending → live → stale → superseded → pruned
 
 ## 4. mcp-exec Wrapper Contract
 
-memtree wraps the native tools that today emit large outputs straight to context. Each wrapper writes to the store and returns either a node ID + summary or the raw content within a budget.
+The wrappers are memtree's **only** mechanism for keeping raw outputs out of the window. `PostToolUse` hooks cannot mutate a tool result Claude has already received — verified against the Claude Code hooks API as of 2026-05: the hook output schema is `continue` / `suppressOutput` / `systemMessage` (and Exit 2 stderr-as-error for command hooks). There is no `updatedToolOutput` analogue to PreToolUse's `updatedInput`. The hook can only *add* context as a separate system message; it cannot replace the tool result the model already saw.
+
+So the contract is: each wrapper writes the full output to the store and returns either a node ID + bounded preview, or the raw content within a caller-specified token budget. The agent reaches for these instead of the native Read/Grep/Bash whenever it expects the output to be large.
 
 ### Wrapped tools (MCP server exposes)
 
@@ -141,8 +154,8 @@ memtree wraps the native tools that today emit large outputs straight to context
 
 ### Cache invalidation
 
-- For `file_chunk` nodes: compare `mtime` on retrieval; if source file changed, mark old node `stale`, create new node, write `supersedes` edge old → new.
-- For `tool_output` nodes: keep all (audit trail); dedupe by `content_hash` against existing nodes in same hour window.
+- For `file_chunk` nodes: compare `mtime` on retrieval; if source file changed, mark old node `stale`, create new node, write `supersedes` edge **newer → older** (the new node points back at what it replaces). This matches §3's definition of `superseded`: "pointed at by a `supersedes` edge from a newer node."
+- For `tool_output` nodes: keep all (audit trail); dedupe by `content_hash` against existing nodes in the same hour window.
 
 ### `memtree.compose(node_ids, budget_tokens, format)` — the surgical-recall tool
 
@@ -208,11 +221,32 @@ Hard deps: Node 20+, bundled `better-sqlite3`, bundled `sqlite-vec`.
 
 ## 7. Capture Strategy (PostToolUse Hook)
 
-memtree captures **all** native tool outputs for Read, Grep, Bash via a Claude Code `PostToolUse` hook. Captured data lands in `status=pending`; the `filter` walker triages.
+The `PostToolUse` hook is **passive indexing only** — it cannot rewrite the tool result Claude already saw (see §4). Its job is to make native tool outputs available for *future* `memtree.search` / `memtree.compose` calls. Captured data lands in `status=pending`; the `filter` walker triages.
 
-Rationale (vs. allowlisting specific tool/path patterns at hook level): hook-level allowlisting requires tuning per-project and risks missing relevant context; the walker has more information (size, dedupe state, recent neighbors) to make a good keep/drop call. Trade-off: store grows faster pre-filter, and the filter walker must run frequently enough that `pending` doesn't pile up. Default `filterMinSize=50` bytes and `maxBytes=100000` per node bound the worst case.
+Hook-level capture is allowlisted at the matcher (`Read|Grep|Bash`) but otherwise greedy: filtering happens in-walker, where size, dedupe state, and recent neighbors are all available. Default `filterMinSize=50` bytes and `maxBytes=100000` per node bound the worst case.
 
-Hook plumbing: `${CLAUDE_PLUGIN_ROOT}/mcp/dist/hooks/capture.js`. Writes via direct SQLite (WAL — same process model as walkers).
+### Ingestion path: hook → MCP server over Unix socket
+
+The hook does **not** open SQLite directly. A ~80–150ms Node cold start plus `better-sqlite3` load plus WAL handshake on every `Read`/`Grep`/`Bash` would be a tax the agent feels in every turn. Instead:
+
+1. The MCP server, already running for the session, listens on a Unix socket at `~/.memtree/<project-hash>/ingest.sock` (mode `0600`).
+2. The hook is a tiny script that JSON-encodes `{ tool, input, output, exit, cwd, ts }` and writes one line to the socket. No DB handle, no walker contention.
+3. The server's ingestion handler does the redacted `INSERT … status='pending'` via a prepared statement (~1ms) and acks. Any failure — socket missing, server crashed, EAGAIN — is logged to stderr and silently dropped. memtree must never block tool calls.
+
+Realistic hook overhead: **~5–15ms** end-to-end including the socket round-trip. This stays under the noise floor of most tool calls. The earlier ≤5ms claim was wrong — it omitted Node startup. The socket design dodges startup entirely because the hook itself can be a short shell script (`jq -c | socat - UNIX-CONNECT:…`) rather than a Node process.
+
+### Security: capture-time redaction
+
+`Capture-all` is fine for Read/Grep but dangerous for Bash, which can pipe `env`, `printenv`, `aws sts get-caller-identity`, `gh auth token`, etc. Filtering after the fact is too late — the secret already landed in the row, the FTS index, and (eventually) the embedding.
+
+So the ingestion handler applies redaction **before** `INSERT`:
+
+- **Command denylist** (drop the whole node): `env`, `printenv`, any binary listed in a per-project denylist file at `~/.memtree/<project-hash>/bash.deny` (one regex per line).
+- **Output-string redaction** (replace in-place with `[REDACTED:<tag>]`): regex set for AWS access keys (`AKIA…`, `ASIA…`), GitHub tokens (`ghp_`, `gho_`, `ghs_`, `ghu_`, `ghr_…`), JWT bearer tokens, `AWS_SECRET_…=`, `OPENAI_API_KEY=`, `ANTHROPIC_API_KEY=`, and generic 32+ char hex/base64 blobs following a `secret`/`token`/`password`/`key=` lexical context.
+- **Per-project opt-out**: a project can set `capture.bash = false` in its sidecar config to disable Bash capture entirely.
+- **Filesystem hardening**: `~/.memtree/<project-hash>/` created at `0700`, `store.db` at `0600`.
+
+The redaction rules ship as a versioned module so users can audit and extend them. v1 ships with the rules above plus a test fixture of known-leaky outputs that must all redact to clean state — see §11.
 
 ---
 
@@ -280,6 +314,22 @@ Short, retrieval-oriented. Activates when the agent is in a large codebase or lo
 
 Per `joe-stack-preferences`: MCP servers, plugins, and tools default to TS. Bun/Node 20 runtime. `better-sqlite3` + `sqlite-vec` bundled via npm.
 
+### Native dependencies
+
+Both `better-sqlite3` and `sqlite-vec` ship native binaries. The marketplace install flow does **not** run `npm install`, so the plugin must arrive with everything resolved.
+
+v1 ships prebuilt binaries for the three platforms users actually have:
+
+- macOS `arm64` (M-series)
+- Linux `x64`
+- Linux `arm64`
+
+Strategy: a `mcp/scripts/prepare-release.sh` script runs during release (driven by `gh release create`) and, for each target triple, fetches the prebuilt binary via `prebuild-install` for `better-sqlite3` and the matching `sqlite-vec` release artifact, then commits them into `mcp/prebuilds/<platform>-<arch>/`. The server picks the right one at startup via `process.platform` + `process.arch`.
+
+A `postinstall` fallback is documented (for users who clone the plugin manually rather than installing via marketplace), but the happy path is "install via marketplace, run, done."
+
+Other platforms (Windows, Linux `x86`, BSDs) are out of v1 scope. The server logs a clear `unsupported platform: <triple>` error and exits.
+
 ---
 
 ## 9. Future: VS Code Inspector
@@ -300,25 +350,56 @@ Out of v1 scope; called out here so the schema is designed with external read-on
 
 ## 10. Open Questions / Risks
 
-- **Hook latency.** PostToolUse runs synchronously; writing to SQLite is fast (≤5ms) but if walker workload causes WAL contention, latency could leak into tool calls. Mitigation: hook writes via a tiny `INSERT` then returns; walker handles indexing async.
+- **Hook latency.** `PostToolUse` runs synchronously. The socket-ingestion design in §7 targets ~5–15ms p50, but a slow socket write (server pinned by walker, OS scheduler hiccup) could leak into tool calls. Mitigation: hook is fire-and-forget — any failure is logged and dropped, never retried in-line. Eval harness has a p95 <20ms gate.
 - **Filter walker tuning.** `Capture-all + filter` means the filter walker is the gatekeeper of store cleanliness. Bad heuristics → store bloat. Plan: ship conservative defaults (size threshold + exact dedupe only), expose `filterMinSize` and a custom filter hook for users to extend.
-- **`summarizer` cost.** Haiku 4.5 isn't free; large sessions could accumulate calls. Mitigation: only fires when subtree exceeds threshold; rate-limited; respects daily cap in config.
-- **Embedding model drift.** If a user changes `embeddingModel` mid-project, old vectors are unusable. Mitigation: store model name in `metadata`; reject mixed-model search; offer one-shot re-embed.
-- **Project-hash collisions.** sha256 truncated to 16 hex chars (~64 bits) — collision-resistant for any realistic project count.
+- **Redaction false negatives.** Hook-time redaction (§7) is regex-based — a novel secret format will leak. Mitigation: ship a known-leaky-output test fixture in the eval harness; bias toward dropping the whole node when *any* denylist regex matches the command itself.
+- **`summarizer` cost (v1.1+).** Haiku 4.5 isn't free; large sessions could accumulate calls. Deferred from v1; when added, only fires when subtree exceeds threshold; rate-limited; respects daily cap in config.
+- **Embedding model drift (v1.1+).** Changing `embeddingModel` mid-project makes existing vectors unusable. Mitigation lives in the schema: `nodes_vec.embedding_model` + `embedding_dim` per row (§3); mixed-model search is rejected at query time; users get a one-shot re-embed command.
+- **Project-hash collisions.** sha256 truncated to 16 hex chars (~64 bits) — collision-resistant for any realistic project count. Path-dependent by design (see §2).
 
 ---
 
 ## 11. Acceptance Criteria
 
-A v1 build is "done" when:
+v1 narrows the surface vs. earlier drafts. The embedding indexer, summarizer, and dedupe walkers — and therefore semantic and hybrid search — are deferred to v1.1. They're the riskiest pieces (model drift, API cost, false-merge risk on near-duplicates), and FTS-only retrieval is more than enough to validate the rest of the architecture.
 
-1. Plugin installs via marketplace; MCP server boots; PostToolUse hook captures Read/Grep/Bash outputs.
-2. `memtree.search` returns hybrid-ranked results across a populated store.
-3. `memtree.compose(seeds, budget, format='mixed')` produces a context bundle within budget.
-4. All six walkers (filter, embedding_indexer, summarizer, dedupe, staleness_marker, pruner) run on schedule; status transitions observable in the DB.
-5. Server starts in <500ms cold; tool wrapper round-trip <50ms median for cached chunks.
-6. Graceful degradation: missing Ollama → keyword search still works; missing `ANTHROPIC_API_KEY` → summarizer no-ops without crashing.
+### v1 ships
+
+- **Wrappers**: `memtree.read`, `memtree.grep`, `memtree.bash`, `memtree.compose`.
+- **Query API**: `memtree.search` (keyword/FTS only — `mode='hybrid'` and `mode='semantic'` deferred), `memtree.neighbors`, `memtree.path_to_root`, `memtree.recent`.
+- **Walkers**: `filter`, `staleness_marker`, `pruner`.
+- **Capture**: `PostToolUse` hook → MCP-server-over-socket with redaction (§7).
+- **Bundled skill**: `using-memtree`.
+- **Prebuilt native deps** for macOS arm64 + Linux x64/arm64.
+
+### v1 is "done" when
+
+1. Plugin installs via marketplace; MCP server boots in <500ms cold; `PostToolUse` hook captures Read/Grep/Bash outputs with no measurable latency increase in tool calls (p95 ingestion <20ms).
+2. `memtree.search` returns FTS-ranked results across a populated store, defaulting to `WHERE status = 'live'`.
+3. `memtree.compose(seeds, budget, format='mixed')` produces a context bundle within the requested token budget; the manifest correctly reports included/dropped nodes.
+4. The three v1 walkers run on schedule; `pending → live → stale → pruned` transitions are observable in the DB.
+5. Tool wrapper round-trip <50ms median for cached chunks.
+6. The eval harness (below) passes on a fresh checkout.
 7. Bundled `using-memtree` skill activates and is discoverable by the agent.
+
+### Eval harness
+
+`mcp/eval/` ships with:
+
+- A **fixture repo** (~30 files, mixed sizes, with a known symbol/structure layout).
+- **Golden queries**: ~20 search assertions (term → expected top-N node IDs) and ~10 compose assertions (`compose(seed_set, budget)` → expected manifest hash).
+- **Latency assertions**: cold start <500ms; wrapper median <50ms; hook ingestion p95 <20ms.
+- **Budget assertions**: `compose` never overruns budget; `truncated` flag set correctly on capped nodes.
+- **Security assertions**: a list of known-leaky Bash outputs (env dumps, AWS creds, GitHub tokens, JWTs) must all redact to clean state *before* `INSERT` — verified by inspecting DB rows post-run.
+
+Run via `bun mcp/eval/run.ts`; CI gates on it.
+
+### Deferred to v1.1 (explicit non-goals for v1)
+
+- `embedding_indexer`, `summarizer`, `dedupe` walkers.
+- Semantic and hybrid search (`mode='semantic'`, `mode='hybrid'`).
+- Ollama and Anthropic-API soft dependencies (no embedding/summarization code paths in v1).
+- The `nodes_vec` table is created but stays empty in v1.
 
 ---
 
