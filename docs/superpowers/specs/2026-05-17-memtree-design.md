@@ -101,6 +101,8 @@ memtree is a **tree-spined graph**: every node has exactly one `parent_id` (the 
 | `updated_at`   | INTEGER  | Epoch ms                                                       |
 | `truncated`    | INTEGER  | 1 if content was truncated at `capture.maxBytes`; 0 otherwise  |
 | `original_bytes`| INTEGER | Pre-truncation byte count (for callers deciding whether to re-fetch) |
+| `truncated`    | INTEGER  | 1 if content was truncated at `capture.maxBytes`; 0 otherwise  |
+| `original_bytes`| INTEGER | Pre-truncation byte count (for callers deciding whether to re-fetch) |
 | `metadata`     | TEXT     | JSON blob (token counts, tool name, line ranges, etc.)         |
 
 ### `edges` table
@@ -313,6 +315,22 @@ Short, retrieval-oriented. Activates when the agent is in a large codebase or lo
 ### Language: TypeScript
 
 Per `joe-stack-preferences`: MCP servers, plugins, and tools default to TS. Bun/Node 20 runtime. `better-sqlite3` + `sqlite-vec` bundled via npm.
+
+### Native dependencies
+
+Both `better-sqlite3` and `sqlite-vec` ship native binaries. The marketplace install flow does **not** run `npm install`, so the plugin must arrive with everything resolved.
+
+v1 ships prebuilt binaries for the three platforms users actually have:
+
+- macOS `arm64` (M-series)
+- Linux `x64`
+- Linux `arm64`
+
+Strategy: a `mcp/scripts/prepare-release.sh` script runs during release (driven by `gh release create`) and, for each target triple, fetches the prebuilt binary via `prebuild-install` for `better-sqlite3` and the matching `sqlite-vec` release artifact, then commits them into `mcp/prebuilds/<platform>-<arch>/`. The server picks the right one at startup via `process.platform` + `process.arch`.
+
+A `postinstall` fallback is documented (for users who clone the plugin manually rather than installing via marketplace), but the happy path is "install via marketplace, run, done."
+
+Other platforms (Windows, Linux `x86`, BSDs) are out of v1 scope. The server logs a clear `unsupported platform: <triple>` error and exits.
 
 ### Native dependencies
 
