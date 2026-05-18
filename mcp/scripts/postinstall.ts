@@ -1,11 +1,5 @@
 #!/usr/bin/env bun
-/**
- * postinstall.ts — memtree MCP post-install check
- *
- * Verifies platform compatibility and warns if the `rg` (ripgrep) binary is
- * not available in PATH. Does NOT download any binaries — bun:sqlite is
- * built-in to Bun and tree-sitter natives are compiled by `bun install`.
- */
+import { spawnSync } from 'child_process';
 
 const SUPPORTED = new Set([
   "darwin-arm64",
@@ -25,8 +19,8 @@ if (!SUPPORTED.has(platform)) {
 
 // Check for rg (ripgrep) — required at runtime for code-search tools.
 // Warn but do not fail: the user may install it separately.
-const rg = Bun.spawnSync(["rg", "--version"]);
-if (rg.exitCode !== 0) {
+const rg = spawnSync('rg', ['--version'], { stdio: 'pipe' });
+if (rg.status !== 0) {
   process.stderr.write(
     "memtree: WARNING — `rg` (ripgrep) not found in PATH.\n" +
       "  memtree's code-search tools require ripgrep at runtime.\n" +

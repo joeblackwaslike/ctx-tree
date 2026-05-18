@@ -191,6 +191,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           limit?: number;
           filters?: Filters;
         };
+        if (typeof query !== 'string') throw new McpError(ErrorCode.InvalidParams, '"query" is required and must be a string');
         if (mode !== undefined && mode !== 'keyword') {
           throw new McpError(
             ErrorCode.InvalidParams,
@@ -208,6 +209,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           edge_kinds?: string[];
           filters?: Filters;
         };
+        if (typeof node_id !== 'string') throw new McpError(ErrorCode.InvalidParams, '"node_id" is required and must be a string');
         const cap = Math.min(depth ?? 1, 5);
         const result = getNeighborsDeep(db, node_id, cap, edge_kinds as any, filters);
         return { content: [{ type: 'text', text: JSON.stringify(result) }] };
@@ -215,6 +217,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case 'memtree_path_to_root': {
         const { node_id } = args as { node_id: string };
+        if (typeof node_id !== 'string') throw new McpError(ErrorCode.InvalidParams, '"node_id" is required and must be a string');
         const result = getPathToRoot(db, node_id);
         return { content: [{ type: 'text', text: JSON.stringify(result) }] };
       }
@@ -235,6 +238,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           lines?: [number, number];
           budget_tokens?: number;
         };
+        if (typeof path !== 'string') throw new McpError(ErrorCode.InvalidParams, '"path" is required and must be a string');
         const result = await memtreeRead(db, config, { path, lines, budget_tokens });
         return { content: [{ type: 'text', text: result.content }] };
       }
@@ -246,6 +250,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           case_insensitive?: boolean;
           file_glob?: string;
         };
+        if (typeof pattern !== 'string') throw new McpError(ErrorCode.InvalidParams, '"pattern" is required and must be a string');
         const result = await memtreeGrep(db, config, {
           pattern,
           path,
@@ -263,6 +268,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           query?: string;
           depth?: number;
         };
+        if (!Array.isArray(node_ids)) throw new McpError(ErrorCode.InvalidParams, '"node_ids" is required and must be an array');
+        if (typeof budget_tokens !== 'number') throw new McpError(ErrorCode.InvalidParams, '"budget_tokens" is required and must be a number');
         const result = await memtreeCompose(db, {
           node_ids,
           budget_tokens,
