@@ -25,8 +25,8 @@ describe('filter walker', () => {
     const id = ulid();
     insertNode(db, id, {
       parent_id: null, kind: 'note', source_uri: null,
-      content: 'this is long enough content', content_hash: 'h1',
-      status: 'pending', mtime: 0, truncated: 0, original_bytes: 27, metadata: '{}',
+      content: 'this is long enough content, padded sufficiently here', content_hash: 'h1',
+      status: 'pending', mtime: 0, truncated: 0, original_bytes: 53, metadata: '{}',
     });
     runFilterWalker(db, cfg);
     expect(getNode(db, id)!.status).toBe('live');
@@ -50,8 +50,8 @@ describe('filter walker batch', () => {
     for (let i = 0; i < 5; i++) {
       insertNode(db, ulid(), {
         parent_id: null, kind: 'note', source_uri: null,
-        content: `content long enough to pass filter ${i}`, content_hash: `hash${i}`,
-        status: 'pending', mtime: 0, truncated: 0, original_bytes: 40, metadata: '{}',
+        content: `content long enough to pass the full filter check here: ${i}`, content_hash: `hash${i}`,
+        status: 'pending', mtime: 0, truncated: 0, original_bytes: 57, metadata: '{}',
       });
     }
     runFilterWalker(db, cfg);
@@ -64,9 +64,9 @@ describe('coordinator startup sweep', () => {
   test('processes pre-existing pending rows on start', () => {
     insertNode(db, ulid(), {
       parent_id: null, kind: 'note', source_uri: null,
-      content: 'leftover pending from crashed session xyz',
+      content: 'leftover pending from crashed session xyz, padded to 56 chars',
       content_hash: 'leftover1', status: 'pending',
-      mtime: 0, truncated: 0, original_bytes: 42, metadata: '{}',
+      mtime: 0, truncated: 0, original_bytes: 61, metadata: '{}',
     });
     const { WalkerCoordinator } = require('./coordinator');
     const coord = new WalkerCoordinator();
