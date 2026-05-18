@@ -3,7 +3,7 @@ import { mkdirSync } from 'fs';
 import { dirname } from 'path';
 
 export function openDb(dbPath: string): Database {
-  mkdirSync(dirname(dbPath), { recursive: true });
+  mkdirSync(dirname(dbPath), { recursive: true, mode: 0o700 });
 
   const db = new Database(dbPath);
   db.run('PRAGMA journal_mode = WAL');

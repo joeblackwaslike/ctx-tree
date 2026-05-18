@@ -1,5 +1,6 @@
 import type { Database } from 'bun:sqlite';
 import type { MemtreeNode, NodeStatus } from './types';
+import { ulid } from 'ulid';
 
 interface InsertNodeParams {
   parent_id: string | null;
@@ -59,7 +60,6 @@ export function getOrCreateSessionNode(
   db: Database,
   sessionId: string
 ): MemtreeNode {
-  const { ulid } = require('ulid');
   const existing = db.query(
     "SELECT * FROM nodes WHERE kind = 'session' AND json_extract(metadata,'$.session_id') = ?"
   ).get(sessionId) as MemtreeNode | undefined;
@@ -87,11 +87,11 @@ export function getPendingNodes(db: Database, limit = 100): MemtreeNode[] {
 
 export function getLiveFileChunks(
   db: Database,
-  olderThanMs: number
+  cutoffMs: number
 ): MemtreeNode[] {
   return db.query(
     "SELECT * FROM nodes WHERE kind = 'file_chunk' AND status = 'live' AND mtime > 0 AND updated_at < ?"
-  ).all(olderThanMs) as MemtreeNode[];
+  ).all(cutoffMs) as MemtreeNode[];
 }
 
 export function getStaleNodes(
