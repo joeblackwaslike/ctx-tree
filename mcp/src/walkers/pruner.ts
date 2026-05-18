@@ -7,10 +7,12 @@ export function runPrunerWalker(db: Database, config: MemtreeConfig): void {
   const staleThreshold = now - config.retention.staleHours * 60 * 60 * 1000;
   const supersededThreshold = now - config.retention.supersededDays * 24 * 60 * 60 * 1000;
 
-  for (const node of getStaleNodes(db, staleThreshold)) {
-    pruneNode(db, node.id);
-  }
-  for (const node of getSupersededNodes(db, supersededThreshold)) {
-    pruneNode(db, node.id);
-  }
+  db.transaction(() => {
+    for (const node of getStaleNodes(db, staleThreshold)) {
+      pruneNode(db, node.id);
+    }
+    for (const node of getSupersededNodes(db, supersededThreshold)) {
+      pruneNode(db, node.id);
+    }
+  })();
 }
