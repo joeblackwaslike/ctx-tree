@@ -18,7 +18,7 @@ async function measureMs(fn: () => Promise<void>, n: number): Promise<{ p50: num
     times.push(performance.now() - start);
   }
   times.sort((a, b) => a - b);
-  return { p50: times[Math.floor(n * 0.5)], p95: times[Math.floor(n * 0.95)] };
+  return { p50: times[Math.floor((n - 1) * 0.5)], p95: times[Math.floor((n - 1) * 0.95)] };
 }
 
 export async function runLatencyCases(
