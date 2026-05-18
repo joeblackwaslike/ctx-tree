@@ -17,6 +17,7 @@ Indexes files and search results in a local SQLite store when you use memtree-ba
 ## Requirements
 
 - macOS arm64, Linux x64/arm64
+- Bun ≥1.1 (`curl -fsSL https://bun.sh/install | bash`)
 - `rg ≥13` (`brew install ripgrep` / `apt install ripgrep`)
 
 ## Tools

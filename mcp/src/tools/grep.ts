@@ -53,7 +53,7 @@ export async function memtreeGrep(
   const matches = rawOutput.split('\n').filter(Boolean);
   const content = matches.join('\n');
   const originalBytes = Buffer.byteLength(content, 'utf8');
-  const truncContent = content.slice(0, config.capture.maxBytes);
+  const truncContent = Buffer.from(content).subarray(0, config.capture.maxBytes).toString('utf8');
   const contentHash = createHash('sha256').update(truncContent).digest('hex');
   const nodeId = ulid();
 
@@ -80,7 +80,8 @@ export async function memtreeGrep(
     );
 
     for (const filePath of matchedFiles) {
-      const fileLines = matches.filter(l => l.startsWith(filePath + ':'));
+      const prefix = filePath + ':';
+      const fileLines = matches.filter(l => l.startsWith(prefix) && /^\d+:/.test(l.slice(prefix.length)));
       const fileContent = fileLines.join('\n');
       if (Buffer.byteLength(fileContent, 'utf8') < config.capture.filterMinSize) continue;
       const fileHash = createHash('sha256').update(fileContent).digest('hex');

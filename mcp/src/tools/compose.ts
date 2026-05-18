@@ -79,7 +79,7 @@ function getFtsRanks(db: Database, query: string, ids: string[]): Map<string, nu
   const minRank = Math.min(...rows.map(r => r.rank));
   const maxRank = Math.max(...rows.map(r => r.rank));
   const range = maxRank - minRank || 1;
-  return new Map(rows.map(r => [r.id, (r.rank - maxRank) / range]));
+  return new Map(rows.map(r => [r.id, (maxRank - r.rank) / range]));
 }
 
 function formatOutline(node: MemtreeNode): string {
