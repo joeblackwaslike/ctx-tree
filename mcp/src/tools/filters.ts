@@ -9,7 +9,7 @@ export function buildFilterSQL(filters: Filters = {}): FilterSQL {
   const clauses: string[] = [];
   const params: (string | number)[] = [];
 
-  const statuses = filters.status ?? ['live'];
+  const statuses = (filters.status?.length ? filters.status : null) ?? ['live'];
   clauses.push(`status IN (${statuses.map(() => '?').join(',')})`);
   params.push(...statuses);
 

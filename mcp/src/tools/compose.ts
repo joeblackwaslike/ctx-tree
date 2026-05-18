@@ -66,14 +66,19 @@ function expandGraph(
 }
 
 function getFtsRanks(db: Database, query: string, ids: string[]): Map<string, number> {
-  if (!query || ids.length === 0) return new Map();
+  if (!query.trim() || ids.length === 0) return new Map();
   const placeholders = ids.map(() => '?').join(',');
-  const rows = db.query(`
-    SELECT n.id, rank FROM nodes n
-    JOIN nodes_fts f ON f.id = n.id
-    WHERE nodes_fts MATCH ? AND n.id IN (${placeholders})
-    ORDER BY rank
-  `).all(query, ...ids) as { id: string; rank: number }[];
+  let rows: { id: string; rank: number }[];
+  try {
+    rows = db.query(`
+      SELECT n.id, rank FROM nodes n
+      JOIN nodes_fts f ON f.id = n.id
+      WHERE nodes_fts MATCH ? AND n.id IN (${placeholders})
+      ORDER BY rank
+    `).all(query, ...ids) as { id: string; rank: number }[];
+  } catch {
+    return new Map();
+  }
 
   if (rows.length === 0) return new Map();
   const minRank = Math.min(...rows.map(r => r.rank));

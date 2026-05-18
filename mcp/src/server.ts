@@ -307,5 +307,6 @@ function shutdown(): void {
 
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
+process.on('disconnect', shutdown);
 
 await server.connect(transport);
