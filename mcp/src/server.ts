@@ -1,0 +1,304 @@
+import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import {
+  CallToolRequestSchema,
+  ListToolsRequestSchema,
+  ErrorCode,
+  McpError,
+} from '@modelcontextprotocol/sdk/types.js';
+import { execSync } from 'child_process';
+import { mkdirSync, chmodSync } from 'fs';
+import { join } from 'path';
+import { openDb, closeDb } from './store/db.js';
+import { loadConfig } from './config.js';
+import { computeProjectHash } from './project-hash.js';
+import { WalkerCoordinator } from './walkers/coordinator.js';
+import { searchKeyword } from './tools/search.js';
+import { getNeighborsDeep } from './tools/neighbors.js';
+import { getPathToRoot } from './tools/path-to-root.js';
+import { getRecent } from './tools/recent.js';
+import { memtreeRead } from './tools/read.js';
+import { memtreeGrep } from './tools/grep.js';
+import { memtreeCompose } from './tools/compose.js';
+import type { Filters } from './store/types.js';
+
+// ── Platform check ────────────────────────────────────────────────────────────
+const SUPPORTED_PLATFORMS = ['darwin-arm64', 'linux-x64', 'linux-arm64'];
+const platform = `${process.platform === 'darwin' ? 'darwin' : 'linux'}-${process.arch === 'arm64' ? 'arm64' : 'x64'}`;
+// Normalize: darwin-x64 is fine, but darwin-arm64, linux-x64, linux-arm64 are the documented ones.
+// We check the raw combined key against the list.
+const rawPlatform = `${process.platform}-${process.arch}`;
+// Accept darwin-arm64, linux-x64, linux-arm64; map darwin-x64 as a fallback.
+const effectivePlatform = SUPPORTED_PLATFORMS.includes(rawPlatform)
+  ? rawPlatform
+  : SUPPORTED_PLATFORMS.includes(platform)
+  ? platform
+  : null;
+
+if (!effectivePlatform) {
+  process.stderr.write(
+    `memtree: unsupported platform ${rawPlatform}\n` +
+      `Supported platforms: ${SUPPORTED_PLATFORMS.join(', ')}\n`,
+  );
+  process.exit(1);
+}
+
+// ── ripgrep check ─────────────────────────────────────────────────────────────
+try {
+  execSync('rg --version', { stdio: 'pipe' });
+} catch {
+  process.stderr.write(
+    'memtree: `rg` (ripgrep) is not installed or not in PATH.\n' +
+      'Install it via: brew install ripgrep  (macOS) or  apt install ripgrep  (Debian/Ubuntu)\n',
+  );
+  process.exit(1);
+}
+
+// ── DB path setup ─────────────────────────────────────────────────────────────
+const projectHash = computeProjectHash(process.env.MEMTREE_CWD ?? process.cwd());
+const storeDir = join(process.env.HOME ?? '/tmp', '.memtree', projectHash);
+const dbPath = join(storeDir, 'store.db');
+
+mkdirSync(storeDir, { recursive: true, mode: 0o700 });
+
+const config = loadConfig(process.env.MEMTREE_CWD ?? process.cwd());
+const db = openDb(dbPath);
+chmodSync(dbPath, 0o600);
+
+// ── Walkers ───────────────────────────────────────────────────────────────────
+const walkers = new WalkerCoordinator();
+walkers.start(db, config);
+
+// ── MCP server ────────────────────────────────────────────────────────────────
+const server = new Server(
+  { name: 'memtree', version: '0.1.0' },
+  { capabilities: { tools: {} } },
+);
+
+server.setRequestHandler(ListToolsRequestSchema, async () => ({
+  tools: [
+    {
+      name: 'memtree_search',
+      description: 'Keyword search over the memtree store.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'Search query' },
+          mode: { type: 'string', enum: ['keyword'], description: 'Search mode (only "keyword" supported)' },
+          limit: { type: 'number', description: 'Max results to return' },
+          filters: { type: 'object', description: 'Optional filters' },
+        },
+        required: ['query'],
+      },
+    },
+    {
+      name: 'memtree_neighbors',
+      description: 'Graph walk from a node, returning neighbors up to a depth cap of 5.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          node_id: { type: 'string', description: 'Starting node ID' },
+          depth: { type: 'number', description: 'Walk depth (max 5)' },
+          edge_kinds: { type: 'array', items: { type: 'string' }, description: 'Edge kinds to traverse' },
+          filters: { type: 'object', description: 'Optional filters' },
+        },
+        required: ['node_id'],
+      },
+    },
+    {
+      name: 'memtree_path_to_root',
+      description: 'Walk the parent chain from a node to the root.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          node_id: { type: 'string', description: 'Node ID to trace' },
+        },
+        required: ['node_id'],
+      },
+    },
+    {
+      name: 'memtree_recent',
+      description: 'Return the most recently created nodes, newest first.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          since: { type: 'number', description: 'Unix timestamp lower bound' },
+          limit: { type: 'number', description: 'Max results to return' },
+          filters: { type: 'object', description: 'Optional filters' },
+        },
+      },
+    },
+    {
+      name: 'memtree_read',
+      description: 'Read a file with tree-sitter chunking and mtime caching.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          path: { type: 'string', description: 'Absolute or relative file path' },
+          lines: {
+            type: 'array',
+            items: { type: 'number' },
+            minItems: 2,
+            maxItems: 2,
+            description: '[start, end] line range (0-based)',
+          },
+          budget_tokens: { type: 'number', description: 'Token budget for chunking' },
+        },
+        required: ['path'],
+      },
+    },
+    {
+      name: 'memtree_grep',
+      description: 'ripgrep integration — search file content by regex pattern.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          pattern: { type: 'string', description: 'Regex pattern to search' },
+          path: { type: 'string', description: 'Path to search within' },
+          case_insensitive: { type: 'boolean', description: 'Case-insensitive search' },
+          file_glob: { type: 'string', description: 'File glob filter' },
+        },
+        required: ['pattern'],
+      },
+    },
+    {
+      name: 'memtree_compose',
+      description: 'BFS graph expansion + scoring + budget-pack into a single context block.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          node_ids: { type: 'array', items: { type: 'string' }, description: 'Seed node IDs' },
+          budget_tokens: { type: 'number', description: 'Token budget for output' },
+          format: { type: 'string', enum: ['raw', 'outline'], description: 'Output format' },
+          query: { type: 'string', description: 'Optional query for relevance scoring' },
+          depth: { type: 'number', description: 'BFS expansion depth' },
+        },
+        required: ['node_ids', 'budget_tokens'],
+      },
+    },
+  ],
+}));
+
+server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  const { name, arguments: args = {} } = request.params;
+
+  try {
+    switch (name) {
+      case 'memtree_search': {
+        const { query, mode, limit, filters } = args as {
+          query: string;
+          mode?: string;
+          limit?: number;
+          filters?: Filters;
+        };
+        if (mode !== undefined && mode !== 'keyword') {
+          throw new McpError(
+            ErrorCode.InvalidParams,
+            `Unsupported mode: "${mode}". Only "keyword" is supported.`,
+          );
+        }
+        const result = searchKeyword(db, query, limit, filters);
+        return { content: [{ type: 'text', text: JSON.stringify(result) }] };
+      }
+
+      case 'memtree_neighbors': {
+        const { node_id, depth, edge_kinds, filters } = args as {
+          node_id: string;
+          depth?: number;
+          edge_kinds?: string[];
+          filters?: Filters;
+        };
+        const cap = Math.min(depth ?? 1, 5);
+        const result = getNeighborsDeep(db, node_id, cap, edge_kinds as any, filters);
+        return { content: [{ type: 'text', text: JSON.stringify(result) }] };
+      }
+
+      case 'memtree_path_to_root': {
+        const { node_id } = args as { node_id: string };
+        const result = getPathToRoot(db, node_id);
+        return { content: [{ type: 'text', text: JSON.stringify(result) }] };
+      }
+
+      case 'memtree_recent': {
+        const { since, limit, filters } = args as {
+          since?: number;
+          limit?: number;
+          filters?: Filters;
+        };
+        const result = getRecent(db, since, limit, filters);
+        return { content: [{ type: 'text', text: JSON.stringify(result) }] };
+      }
+
+      case 'memtree_read': {
+        const { path, lines, budget_tokens } = args as {
+          path: string;
+          lines?: [number, number];
+          budget_tokens?: number;
+        };
+        const result = await memtreeRead(db, config, { path, lines, budget_tokens });
+        return { content: [{ type: 'text', text: result.content }] };
+      }
+
+      case 'memtree_grep': {
+        const { pattern, path, case_insensitive, file_glob } = args as {
+          pattern: string;
+          path?: string;
+          case_insensitive?: boolean;
+          file_glob?: string;
+        };
+        const result = await memtreeGrep(db, config, {
+          pattern,
+          path,
+          caseInsensitive: case_insensitive,
+          fileGlob: file_glob,
+        });
+        return { content: [{ type: 'text', text: result.matches.join('\n') }] };
+      }
+
+      case 'memtree_compose': {
+        const { node_ids, budget_tokens, format, query, depth } = args as {
+          node_ids: string[];
+          budget_tokens: number;
+          format?: 'raw' | 'outline';
+          query?: string;
+          depth?: number;
+        };
+        const result = await memtreeCompose(db, {
+          node_ids,
+          budget_tokens,
+          format,
+          query,
+          depth,
+        });
+        return {
+          content: [
+            {
+              type: 'text',
+              text: result.content + '\n\n---\n' + JSON.stringify(result.manifest),
+            },
+          ],
+        };
+      }
+
+      default:
+        throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
+    }
+  } catch (err) {
+    if (err instanceof McpError) throw err;
+    throw new McpError(ErrorCode.InternalError, String(err));
+  }
+});
+
+// ── Transport & lifecycle ─────────────────────────────────────────────────────
+const transport = new StdioServerTransport();
+
+function shutdown(): void {
+  walkers.stop();
+  closeDb(db);
+  process.exit(0);
+}
+
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);
+
+await server.connect(transport);
