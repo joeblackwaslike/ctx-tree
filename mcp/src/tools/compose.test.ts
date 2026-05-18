@@ -44,11 +44,12 @@ describe('memtreeCompose', () => {
     expect(result.manifest.included.length).toBeGreaterThan(0);
   });
 
-  test('manifest.dropped lists over-budget nodes', async () => {
+  test('manifest.dropped lists over-budget nodes with reason', async () => {
     node('big', LONG(200));
     node('also-big', LONG(200), 'big');
     const result = await memtreeCompose(db, { node_ids: ['big'], budget_tokens: 50 });
-    expect(result.manifest.included.length + result.manifest.dropped.length).toBeGreaterThan(0);
+    expect(result.manifest.dropped.length).toBeGreaterThan(0);
+    expect(result.manifest.dropped[0].reason).toBe('over_budget');
   });
 
   test('format=outline returns titles+previews not full content', async () => {

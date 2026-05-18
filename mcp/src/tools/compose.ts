@@ -24,7 +24,7 @@ function scoreNode(
   queryRank: number,
   hasQuery: boolean
 ): number {
-  const wDist = hasQuery ? 0.6 : 0.7;
+  const wDist = 0.7;
   const wRecency = 0.3;
   const wQuery = hasQuery ? 0.1 : 0.0;
   const ageHours = (Date.now() - node.updated_at) / (1000 * 60 * 60);
@@ -95,7 +95,8 @@ export async function memtreeCompose(
   db: Database,
   params: ComposeParams
 ): Promise<ComposeResult> {
-  const { node_ids, budget_tokens, format = 'raw', query, depth = 2 } = params;
+  const { node_ids, budget_tokens, format = 'raw', query } = params;
+  const depth = Math.min(params.depth ?? 2, 2);
 
   if (format === 'mixed') {
     throw new Error("format='mixed' is deferred to v1.1 — summary nodes not available in v1");
