@@ -11,6 +11,7 @@ Use memtree's MCP tools instead of native Read/Grep when working in a large code
 - `memtree_compose` — assemble a context bundle from seed node IDs within a token budget
 - `memtree_neighbors` — walk edges and parent relationships from a known node
 - `memtree_recent` — retrieve recently captured nodes
+- `memtree_path_to_root` — walk the parent chain from any node up to the root
 
 **When to use memtree over native tools:**
 - File you've already read this session → `memtree_search` or `memtree_compose` on the cached node
