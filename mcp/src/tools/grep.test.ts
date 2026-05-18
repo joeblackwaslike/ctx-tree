@@ -33,10 +33,12 @@ describe('memtreeGrep', () => {
     expect(result.nodeId).toBeTruthy();
   });
 
-  test('creates tool_output node in store', async () => {
+  test('creates tool_output node and file_chunk children in store', async () => {
     await memtreeGrep(db, DEFAULT_CONFIG, { pattern: 'doThing', path: FIXTURE_DIR });
-    const node = db.query("SELECT * FROM nodes WHERE kind = 'tool_output' LIMIT 1").get();
-    expect(node).not.toBeNull();
+    const toolNode = db.query("SELECT * FROM nodes WHERE kind = 'tool_output' LIMIT 1").get();
+    expect(toolNode).not.toBeNull();
+    const children = db.query("SELECT * FROM nodes WHERE kind = 'file_chunk' AND parent_id = ?").all((toolNode as { id: string }).id);
+    expect(children.length).toBeGreaterThan(0);
   });
 
   test('returns empty matches when pattern not found', async () => {
