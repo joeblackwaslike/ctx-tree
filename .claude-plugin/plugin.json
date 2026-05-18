@@ -1,0 +1,17 @@
+{
+  "name": "memtree",
+  "description": "Tree/graph-based persistent context store with surgical recall. Exposes memtree.read, memtree.grep, memtree.compose, memtree.search, memtree.neighbors for budget-bounded recall.",
+  "author": { "name": "Joe Black", "email": "joeblackwaslike@gmail.com" },
+  "homepage": "https://github.com/joeblackwaslike/memtree",
+  "repository": "https://github.com/joeblackwaslike/memtree",
+  "license": "MIT",
+  "mcpServers": {
+    "memtree": {
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/mcp/dist/server.js"],
+      "env": {
+        "MEMTREE_CWD": "${workspaceFolder}"
+      }
+    }
+  }
+}
