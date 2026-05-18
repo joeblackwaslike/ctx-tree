@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "build": "bun build src/server.ts --target bun --outdir dist --external tree-sitter --external tree-sitter-typescript --external tree-sitter-javascript --external tree-sitter-python --external tree-sitter-rust --external tree-sitter-go --external tree-sitter-bash",
+    "postinstall": "bun run scripts/postinstall.ts",
     "test": "bun test",
     "dev": "bun run src/server.ts"
   },
