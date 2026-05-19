@@ -66,11 +66,83 @@ describe('memtreeCompose', () => {
     expect(result.content).toContain('n1');
   });
 
-  test('format=mixed returns error in v1', async () => {
-    node('n1', LONG(10));
-    await expect(
-      memtreeCompose(db, { node_ids: ['n1'], budget_tokens: 500, format: 'mixed' })
-    ).rejects.toThrow('deferred to v1.1');
+  test('format=mixed substitutes summary for over-budget nodes', async () => {
+    // Small node fits in budget, large node uses its summary
+    insertNode(db, 'small', {
+      parent_id: null, kind: 'note', source_uri: null,
+      content: LONG(10), content_hash: 'small', status: 'live',
+      mtime: 0, truncated: 0, original_bytes: 40, metadata: '{}',
+    });
+    insertNode(db, 'large', {
+      parent_id: null, kind: 'note', source_uri: null,
+      content: LONG(200), content_hash: 'large', status: 'live',
+      mtime: 0, truncated: 0, original_bytes: 800, metadata: '{}',
+    });
+    // Give 'large' a summary by updating directly
+    db.run("UPDATE nodes SET summary = 'This is the summary of large.' WHERE id = 'large'");
+
+    // Budget: enough for 'small' raw + 'large' summary, but not 'large' raw
+    const result = await memtreeCompose(db, {
+      node_ids: ['small', 'large'], budget_tokens: 60, format: 'mixed',
+    });
+
+    expect(result.manifest.included).toContain('large');
+    expect(result.manifest.summary_substituted).toContain('large');
+    expect(result.content).toContain('This is the summary of large.');
+  });
+
+  test('format=mixed drops over-budget nodes with no summary', async () => {
+    insertNode(db, 'big-nosummary', {
+      parent_id: null, kind: 'note', source_uri: null,
+      content: LONG(200), content_hash: 'big-nosummary', status: 'live',
+      mtime: 0, truncated: 0, original_bytes: 800, metadata: '{}',
+    });
+    // No summary set — summary column is NULL
+
+    const result = await memtreeCompose(db, {
+      node_ids: ['big-nosummary'], budget_tokens: 10, format: 'mixed',
+    });
+
+    expect(result.manifest.included).not.toContain('big-nosummary');
+    const drop = result.manifest.dropped.find(d => d.id === 'big-nosummary');
+    expect(drop?.reason).toBe('over_budget_no_summary');
+    expect(result.manifest.summary_substituted).toBeUndefined();
+  });
+
+  test('format=mixed with all nodes fitting budget uses raw content', async () => {
+    node('fits1', LONG(10));
+    node('fits2', LONG(10));
+
+    const result = await memtreeCompose(db, {
+      node_ids: ['fits1', 'fits2'], budget_tokens: 500, format: 'mixed',
+    });
+
+    expect(result.manifest.included).toContain('fits1');
+    expect(result.manifest.included).toContain('fits2');
+    expect(result.manifest.dropped).toHaveLength(0);
+    // No summary substitution needed
+    expect(result.manifest.summary_substituted).toBeUndefined();
+  });
+
+  test('format=raw drops over-budget nodes with reason over_budget', async () => {
+    node('big', LONG(200));
+    const result = await memtreeCompose(db, {
+      node_ids: ['big'], budget_tokens: 10, format: 'raw',
+    });
+    const drop = result.manifest.dropped.find(d => d.id === 'big');
+    expect(drop?.reason).toBe('over_budget');
+  });
+
+  test('format=outline drops over-budget outlines with reason over_budget', async () => {
+    // Insert many nodes so budget overflows even for outlines
+    for (let i = 0; i < 20; i++) {
+      node(`ol${i}`, LONG(30));
+    }
+    const result = await memtreeCompose(db, {
+      node_ids: Array.from({ length: 20 }, (_, i) => `ol${i}`), budget_tokens: 5, format: 'outline',
+    });
+    expect(result.manifest.dropped.length).toBeGreaterThan(0);
+    expect(result.manifest.dropped[0].reason).toBe('over_budget');
   });
 
   test('manifest.truncated lists nodes with truncated=1', async () => {

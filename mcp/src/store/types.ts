@@ -16,6 +16,7 @@ export interface MemtreeNode {
   truncated: number;     // 0 | 1
   original_bytes: number;
   metadata: string;      // JSON blob
+  summary?: string | null;  // optional summary text (v1.1+)
 }
 
 export interface MemtreeEdge {
@@ -69,8 +70,9 @@ export type FilterResult = { action: 'accept' } | { action: 'drop'; reason: stri
 
 export interface ComposeManifest {
   included: string[];
-  dropped: Array<{ id: string; reason: 'over_budget' | 'superseded' | 'pruned' | 'filtered' }>;
+  dropped: Array<{ id: string; reason: 'over_budget' | 'superseded' | 'pruned' | 'filtered' | 'over_budget_no_summary' }>;
   truncated: string[];
+  summary_substituted?: string[];  // node IDs where summary was substituted for raw content
 }
 
 export interface Filters {
