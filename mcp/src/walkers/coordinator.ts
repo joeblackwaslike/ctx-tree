@@ -52,7 +52,7 @@ export class WalkerCoordinator {
       this.timers.push(
         setInterval(
           () => withErrorBoundary('summarizer', () => runSummarizerWalker(db, config, summarizer)),
-          config.walkers.embeddingIdleMs
+          config.walkers.summarizerIdleMs
         )
       );
     }

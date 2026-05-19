@@ -10,6 +10,7 @@ export const DEFAULT_CONFIG: MemtreeConfig = {
   walkers: {
     embeddingIdleMs: 5000,
     embeddingBatchSize: 32,
+    summarizerIdleMs: 30000,
     summarizerSubtreeThreshold: 25,
     dedupeIntervalMs: 60000,
     stalenessIntervalMs: 30000,

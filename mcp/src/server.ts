@@ -226,7 +226,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         properties: {
           node_ids: { type: 'array', items: { type: 'string' }, description: 'Seed node IDs' },
           budget_tokens: { type: 'number', description: 'Token budget for output' },
-          format: { type: 'string', enum: ['raw', 'outline'], description: 'Output format' },
+          format: { type: 'string', enum: ['raw', 'outline', 'mixed'], description: 'Output format: "raw" (full content), "outline" (first-line previews), or "mixed" (summary-substituted for over-budget nodes)' },
           query: { type: 'string', description: 'Optional query for relevance scoring' },
           depth: { type: 'number', description: 'BFS expansion depth' },
         },
@@ -340,7 +340,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const { node_ids, budget_tokens, format, query, depth } = args as {
           node_ids: string[];
           budget_tokens: number;
-          format?: 'raw' | 'outline';
+          format?: 'raw' | 'outline' | 'mixed';
           query?: string;
           depth?: number;
         };

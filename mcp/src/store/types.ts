@@ -29,6 +29,7 @@ export interface MemtreeEdge {
 export interface WalkerConfig {
   embeddingIdleMs: number;
   embeddingBatchSize: number;
+  summarizerIdleMs: number;
   summarizerSubtreeThreshold: number;
   dedupeIntervalMs: number;
   stalenessIntervalMs: number;
