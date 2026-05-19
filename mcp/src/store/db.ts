@@ -79,6 +79,17 @@ export function openDb(dbPath: string): Database {
     // Column already exists — safe to ignore
   }
 
+  // Add expression indices on metadata JSON fields (idempotent, SQLite supports these on existing tables)
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_nodes_meta_tool
+      ON nodes(json_extract(metadata, '$.tool'));
+    CREATE INDEX IF NOT EXISTS idx_nodes_meta_session_id
+      ON nodes(json_extract(metadata, '$.session_id'));
+    CREATE INDEX IF NOT EXISTS idx_nodes_meta_gitignored
+      ON nodes(json_extract(metadata, '$.gitignored'))
+      WHERE json_extract(metadata, '$.gitignored') = 1;
+  `);
+
   return db;
 }
 

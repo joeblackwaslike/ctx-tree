@@ -1,3 +1,4 @@
+import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import type { Filters } from '../store/types';
 
 export interface FilterSQL {
@@ -24,6 +25,27 @@ export function buildFilterSQL(filters: Filters = {}, tableAlias = ''): FilterSQ
   if (filters.session_id) {
     clauses.push(`json_extract(${p}metadata,'$.session_id') = ?`);
     params.push(filters.session_id);
+  }
+
+  if (filters.metadata !== undefined) {
+    const KNOWN_KEYS = new Set(['tool', 'session_id', 'gitignored']);
+    for (const key of Object.keys(filters.metadata)) {
+      if (!KNOWN_KEYS.has(key)) {
+        throw new McpError(ErrorCode.InvalidParams, `Unknown metadata filter key: ${key}`);
+      }
+    }
+    if (filters.metadata.tool !== undefined) {
+      clauses.push(`json_extract(${p}metadata,'$.tool') = ?`);
+      params.push(filters.metadata.tool);
+    }
+    if (filters.metadata.session_id !== undefined) {
+      clauses.push(`json_extract(${p}metadata,'$.session_id') = ?`);
+      params.push(filters.metadata.session_id);
+    }
+    if (filters.metadata.gitignored !== undefined) {
+      clauses.push(`json_extract(${p}metadata,'$.gitignored') = ?`);
+      params.push(filters.metadata.gitignored ? 1 : 0);
+    }
   }
 
   return { where: clauses.join(' AND '), params };

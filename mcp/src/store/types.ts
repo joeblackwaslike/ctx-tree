@@ -82,6 +82,12 @@ export interface Filters {
   until?: number;
   parent_id?: string;
   session_id?: string;
+  // v1.1: metadata sub-filters
+  metadata?: {
+    tool?: string;        // exact match on metadata.tool
+    session_id?: string;  // exact match on metadata.session_id
+    gitignored?: boolean; // filter on metadata.gitignored flag
+  };
 }
 
 // Provider interfaces — implementations are v1.1 (Ollama, OpenAI, Anthropic adapters).
