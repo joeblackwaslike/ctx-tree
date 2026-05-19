@@ -7,6 +7,13 @@ export interface FilterSQL {
 }
 
 export function buildFilterSQL(filters: Filters = {}, tableAlias = ''): FilterSQL {
+  if (tableAlias && !/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(tableAlias)) {
+    throw new Error(`Invalid tableAlias: ${tableAlias}`);
+  }
+  if (filters.session_id && filters.metadata?.session_id) {
+    throw new McpError(ErrorCode.InvalidParams,
+      'filters.session_id and filters.metadata.session_id cannot both be set');
+  }
   const p = tableAlias ? `${tableAlias}.` : '';
   const clauses: string[] = [];
   const params: (string | number)[] = [];

@@ -90,6 +90,12 @@ describe('buildFilterSQL — metadata filters', () => {
     }
   });
 
+  test('setting both session_id and metadata.session_id throws McpError', () => {
+    expect(() =>
+      buildFilterSQL({ session_id: 'A', metadata: { session_id: 'B' } })
+    ).toThrow(McpError);
+  });
+
   test('empty metadata object produces no extra clauses', () => {
     const { where, params } = buildFilterSQL({ metadata: {} });
     expect(where).not.toContain('json_extract');
