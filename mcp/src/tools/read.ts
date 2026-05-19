@@ -7,6 +7,7 @@ import type { MemtreeConfig } from '../store/types';
 import { insertNode, getNodeBySourceUri, updateNodeStatus, markStaleByFilePath } from '../store/nodes';
 import { insertEdge } from '../store/edges';
 import { shouldDropPath } from '../redaction';
+import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 
 export interface ReadParams {
   path: string;
@@ -110,7 +111,12 @@ export async function memtreeRead(
     throw new Error(`Path rejected by denylist: ${path}`);
   }
 
-  const stat = statSync(path);
+  let stat: ReturnType<typeof statSync>;
+  try {
+    stat = statSync(path);
+  } catch {
+    throw new McpError(ErrorCode.InvalidParams, `File not found or inaccessible: ${path}`);
+  }
   const mtime = Math.round(stat.mtimeMs);
   const ext = extname(path).toLowerCase();
 
