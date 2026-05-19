@@ -107,5 +107,14 @@ export class Greeter {
     expect(result.content).toBeTruthy();
     // Verify that the chunking strategy is 'treesitter', not 'window'
     expect(result.chunking).toBe('treesitter');
+    
+    // Check the persisted metadata for proof of actual tree-sitter parsing
+    const nodeRow = db.query(
+      "SELECT metadata FROM nodes WHERE kind='file_chunk' ORDER BY rowid DESC LIMIT 1"
+    ).get() as any;
+    expect(nodeRow).toBeTruthy();
+    const meta = JSON.parse(nodeRow.metadata);
+    expect(meta.chunking).toBe('treesitter');
+    expect(meta.chunkCount).toBeGreaterThan(1);
   });
 });
