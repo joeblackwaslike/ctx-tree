@@ -72,6 +72,13 @@ export function openDb(dbPath: string): Database {
     );
   `);
 
+  // Add summary column if it doesn't exist (idempotent migration)
+  try {
+    db.run('ALTER TABLE nodes ADD COLUMN summary TEXT');
+  } catch {
+    // Column already exists — safe to ignore
+  }
+
   return db;
 }
 

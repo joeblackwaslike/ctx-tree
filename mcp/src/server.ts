@@ -85,7 +85,7 @@ const { embedding: _embedding, summarizer: _summarizer } = loadProviders(config)
 
 // ── Walkers ───────────────────────────────────────────────────────────────────
 const walkers = new WalkerCoordinator();
-walkers.start(db, config, _embedding);
+walkers.start(db, config, _embedding, _summarizer);
 
 // ── Ingest socket ─────────────────────────────────────────────────────────────
 const ingestSockPath = join(storeDir, 'ingest.sock');
