@@ -53,12 +53,14 @@ export async function runSearchCases(db: Database): Promise<SearchResult[]> {
     ];
     for (const [id, content] of nodes) seedNode(db, id, content);
 
+    const seededIds = new Set(nodes.map(([id]) => id));
     let passed = false;
     let error: string | undefined;
     try {
       const result = searchKeyword(db, 'authenticate', 10, {});
-      passed = result.nodes.length >= 1;
-      if (!passed) error = `Expected >=1 results but got ${result.nodes.length}`;
+      const foundSeeded = result.nodes.some(n => seededIds.has(n.id));
+      passed = foundSeeded;
+      if (!passed) error = `None of the seeded nodes appeared in keyword search results`;
     } catch (e: unknown) {
       error = `Unexpected error: ${(e as Error).message}`;
     }

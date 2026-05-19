@@ -1,4 +1,3 @@
-import { createHash } from 'crypto';
 import { ulid } from 'ulid';
 import type { Database } from 'bun:sqlite';
 import type { MemtreeConfig, IngestPayload, MemtreeNode } from '../../src/store/types';
@@ -17,16 +16,9 @@ function makePayload(
   tool: string,
   input: Record<string, unknown>,
   response: Record<string, unknown>,
-  idSuffix?: string
+  session_id: string
 ): IngestPayload {
-  return {
-    tool,
-    input,
-    response,
-    session_id: `eval-session-${idSuffix ?? ulid()}`,
-    cwd: '/tmp',
-    ts: Date.now(),
-  };
+  return { tool, input, response, session_id, cwd: '/tmp', ts: Date.now() };
 }
 
 function queryNodesBySourceUri(db: Database, sourceUri: string): MemtreeNode[] {
@@ -44,6 +36,7 @@ export async function runRoutingCases(
   db: Database,
   config: MemtreeConfig
 ): Promise<RoutingResult[]> {
+  _resetIngestState(); // clear any dedup state from prior suites
   const results: RoutingResult[] = [];
 
   // ── Case 1: hook-payload-normalization:Read ───────────────────────────────
@@ -52,13 +45,7 @@ export async function runRoutingCases(
     const sessionId = `eval-read-${ulid()}`;
     const filePath = '/tmp/eval-fixture.ts';
     const content = PAD('export function add(a: number, b: number): number { return a + b; }');
-    const payload = makePayload(
-      'Read',
-      { path: filePath },
-      { content },
-      sessionId
-    );
-    payload.session_id = sessionId;
+    const payload = makePayload('Read', { path: filePath }, { content }, sessionId);
 
     _processIngestSyncForTests(db, config, payload);
 
@@ -67,7 +54,7 @@ export async function runRoutingCases(
     try {
       const nodes = queryNodesByTool(db, 'Read', sessionId);
       if (nodes.length === 0) {
-        error = 'No nodes inserted for Read payload';
+        error = 'No nodes inserted for Read payload (check stderr for DB errors)';
       } else {
         const node = nodes[0];
         const meta = JSON.parse(node.metadata) as Record<string, unknown>;
@@ -93,14 +80,12 @@ export async function runRoutingCases(
       { file: '/tmp/foo.ts', line: 12, match: 'authenticate(user, password)' },
       { file: '/tmp/bar.ts', line: 34, match: 'authenticate(token) returns session' },
     ]);
-    // Grep response must exceed filterMinSize (50 bytes). JSON stringify above handles it.
     const payload = makePayload(
       'Grep',
       { pattern: 'authenticate', path: '/tmp' },
       { output: grepResponse },
       sessionId
     );
-    payload.session_id = sessionId;
 
     _processIngestSyncForTests(db, config, payload);
 
@@ -109,7 +94,7 @@ export async function runRoutingCases(
     try {
       const nodes = queryNodesByTool(db, 'Grep', sessionId);
       if (nodes.length === 0) {
-        error = 'No nodes inserted for Grep payload';
+        error = 'No nodes inserted for Grep payload (check stderr for DB errors)';
       } else {
         const node = nodes[0];
         const meta = JSON.parse(node.metadata) as Record<string, unknown>;
@@ -129,13 +114,7 @@ export async function runRoutingCases(
     _resetIngestState();
     const sessionId = `eval-bash-${ulid()}`;
     const stdout = PAD('total 128\ndrwxr-xr-x  12 user group  384 May 19 10:00 .\n-rw-r--r--   1 user group 4096 May 19 10:00 index.ts\n');
-    const payload = makePayload(
-      'Bash',
-      { command: 'ls -la /tmp' },
-      { stdout, stderr: '' },
-      sessionId
-    );
-    payload.session_id = sessionId;
+    const payload = makePayload('Bash', { command: 'ls -la /tmp' }, { stdout, stderr: '' }, sessionId);
 
     _processIngestSyncForTests(db, config, payload);
 
@@ -144,7 +123,7 @@ export async function runRoutingCases(
     try {
       const nodes = queryNodesByTool(db, 'Bash', sessionId);
       if (nodes.length === 0) {
-        error = 'No nodes inserted for Bash payload';
+        error = 'No nodes inserted for Bash payload (check stderr for DB errors)';
       } else {
         const node = nodes[0];
         const meta = JSON.parse(node.metadata) as Record<string, unknown>;
@@ -169,7 +148,6 @@ export async function runRoutingCases(
       { content: PAD('SECRET=supersecret\nANTHROPIC_API_KEY=sk-ant-xyz\nDATABASE_URL=postgres://') },
       sessionId
     );
-    payload.session_id = sessionId;
 
     _processIngestSyncForTests(db, config, payload);
 
@@ -195,7 +173,6 @@ export async function runRoutingCases(
       { stdout: PAD('HOME=/Users/user\nPATH=/usr/bin:/bin\nANTHROPIC_API_KEY=sk-ant-redacted'), stderr: '' },
       sessionId
     );
-    payload.session_id = sessionId;
 
     _processIngestSyncForTests(db, config, payload);
 
