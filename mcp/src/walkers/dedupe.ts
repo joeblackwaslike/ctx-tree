@@ -2,7 +2,7 @@ import type { Database } from 'bun:sqlite';
 import type { MemtreeConfig } from '../store/types.js';
 import { insertEdge } from '../store/edges.js';
 
-function cosineSimilarity(a: Float32Array, b: Float32Array): number {
+export function cosineSimilarity(a: Float32Array, b: Float32Array): number {
   let dot = 0, normA = 0, normB = 0;
   for (let i = 0; i < a.length; i++) {
     dot += a[i] * b[i];

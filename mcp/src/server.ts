@@ -14,7 +14,7 @@ import { openDb, closeDb } from './store/db.js';
 import { loadConfig } from './config.js';
 import { computeProjectHash, registerProject, deregisterProject } from './project-hash.js';
 import { WalkerCoordinator } from './walkers/coordinator.js';
-import { searchKeyword } from './tools/search.js';
+import { searchKeyword, searchSemantic, searchHybrid } from './tools/search.js';
 import { getNeighborsDeep } from './tools/neighbors.js';
 import { getPathToRoot } from './tools/path-to-root.js';
 import { getRecent } from './tools/recent.js';
@@ -81,11 +81,11 @@ chmodSync(dbPath, 0o600);
 registerProject(process.env.MEMTREE_CWD ?? process.cwd(), projectHash);
 
 // ── Providers ─────────────────────────────────────────────────────────────────
-const { embedding: _embedding, summarizer: _summarizer } = loadProviders(config);
+const { embedding, summarizer: _summarizer } = loadProviders(config);
 
 // ── Walkers ───────────────────────────────────────────────────────────────────
 const walkers = new WalkerCoordinator();
-walkers.start(db, config, _embedding, _summarizer);
+walkers.start(db, config, embedding, _summarizer);
 
 // ── Ingest socket ─────────────────────────────────────────────────────────────
 const ingestSockPath = join(storeDir, 'ingest.sock');
@@ -135,12 +135,12 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: [
     {
       name: 'memtree_search',
-      description: 'Keyword search over the memtree store.',
+      description: 'Search over the memtree store. Supports keyword (BM25), semantic (cosine similarity), and hybrid (RRF fusion) modes.',
       inputSchema: {
         type: 'object',
         properties: {
           query: { type: 'string', description: 'Search query' },
-          mode: { type: 'string', enum: ['keyword'], description: 'Search mode (only "keyword" supported)' },
+          mode: { type: 'string', enum: ['keyword', 'semantic', 'hybrid'], description: 'Search mode: "keyword" (BM25), "semantic" (vector cosine), or "hybrid" (RRF fusion). Defaults to "keyword".' },
           limit: { type: 'number', description: 'Max results to return' },
           filters: { type: 'object', description: 'Optional filters' },
         },
@@ -248,10 +248,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           filters?: Filters;
         };
         if (typeof query !== 'string') throw new McpError(ErrorCode.InvalidParams, '"query" is required and must be a string');
-        if (mode !== undefined && mode !== 'keyword') {
+        if (mode === 'semantic') {
+          const result = await searchSemantic(db, config, embedding, query, limit, filters);
+          return { content: [{ type: 'text', text: JSON.stringify(result) }] };
+        } else if (mode === 'hybrid') {
+          const result = await searchHybrid(db, config, embedding, query, limit, filters);
+          return { content: [{ type: 'text', text: JSON.stringify(result) }] };
+        } else if (mode !== undefined && mode !== 'keyword') {
           throw new McpError(
             ErrorCode.InvalidParams,
-            `Unsupported mode: "${mode}". Only "keyword" is supported.`,
+            `Unsupported mode: "${mode}". Supported modes: "keyword", "semantic", "hybrid".`,
           );
         }
         const result = searchKeyword(db, query, limit, filters);
