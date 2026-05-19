@@ -41,14 +41,12 @@ if (!effectivePlatform) {
 }
 
 // ── ripgrep check ─────────────────────────────────────────────────────────────
+let rgAvailable = false;
 try {
   execSync('rg --version', { stdio: 'pipe' });
+  rgAvailable = true;
 } catch {
-  process.stderr.write(
-    'memtree: `rg` (ripgrep) is not installed or not in PATH.\n' +
-      'Install it via: brew install ripgrep  (macOS) or  apt install ripgrep  (Debian/Ubuntu)\n',
-  );
-  process.exit(1);
+  process.stderr.write('memtree: `rg` not found — memtree_grep will be unavailable.\n');
 }
 
 // ── DB path setup ─────────────────────────────────────────────────────────────
@@ -248,6 +246,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           file_glob?: string;
         };
         if (typeof pattern !== 'string') throw new McpError(ErrorCode.InvalidParams, '"pattern" is required and must be a string');
+        if (!rgAvailable) throw new McpError(ErrorCode.InvalidParams, '`rg` (ripgrep) is not installed. Install via: brew install ripgrep');
         const result = await memtreeGrep(db, config, {
           pattern,
           path,
