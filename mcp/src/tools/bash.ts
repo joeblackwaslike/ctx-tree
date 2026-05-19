@@ -1,4 +1,4 @@
-import { execSync } from 'child_process';
+import { execSync, type SpawnSyncError } from 'child_process';
 import { createHash } from 'crypto';
 import { ulid } from 'ulid';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
@@ -40,7 +40,10 @@ export async function memtreeBash(
     );
   }
 
-  // 3. Execute command
+  // 3. Execute command — command is passed as a raw string to sh -c.
+  // Input sanitization beyond the denylist is delegated to the caller's sandbox
+  // (e.g., Claude Code's permission system). This function must only be reachable
+  // via trustedExecution=true, which gates access to privileged deployments.
   let rawStdout = '';
   let rawStderr = '';
   let exit_code = 0;
@@ -52,11 +55,7 @@ export async function memtreeBash(
     });
   } catch (err: unknown) {
     // execSync throws on non-zero exit — extract details from the error object
-    const spawnErr = err as {
-      stdout?: string;
-      stderr?: string;
-      status?: number;
-    };
+    const spawnErr = err as SpawnSyncError<string>;
     rawStdout = spawnErr.stdout ?? '';
     rawStderr = spawnErr.stderr ?? '';
     exit_code = spawnErr.status ?? 1;
