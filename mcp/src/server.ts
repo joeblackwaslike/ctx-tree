@@ -53,6 +53,19 @@ try {
   process.stderr.write('memtree: `rg` not found — memtree_grep will be unavailable.\n');
 }
 
+// ── jq & socat checks (for capture hook) ──────────────────────────────────────
+for (const bin of ['jq', 'socat'] as const) {
+  try {
+    execSync(`${bin} --version`, { stdio: 'pipe' });
+  } catch {
+    process.stderr.write(
+      `memtree: \`${bin}\` not found — passive capture hook will not function.\n` +
+      `  Install: brew install ${bin}\n`,
+    );
+    // Non-fatal: server still starts; capture.sh will silently exit 0 without the binary.
+  }
+}
+
 // ── DB path setup ─────────────────────────────────────────────────────────────
 const projectHash = computeProjectHash(process.env.MEMTREE_CWD ?? process.cwd());
 const storeDir = join(process.env.HOME ?? '/tmp', '.memtree', projectHash);
