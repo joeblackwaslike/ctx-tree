@@ -1,8 +1,8 @@
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
 import { computeProjectHash, registerProject, deregisterProject, resolveProjectHash } from './project-hash';
-import { unlinkSync, mkdirSync } from 'fs';
+import { mkdtempSync, rmSync } from 'fs';
 import { join } from 'path';
-import { homedir } from 'os';
+import { tmpdir } from 'os';
 
 describe('computeProjectHash', () => {
   test('returns 16-char hex string for a git repo', () => {
@@ -31,23 +31,21 @@ describe('computeProjectHash determinism', () => {
 });
 
 describe('registerProject, deregisterProject, resolveProjectHash', () => {
-  const PROJECTS_TSV = join(homedir(), '.memtree', 'projects.tsv');
+  let tmpDir: string;
   
   beforeEach(() => {
-    // Clean up before each test
-    try {
-      unlinkSync(PROJECTS_TSV);
-    } catch {
-      // File doesn't exist, which is fine
-    }
+    // Create a temporary directory for each test
+    tmpDir = mkdtempSync(join(tmpdir(), 'memtree-test-'));
+    process.env.MEMTREE_HOME = tmpDir;
   });
 
   afterEach(() => {
-    // Clean up after each test
+    // Clean up the temp directory after each test
+    delete process.env.MEMTREE_HOME;
     try {
-      unlinkSync(PROJECTS_TSV);
+      rmSync(tmpDir, { recursive: true });
     } catch {
-      // File doesn't exist, which is fine
+      // Directory already removed or doesn't exist
     }
   });
 
@@ -112,5 +110,18 @@ describe('registerProject, deregisterProject, resolveProjectHash', () => {
     registerProject('/tmp/test-project', 'hash1111111111');
     
     expect(resolveProjectHash('/tmp/unknown-project')).toBeNull();
+  });
+
+  test('registerProject creates missing MEMTREE_HOME directory', () => {
+    // Remove the temp directory to simulate missing ~/.memtree/
+    rmSync(tmpDir, { recursive: true });
+    
+    const cwd = '/tmp/test-project-missing-dir';
+    const hash = 'hashABCD1234567';
+    
+    // This should succeed and create the directory
+    registerProject(cwd, hash);
+    
+    expect(resolveProjectHash(cwd)).toBe(hash);
   });
 });
