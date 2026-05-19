@@ -28,6 +28,22 @@ function readJson(path: string): Partial<MemtreeConfig> {
   }
 }
 
+function deepMergeConfig(base: MemtreeConfig, override: Partial<MemtreeConfig>): MemtreeConfig {
+  const result = { ...base } as Record<string, unknown>;
+  for (const key of Object.keys(override) as (keyof MemtreeConfig)[]) {
+    const val = override[key];
+    if (val === undefined) continue;
+    const baseVal = base[key];
+    if (val !== null && typeof val === 'object' && !Array.isArray(val) &&
+        baseVal !== null && typeof baseVal === 'object' && !Array.isArray(baseVal)) {
+      result[key] = { ...baseVal as object, ...val as object };
+    } else {
+      result[key] = val;
+    }
+  }
+  return result as MemtreeConfig;
+}
+
 export function loadConfig(projectRoot?: string): MemtreeConfig {
   const globalPath = join(process.env.HOME ?? homedir(), '.memtree', 'config.json');
   const globalOverride = existsSync(globalPath) ? readJson(globalPath) : {};
@@ -39,5 +55,5 @@ export function loadConfig(projectRoot?: string): MemtreeConfig {
     ? readJson(projectPath)
     : {};
 
-  return { ...DEFAULT_CONFIG, ...globalOverride, ...projectOverride };
+  return deepMergeConfig(deepMergeConfig(DEFAULT_CONFIG, globalOverride), projectOverride);
 }

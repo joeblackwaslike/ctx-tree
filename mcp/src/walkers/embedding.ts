@@ -34,7 +34,7 @@ export function runEmbeddingWalker(
       for (let i = 0; i < rows.length; i++) {
         const vec = vectors[i];
         const blob = Buffer.from(new Float32Array(vec).buffer);
-        upsert.run(rows[i].id, blob, provider.model, provider.dim, now);
+        upsert.run(rows[i].id, blob, provider.model, vec.length, now);
       }
     });
     insertBatch();
