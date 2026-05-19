@@ -82,9 +82,11 @@ export function openDb(dbPath: string): Database {
   // Add expression indices on metadata JSON fields (idempotent, SQLite supports these on existing tables)
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_nodes_meta_tool
-      ON nodes(json_extract(metadata, '$.tool'));
+      ON nodes(json_extract(metadata, '$.tool'))
+      WHERE json_extract(metadata, '$.tool') IS NOT NULL;
     CREATE INDEX IF NOT EXISTS idx_nodes_meta_session_id
-      ON nodes(json_extract(metadata, '$.session_id'));
+      ON nodes(json_extract(metadata, '$.session_id'))
+      WHERE json_extract(metadata, '$.session_id') IS NOT NULL;
     CREATE INDEX IF NOT EXISTS idx_nodes_meta_gitignored
       ON nodes(json_extract(metadata, '$.gitignored'))
       WHERE json_extract(metadata, '$.gitignored') = 1;

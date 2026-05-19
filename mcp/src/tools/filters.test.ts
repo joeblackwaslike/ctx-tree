@@ -140,4 +140,16 @@ describe('getRecent with metadata filters', () => {
     expect(ids).toContain('r1');
     expect(ids).not.toContain('r2');
   });
+
+  test('filters by metadata.gitignored = true in recent', () => {
+    node('gi1', 'gitignored recent content here', { gitignored: true });
+    node('gi2', 'another gitignored recent content', { gitignored: true });
+    node('normal1', 'normal tracked recent content', {});
+
+    const nodes = getRecent(db, undefined, 50, { metadata: { gitignored: true } });
+    const ids = nodes.map(n => n.id);
+    expect(ids).toContain('gi1');
+    expect(ids).toContain('gi2');
+    expect(ids).not.toContain('normal1');
+  });
 });
