@@ -19,7 +19,7 @@ export function searchKeyword(
       SELECT n.* FROM nodes n
       JOIN nodes_fts f ON f.id = n.id
       WHERE nodes_fts MATCH ? AND ${where}
-      ORDER BY rank
+      ORDER BY bm25(nodes_fts)
       LIMIT ?
     `).all(query, ...params, limit) as MemtreeNode[];
     return { nodes };

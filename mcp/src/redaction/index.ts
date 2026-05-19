@@ -1,11 +1,21 @@
 import micromatch from 'micromatch';
-import { BASH_DENY_COMMANDS, OUTPUT_REDACTION_PATTERNS } from './bash';
 import { DEFAULT_PATH_DENY_GLOBS } from './paths';
 
-export function shouldDropBashCommand(command: string, extraPatterns: RegExp[] = []): boolean {
-  const all = [...BASH_DENY_COMMANDS, ...extraPatterns];
-  return all.some(re => re.test(command));
-}
+// Bash command filtering is handled by the SRT sandbox (same sandbox as Claude Code),
+// which reuses ~/.claude/settings.json permissions. No need to reimplement here.
+
+const OUTPUT_REDACTION_PATTERNS: Array<{ pattern: RegExp; tag: string }> = [
+  { pattern: /\b(AKIA|ASIA)[A-Z0-9]{16}\b/g, tag: 'AWS_ACCESS_KEY' },
+  { pattern: /\bgh[poshur]_[A-Za-z0-9_]{30,}\b/g, tag: 'GITHUB_TOKEN' },
+  { pattern: /\bey[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/g, tag: 'JWT' },
+  { pattern: /(AWS_SECRET_ACCESS_KEY|AWS_SESSION_TOKEN)=[^\s\n]+/gi, tag: 'AWS_SECRET' },
+  { pattern: /ANTHROPIC_API_KEY=[^\s\n]+/gi, tag: 'ANTHROPIC_API_KEY' },
+  { pattern: /OPENAI_API_KEY=[^\s\n]+/gi, tag: 'OPENAI_API_KEY' },
+  { pattern: /\b(secret|token|password|key)\s*=\s*['"]?[A-Fa-f0-9]{32,}['"]?/gi, tag: 'SECRET_HEX' },
+  { pattern: /\b(secret|token|password|key)\s*=\s*['"]?[A-Za-z0-9+/]{40,}={0,2}['"]?/gi, tag: 'SECRET_B64' },
+];
+
+
 
 export function redactBashOutput(output: string): string {
   let result = output;

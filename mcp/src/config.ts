@@ -1,5 +1,6 @@
 import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
+import { homedir } from 'os';
 import type { MemtreeConfig } from './store/types';
 
 export const DEFAULT_CONFIG: MemtreeConfig = {
@@ -26,7 +27,7 @@ function readJson(path: string): Partial<MemtreeConfig> {
 }
 
 export function loadConfig(projectRoot?: string): MemtreeConfig {
-  const globalPath = join(process.env.HOME ?? '~', '.memtree', 'config.json');
+  const globalPath = join(process.env.HOME ?? homedir(), '.memtree', 'config.json');
   const globalOverride = existsSync(globalPath) ? readJson(globalPath) : {};
 
   const projectPath = projectRoot

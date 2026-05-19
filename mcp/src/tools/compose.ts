@@ -67,15 +67,20 @@ function expandGraph(
 
 function getFtsRanks(db: Database, query: string, ids: string[]): Map<string, number> {
   if (!query.trim() || ids.length === 0) return new Map();
-  const placeholders = ids.map(() => '?').join(',');
-  let rows: { id: string; rank: number }[];
+  const CHUNK = 999;
+  let rows: { id: string; rank: number }[] = [];
   try {
-    rows = db.query(`
-      SELECT n.id, rank FROM nodes n
-      JOIN nodes_fts f ON f.id = n.id
-      WHERE nodes_fts MATCH ? AND n.id IN (${placeholders})
-      ORDER BY rank
-    `).all(query, ...ids) as { id: string; rank: number }[];
+    for (let i = 0; i < ids.length; i += CHUNK) {
+      const chunk = ids.slice(i, i + CHUNK);
+      const placeholders = chunk.map(() => '?').join(',');
+      const batch = db.query(`
+        SELECT n.id, bm25(nodes_fts) AS rank FROM nodes n
+        JOIN nodes_fts f ON f.id = n.id
+        WHERE nodes_fts MATCH ? AND n.id IN (${placeholders})
+        ORDER BY rank
+      `).all(query, ...chunk) as { id: string; rank: number }[];
+      rows.push(...batch);
+    }
   } catch {
     return new Map();
   }
@@ -113,9 +118,15 @@ export async function memtreeCompose(
   }
 
   const allIds = [...distanceMap.keys()];
-  const candidates = db.query(
-    `SELECT * FROM nodes WHERE id IN (${allIds.map(() => '?').join(',')}) AND status = 'live'`
-  ).all(...allIds) as MemtreeNode[];
+  const CHUNK = 999;
+  const candidates: MemtreeNode[] = [];
+  for (let i = 0; i < allIds.length; i += CHUNK) {
+    const chunk = allIds.slice(i, i + CHUNK);
+    const rows = db.query(
+      `SELECT * FROM nodes WHERE id IN (${chunk.map(() => '?').join(',')}) AND status = 'live'`
+    ).all(...chunk) as MemtreeNode[];
+    candidates.push(...rows);
+  }
 
   const ftsRanks = query ? getFtsRanks(db, query, allIds) : new Map<string, number>();
   const hasQuery = !!query;

@@ -42,11 +42,30 @@ describe('memtreeRead', () => {
   test('returns cached result when mtime unchanged', async () => {
     const filePath = join(FIXTURE_DIR, 'stable.ts');
     writeFileSync(filePath, 'export const x = 42;\n// padding to meet size threshold\n');
-    await memtreeRead(db, cfg, { path: filePath, budget_tokens: 500 });
+    const r1 = await memtreeRead(db, cfg, { path: filePath, budget_tokens: 500 });
     const count1 = (db.query("SELECT COUNT(*) as n FROM nodes").get() as { n: number }).n;
-    await memtreeRead(db, cfg, { path: filePath, budget_tokens: 500 });
+    const r2 = await memtreeRead(db, cfg, { path: filePath, budget_tokens: 500 });
     const count2 = (db.query("SELECT COUNT(*) as n FROM nodes").get() as { n: number }).n;
     expect(count2).toBe(count1);
+    expect(r2.nodeId).toBe(r1.nodeId);
+    expect(r2.content).toBe(r1.content);
+  });
+
+  test('filters chunks to requested line range (0-based)', async () => {
+    const filePath = join(FIXTURE_DIR, 'ranged.ts');
+    // Write a file with two distinct blocks across lines 0-2 and 4-6 (0-based)
+    writeFileSync(filePath, [
+      'const BLOCK_A = 1;',  // line 0
+      'const A2 = 2;',       // line 1
+      'const A3 = 3;',       // line 2
+      '',                    // line 3
+      'const BLOCK_B = 10;', // line 4
+      'const B2 = 20;',      // line 5
+      'const B3 = 30;',      // line 6
+    ].join('\n'));
+    const result = await memtreeRead(db, cfg, { path: filePath, lines: [4, 6], budget_tokens: 2000 });
+    expect(result.content).toContain('BLOCK_B');
+    expect(result.content).not.toContain('BLOCK_A');
   });
 
   test('falls back to window chunking for unknown file type', async () => {

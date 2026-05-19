@@ -12,7 +12,7 @@ export function getNeighborsDeep(
   filters: Filters = {}
 ): MemtreeNode[] {
   const cap = Math.min(depth, MAX_DEPTH);
-  const { where, params } = buildFilterSQL(filters);
+  const { where, params } = buildFilterSQL(filters, 'n');
   const kindFilter = edgeKinds?.length
     ? `AND e.kind IN (${edgeKinds.map(() => '?').join(',')})`
     : '';

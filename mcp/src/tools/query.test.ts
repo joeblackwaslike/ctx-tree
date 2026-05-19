@@ -52,6 +52,19 @@ describe('getNeighborsDeep', () => {
     const neighbors = getNeighborsDeep(db, 'a', 1);
     expect(neighbors.some(n => n.id === 'b')).toBe(true);
   });
+
+  test('enforces MAX_DEPTH cap at 5 even when larger depth is requested', () => {
+    // Build a chain: n0 → n1 → n2 → n3 → n4 → n5 → n6 (7 hops)
+    for (let i = 0; i <= 6; i++) node(`n${i}`, `chain node ${i} content long enough`);
+    for (let i = 0; i < 6; i++) insertEdge(db, { src_id: `n${i}`, dst_id: `n${i + 1}`, kind: 'references' });
+
+    const neighbors = getNeighborsDeep(db, 'n0', 10); // request depth=10, cap is 5
+    const ids = new Set(neighbors.map(n => n.id));
+    // Should reach n1-n5 (5 hops) but NOT n6
+    expect(ids.has('n1')).toBe(true);
+    expect(ids.has('n5')).toBe(true);
+    expect(ids.has('n6')).toBe(false);
+  });
 });
 
 describe('getPathToRoot', () => {

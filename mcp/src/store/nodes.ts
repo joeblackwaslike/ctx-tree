@@ -75,6 +75,16 @@ export function getOrCreateSessionNode(
   return getNode(db, id)!;
 }
 
+export function markStaleByFilePath(db: Database, filePath: string, exceptMtime: number): void {
+  db.run(
+    `UPDATE nodes SET status = 'stale', updated_at = ?
+     WHERE json_extract(metadata, '$.filePath') = ?
+       AND mtime != ?
+       AND status = 'live'`,
+    Date.now(), filePath, exceptMtime
+  );
+}
+
 export function countPendingNodes(db: Database): number {
   return (db.query("SELECT COUNT(*) as n FROM nodes WHERE status = 'pending'").get() as { n: number }).n;
 }

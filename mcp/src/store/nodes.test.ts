@@ -78,4 +78,13 @@ describe('edges', () => {
     const neighbors = getNeighbors(db, a);
     expect(neighbors.some(n => n.id === b)).toBe(true);
   });
+
+  test('getNeighbors is bidirectional — querying dst also returns src', () => {
+    const a = ulid(), b = ulid();
+    insertNode(db, a, makeNode());
+    insertNode(db, b, makeNode());
+    insertEdge(db, { src_id: a, dst_id: b, kind: 'references' });
+    const neighborsOfB = getNeighbors(db, b);
+    expect(neighborsOfB.some(n => n.id === a)).toBe(true);
+  });
 });

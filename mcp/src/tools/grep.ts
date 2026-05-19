@@ -36,9 +36,13 @@ export async function memtreeGrep(
   args.push('--max-count', String(maxCount));
   args.push('--', pattern, path);
 
+  // Use a generous buffer so large results are truncated in post-processing,
+  // not killed with ENOBUFS.
+  const spawnBuffer = Math.max(config.capture.maxBytes * 10, 10 * 1024 * 1024);
+
   let rawOutput = '';
   const result = spawnSync('rg', args.slice(1), {
-    maxBuffer: config.capture.maxBytes,
+    maxBuffer: spawnBuffer,
     encoding: 'buffer',
   });
 
@@ -71,17 +75,21 @@ export async function memtreeGrep(
       metadata: JSON.stringify({ tool: 'Grep', pattern, path }),
     });
 
-    // Create child file_chunk nodes per matched file
-    const matchedFiles = new Set(
-      matches.map(line => {
-        const colonIdx = line.indexOf(':');
-        return colonIdx > 0 ? line.slice(0, colonIdx) : null;
-      }).filter((f): f is string => f !== null && !shouldDropPath(f, config.capture.pathDenylistExtra ?? []))
-    );
+    // Build file→lines map in O(matches) instead of O(files × matches).
+    const fileMatchMap = new Map<string, string[]>();
+    for (const line of matches) {
+      const colonIdx = line.indexOf(':');
+      if (colonIdx <= 0) continue;
+      const filePath = line.slice(0, colonIdx);
+      if (shouldDropPath(filePath, config.capture.pathDenylistExtra ?? [])) continue;
+      const rest = line.slice(colonIdx + 1);
+      if (!/^\d+:/.test(rest)) continue;
+      const arr = fileMatchMap.get(filePath);
+      if (arr) arr.push(line);
+      else fileMatchMap.set(filePath, [line]);
+    }
 
-    for (const filePath of matchedFiles) {
-      const prefix = filePath + ':';
-      const fileLines = matches.filter(l => l.startsWith(prefix) && /^\d+:/.test(l.slice(prefix.length)));
+    for (const [filePath, fileLines] of fileMatchMap) {
       const fileContent = fileLines.join('\n');
       if (Buffer.byteLength(fileContent, 'utf8') < config.capture.filterMinSize) continue;
       const fileHash = createHash('sha256').update(fileContent).digest('hex');

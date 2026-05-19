@@ -4,7 +4,7 @@ import { ulid } from 'ulid';
 import { extname } from 'path';
 import type { Database } from 'bun:sqlite';
 import type { MemtreeConfig } from '../store/types';
-import { insertNode, getNodeBySourceUri, updateNodeStatus } from '../store/nodes';
+import { insertNode, getNodeBySourceUri, updateNodeStatus, markStaleByFilePath } from '../store/nodes';
 import { insertEdge } from '../store/edges';
 import { shouldDropPath } from '../redaction';
 
@@ -71,15 +71,16 @@ function treeSitterChunk(source: string, lang: TreeSitterLanguage): Chunk[] {
       children: TSNode[];
     };
 
-    function walk(node: TSNode) {
-      const isTopLevel = [
-        'function_declaration', 'class_declaration', 'method_definition',
-        'lexical_declaration', 'variable_declaration', 'export_statement',
-        'function_definition', 'class_definition',
-        'function_item', 'struct_item', 'enum_item', 'impl_item',
-      ].includes(node.type);
+    // Classes are containers — recurse into them to capture individual methods.
+    const LEAF_TYPES = new Set([
+      'function_declaration', 'method_definition',
+      'lexical_declaration', 'variable_declaration', 'export_statement',
+      'function_definition',
+      'function_item', 'struct_item', 'enum_item', 'impl_item',
+    ]);
 
-      if (isTopLevel) {
+    function walk(node: TSNode) {
+      if (LEAF_TYPES.has(node.type)) {
         const startLine = node.startPosition.row + 1;
         const endLine = node.endPosition.row + 1;
         const content = lines.slice(startLine - 1, endLine).join('\n');
@@ -112,15 +113,20 @@ export async function memtreeRead(
   const stat = statSync(path);
   const mtime = Math.round(stat.mtimeMs);
   const ext = extname(path).toLowerCase();
-  const fileRootUri = `file://${path}`;
 
-  const cached = getNodeBySourceUri(db, fileRootUri);
+  // Cache key includes lines and budget to avoid returning wrong cached content.
+  const lineKey = lines ? `${lines[0]},${lines[1]}` : 'all';
+  const cacheUri = `file://${path}?lines=${lineKey}&budget=${budget_tokens}`;
+
+  const cached = getNodeBySourceUri(db, cacheUri);
   if (cached && cached.mtime === mtime) {
     const meta = JSON.parse(cached.metadata) as { chunking: 'treesitter' | 'window' };
     return { nodeId: cached.id, content: cached.content, truncated: cached.truncated === 1, chunking: meta.chunking };
   }
 
   if (cached) updateNodeStatus(db, cached.id, 'stale');
+  // Stale any other cached reads of this file whose mtime no longer matches.
+  markStaleByFilePath(db, path, mtime);
 
   let raw = readFileSync(path, 'utf8');
   const originalBytes = Buffer.byteLength(raw, 'utf8');
@@ -149,15 +155,19 @@ export async function memtreeRead(
   }
 
   if (lines) {
-    chunks = chunks.filter(c => c.startLine <= lines[1] && c.endLine >= lines[0]);
+    // Schema advertises 0-based lines; internal chunks use 1-based line numbers.
+    const start1 = lines[0] + 1;
+    const end1 = lines[1] + 1;
+    chunks = chunks.filter(c => c.startLine <= end1 && c.endLine >= start1);
   }
 
   const budget = budget_tokens;
   let used = 0;
   const included: Chunk[] = [];
-  for (const chunk of chunks) {
+  for (const [i, chunk] of chunks.entries()) {
     const tokens = estimateTokens(chunk.content);
-    if (used + tokens > budget) break;
+    // Always include at least the first chunk so callers get some content.
+    if (i > 0 && used + tokens > budget) break;
     included.push(chunk);
     used += tokens;
   }
@@ -169,7 +179,7 @@ export async function memtreeRead(
   insertNode(db, nodeId, {
     parent_id: null,
     kind: 'file_chunk',
-    source_uri: fileRootUri,
+    source_uri: cacheUri,
     content,
     content_hash: contentHash,
     status: 'live',

@@ -53,11 +53,17 @@ describe('memtreeCompose', () => {
   });
 
   test('format=outline returns titles+previews not full content', async () => {
-    node('n1', 'export function doStuff() { return 42; } // more content');
+    const fullContent = 'export function doStuff() { return 42; } // more content here padding';
+    node('n1', fullContent);
     const result = await memtreeCompose(db, {
       node_ids: ['n1'], budget_tokens: 500, format: 'outline',
     });
-    expect(result.content.length).toBeLessThan('export function doStuff() { return 42; } // more content'.length);
+    // Outline must be shorter than the full body
+    expect(result.content.length).toBeLessThan(fullContent.length);
+    // Outline must not include the full function body verbatim
+    expect(result.content).not.toContain(fullContent);
+    // Outline must include the node ID prefix
+    expect(result.content).toContain('n1');
   });
 
   test('format=mixed returns error in v1', async () => {

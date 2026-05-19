@@ -1,12 +1,6 @@
 import { describe, test, expect } from 'bun:test';
-import { redactBashOutput, shouldDropBashCommand, shouldDropPath } from './index';
-
-describe('shouldDropBashCommand', () => {
-  test('drops "env"', () => expect(shouldDropBashCommand('env')).toBe(true));
-  test('drops "printenv HOME"', () => expect(shouldDropBashCommand('printenv HOME')).toBe(true));
-  test('allows "echo hello"', () => expect(shouldDropBashCommand('echo hello')).toBe(false));
-  test('allows "ls -la"', () => expect(shouldDropBashCommand('ls -la')).toBe(false));
-});
+import { redactBashOutput, shouldDropPath } from './index';
+// Bash command filtering is delegated to the SRT sandbox — no shouldDropBashCommand here.
 
 describe('redactBashOutput', () => {
   test('redacts AWS access key', () => {

@@ -14,7 +14,7 @@ export function runStalenessWalker(db: Database, _config: MemtreeConfig): void {
 
     try {
       const stat = statSync(filePath);
-      if (stat.mtimeMs !== node.mtime) {
+      if (Math.round(stat.mtimeMs) !== node.mtime) {
         updateNodeStatus(db, node.id, 'stale');
       }
     } catch {

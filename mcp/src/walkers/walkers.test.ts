@@ -77,6 +77,29 @@ describe('coordinator startup sweep', () => {
   });
 });
 
+describe('filter walker deduplication', () => {
+  test('prunes duplicate pending node when live node with same hash exists', () => {
+    const liveId = ulid();
+    insertNode(db, liveId, {
+      parent_id: null, kind: 'note', source_uri: null,
+      content: 'shared content that is long enough to pass the size check here',
+      content_hash: 'shared-hash', status: 'live',
+      mtime: 0, truncated: 0, original_bytes: 62, metadata: '{}',
+    });
+    const dupId = ulid();
+    insertNode(db, dupId, {
+      parent_id: null, kind: 'note', source_uri: null,
+      content: 'shared content that is long enough to pass the size check here',
+      content_hash: 'shared-hash', status: 'pending',
+      mtime: 0, truncated: 0, original_bytes: 62, metadata: '{}',
+    });
+    runFilterWalker(db, cfg);
+    const dup = getNode(db, dupId);
+    expect(dup?.status ?? 'pruned').toBe('pruned');
+    expect(getNode(db, liveId)!.status).toBe('live');
+  });
+});
+
 describe('pruner walker', () => {
   test('prunes stale nodes older than retention horizon', () => {
     const id = ulid();

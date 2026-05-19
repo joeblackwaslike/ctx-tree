@@ -23,12 +23,9 @@ import { memtreeCompose } from './tools/compose.js';
 import type { Filters } from './store/types.js';
 
 // ── Platform check ────────────────────────────────────────────────────────────
-const SUPPORTED_PLATFORMS = ['darwin-arm64', 'linux-x64', 'linux-arm64'];
-const platform = `${process.platform === 'darwin' ? 'darwin' : 'linux'}-${process.arch === 'arm64' ? 'arm64' : 'x64'}`;
-// Normalize: darwin-x64 is fine, but darwin-arm64, linux-x64, linux-arm64 are the documented ones.
-// We check the raw combined key against the list.
+const SUPPORTED_PLATFORMS = ['darwin-arm64', 'darwin-x64', 'linux-x64', 'linux-arm64'];
 const rawPlatform = `${process.platform}-${process.arch}`;
-// Accept darwin-arm64, linux-x64, linux-arm64; map darwin-x64 as a fallback.
+const platform = `${process.platform === 'darwin' ? 'darwin' : 'linux'}-${process.arch === 'arm64' ? 'arm64' : 'x64'}`;
 const effectivePlatform = SUPPORTED_PLATFORMS.includes(rawPlatform)
   ? rawPlatform
   : SUPPORTED_PLATFORMS.includes(platform)
