@@ -7,7 +7,8 @@ import {
   McpError,
 } from '@modelcontextprotocol/sdk/types.js';
 import { execSync } from 'child_process';
-import { mkdirSync, chmodSync } from 'fs';
+import { mkdirSync, chmodSync, unlinkSync, existsSync } from 'fs';
+import * as net from 'net';
 import { join } from 'path';
 import { openDb, closeDb } from './store/db.js';
 import { loadConfig } from './config.js';
@@ -22,6 +23,8 @@ import { memtreeGrep } from './tools/grep.js';
 import { memtreeCompose } from './tools/compose.js';
 import type { Filters } from './store/types.js';
 import { loadProviders } from './providers/index.js';
+import { processIngest } from './ingest.js';
+import type { IngestPayload } from './store/types.js';
 
 // ── Platform check ────────────────────────────────────────────────────────────
 const SUPPORTED_PLATFORMS = ['darwin-arm64', 'darwin-x64', 'linux-x64', 'linux-arm64'];
@@ -71,6 +74,44 @@ const { embedding: _embedding, summarizer: _summarizer } = loadProviders(config)
 // ── Walkers ───────────────────────────────────────────────────────────────────
 const walkers = new WalkerCoordinator();
 walkers.start(db, config);
+
+// ── Ingest socket ─────────────────────────────────────────────────────────────
+const ingestSockPath = join(storeDir, 'ingest.sock');
+
+// Remove stale socket file if it exists from a previous run
+if (existsSync(ingestSockPath)) {
+  try { unlinkSync(ingestSockPath); } catch { /* ignore */ }
+}
+
+const ingestServer = net.createServer((socket) => {
+  let buf = '';
+  socket.on('data', (chunk) => {
+    buf += chunk.toString('utf8');
+    let nl: number;
+    while ((nl = buf.indexOf('\n')) !== -1) {
+      const line = buf.slice(0, nl).trim();
+      buf = buf.slice(nl + 1);
+      if (!line) continue;
+      try {
+        const payload = JSON.parse(line) as IngestPayload;
+        processIngest(db, config, payload);
+      } catch (err) {
+        process.stderr.write(`[memtree/ingest] failed to parse line: ${err}\n`);
+      }
+    }
+  });
+  socket.on('error', (err) => {
+    process.stderr.write(`[memtree/ingest] socket connection error: ${err}\n`);
+  });
+});
+
+ingestServer.listen(ingestSockPath, () => {
+  try { chmodSync(ingestSockPath, 0o600); } catch { /* ignore on platforms that don't support it */ }
+});
+
+ingestServer.on('error', (err) => {
+  process.stderr.write(`[memtree/ingest] server error: ${err}\n`);
+});
 
 // ── MCP server ────────────────────────────────────────────────────────────────
 const server = new Server(
@@ -304,6 +345,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 const transport = new StdioServerTransport();
 
 function shutdown(): void {
+  ingestServer.close();
+  try { unlinkSync(ingestSockPath); } catch { /* already gone */ }
   walkers.stop();
   closeDb(db);
   deregisterProject(projectHash);

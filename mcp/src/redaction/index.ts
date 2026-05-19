@@ -25,6 +25,13 @@ export function redactBashOutput(output: string): string {
   return result;
 }
 
+// Commands that leak environment variables or shell state — always drop.
+const BLOCKED_BASH_COMMANDS = /\b(env|printenv|set|export|history)\b/;
+
+export function shouldDropBashCommand(command: string): boolean {
+  return BLOCKED_BASH_COMMANDS.test(command);
+}
+
 export function shouldDropPath(filePath: string, extraGlobs: string[] = []): boolean {
   const allGlobs = [...DEFAULT_PATH_DENY_GLOBS, ...extraGlobs];
   const basename = filePath.split('/').pop() ?? '';
