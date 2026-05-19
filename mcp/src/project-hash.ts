@@ -79,7 +79,13 @@ export function deregisterProject(hash: string): void {
       .filter(line => line.split('\t')[1] !== hash);
     
     const newContent = lines.join('\n') + (lines.length > 0 ? '\n' : '');
-    writeFileSync(PROJECTS_TSV, newContent, 'utf-8');
+    
+    // Write atomically: write to a temp file, then rename
+    const tmpPath = `${PROJECTS_TSV}.tmp.${process.pid}`;
+    writeFileSync(tmpPath, newContent, 'utf-8');
+    
+    // Atomic rename
+    renameSync(tmpPath, PROJECTS_TSV);
   } catch {
     // File doesn't exist, nothing to deregister
   }
