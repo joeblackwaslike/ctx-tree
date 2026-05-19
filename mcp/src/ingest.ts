@@ -1,5 +1,5 @@
 import { createHash } from 'crypto';
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import { ulid } from 'ulid';
 import type Database from 'bun:sqlite';
 import { insertNode } from './store/nodes.js';
@@ -43,9 +43,16 @@ function isGitignored(filePath: string, cwd: string): boolean {
   if (cached && Date.now() - cached.ts < GITIGNORE_CACHE_TTL_MS) {
     return cached.result;
   }
+  // Evict stale entries if cache is large (Fix 3: prevent memory leak)
+  if (gitignoreCache.size > 1000) {
+    const now = Date.now();
+    for (const [k, v] of gitignoreCache) {
+      if (now - v.ts > GITIGNORE_CACHE_TTL_MS) gitignoreCache.delete(k);
+    }
+  }
   let result = false;
   try {
-    execSync(`git check-ignore -q ${JSON.stringify(filePath)}`, { cwd, stdio: 'pipe' });
+    execFileSync('git', ['check-ignore', '-q', filePath], { cwd, stdio: 'pipe' });
     result = true;
   } catch {
     result = false;
@@ -232,7 +239,7 @@ function processPayloadSync(db: Database, config: MemtreeConfig, payload: Ingest
   // 12. Insert node (fast path — status='live')
   try {
     insertNode(db, ulid(), {
-      parent_id: payload.session_id ?? null,
+      parent_id: null,
       kind,
       source_uri: sourceUri,
       content,
@@ -278,7 +285,7 @@ export function processIngest(db: Database, config: MemtreeConfig, payload: Inge
 /**
  * Exported for testing — synchronous processing that bypasses the ring buffer.
  */
-export function processIngestSync(db: Database, config: MemtreeConfig, payload: IngestPayload): void {
+export function _processIngestSyncForTests(db: Database, config: MemtreeConfig, payload: IngestPayload): void {
   try {
     processPayloadSync(db, config, payload);
   } catch (err) {

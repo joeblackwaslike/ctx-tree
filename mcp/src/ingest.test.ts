@@ -2,7 +2,7 @@ import { describe, test, expect, beforeEach, afterEach, mock, spyOn } from 'bun:
 import { unlinkSync, existsSync } from 'fs';
 import * as childProcess from 'child_process';
 import { openDb, closeDb } from './store/db';
-import { processIngestSync, _resetIngestState } from './ingest';
+import { _processIngestSyncForTests, _resetIngestState } from './ingest';
 import type { IngestPayload, MemtreeConfig } from './store/types';
 import type { Database } from 'bun:sqlite';
 
@@ -90,19 +90,19 @@ afterEach(() => {
 describe('per-tool capture flags', () => {
   test('drops Read payload when config.capture.read = false', () => {
     const config = { ...BASE_CONFIG, capture: { ...BASE_CONFIG.capture, read: false } };
-    processIngestSync(db, config, makeReadPayload());
+    _processIngestSyncForTests(db, config, makeReadPayload());
     expect(countNodes(db)).toBe(0);
   });
 
   test('drops Grep payload when config.capture.grep = false', () => {
     const config = { ...BASE_CONFIG, capture: { ...BASE_CONFIG.capture, grep: false } };
-    processIngestSync(db, config, makeGrepPayload());
+    _processIngestSyncForTests(db, config, makeGrepPayload());
     expect(countNodes(db)).toBe(0);
   });
 
   test('drops Bash payload when config.capture.bash = false', () => {
     const config = { ...BASE_CONFIG, capture: { ...BASE_CONFIG.capture, bash: false } };
-    processIngestSync(db, config, makeBashPayload());
+    _processIngestSyncForTests(db, config, makeBashPayload());
     expect(countNodes(db)).toBe(0);
   });
 });
@@ -113,7 +113,7 @@ describe('filterMinSize', () => {
   test('drops payload below filterMinSize', () => {
     const config = { ...BASE_CONFIG, capture: { ...BASE_CONFIG.capture, filterMinSize: 200 } };
     // 'x'.repeat(10) → 10 bytes < 200
-    processIngestSync(
+    _processIngestSyncForTests(
       db,
       config,
       makeReadPayload({ response: { content: 'x'.repeat(10) } }),
@@ -123,7 +123,7 @@ describe('filterMinSize', () => {
 
   test('accepts payload at or above filterMinSize', () => {
     const config = { ...BASE_CONFIG, capture: { ...BASE_CONFIG.capture, filterMinSize: 50 } };
-    processIngestSync(
+    _processIngestSyncForTests(
       db,
       config,
       makeReadPayload({ response: { content: 'x'.repeat(50) } }),
@@ -137,9 +137,9 @@ describe('filterMinSize', () => {
 describe('dedup window', () => {
   test('drops duplicate payload within 60s dedup window', () => {
     const payload = makeReadPayload();
-    processIngestSync(db, BASE_CONFIG, payload);
+    _processIngestSyncForTests(db, BASE_CONFIG, payload);
     // same tool+input → same dedup key
-    processIngestSync(db, BASE_CONFIG, { ...payload, ts: payload.ts + 1000 });
+    _processIngestSyncForTests(db, BASE_CONFIG, { ...payload, ts: payload.ts + 1000 });
     expect(countNodes(db)).toBe(1);
   });
 });
@@ -148,7 +148,7 @@ describe('dedup window', () => {
 
 describe('path denylist', () => {
   test('drops Read payload for denylisted path (.env)', () => {
-    processIngestSync(
+    _processIngestSyncForTests(
       db,
       BASE_CONFIG,
       makeReadPayload({ input: { path: '/project/.env' }, response: { content: 'x'.repeat(200) } }),
@@ -157,7 +157,7 @@ describe('path denylist', () => {
   });
 
   test('drops Read payload for SSH key path', () => {
-    processIngestSync(
+    _processIngestSyncForTests(
       db,
       BASE_CONFIG,
       makeReadPayload({
@@ -174,7 +174,7 @@ describe('path denylist', () => {
 describe('Read ingestion', () => {
   test('inserts file_chunk node for valid Read payload', () => {
     // Use a unique path/content combo to avoid dedup from earlier tests
-    processIngestSync(
+    _processIngestSyncForTests(
       db,
       BASE_CONFIG,
       makeReadPayload({
@@ -189,7 +189,7 @@ describe('Read ingestion', () => {
 
   test('source_uri starts with file:// for Read payload', () => {
     const filePath = '/project/src/source-uri-check.ts';
-    processIngestSync(
+    _processIngestSyncForTests(
       db,
       BASE_CONFIG,
       makeReadPayload({
@@ -210,7 +210,7 @@ describe('Read ingestion', () => {
 
 describe('Bash ingestion', () => {
   test('inserts tool_output node for valid Bash payload', () => {
-    processIngestSync(db, BASE_CONFIG, makeBashPayload());
+    _processIngestSyncForTests(db, BASE_CONFIG, makeBashPayload());
     const node = getNodeByKind(db, 'tool_output');
     expect(node).not.toBeNull();
     expect(node!.kind).toBe('tool_output');
@@ -222,18 +222,14 @@ describe('Bash ingestion', () => {
 describe('gitignore flag', () => {
   test('sets metadata.gitignored=true for gitignored path', () => {
     // Mock execSync to simulate git check-ignore returning exit code 0 (file is gitignored)
-    const spy = spyOn(childProcess, 'execSync').mockImplementation(
-      (cmd: string, _opts?: object) => {
-        if (typeof cmd === 'string' && cmd.includes('git check-ignore')) {
-          return Buffer.from('');
-        }
-        // Fallback for any other execSync usage
+    const spy = spyOn(childProcess, 'execFileSync').mockImplementation(
+      (_file: string, _args?: readonly string[], _opts?: object) => {
         return Buffer.from('');
       },
     );
 
     const filePath = '/project/dist/bundle.js';
-    processIngestSync(
+    _processIngestSyncForTests(
       db,
       BASE_CONFIG,
       makeReadPayload({
@@ -254,17 +250,14 @@ describe('gitignore flag', () => {
 
   test('does not set metadata.gitignored for non-gitignored path', () => {
     // Mock execSync to simulate git check-ignore throwing (exit code 1 = not ignored)
-    const spy = spyOn(childProcess, 'execSync').mockImplementation(
-      (cmd: string, _opts?: object) => {
-        if (typeof cmd === 'string' && cmd.includes('git check-ignore')) {
-          throw new Error('not ignored');
-        }
-        return Buffer.from('');
+    const spy = spyOn(childProcess, 'execFileSync').mockImplementation(
+      (_file: string, _args?: readonly string[], _opts?: object) => {
+        throw new Error('not ignored');
       },
     );
 
     const filePath = '/project/src/not-ignored.ts';
-    processIngestSync(
+    _processIngestSyncForTests(
       db,
       BASE_CONFIG,
       makeReadPayload({
@@ -289,7 +282,7 @@ describe('gitignore flag', () => {
 describe('Bash output redaction', () => {
   test('redacts API keys in Bash output before storing', () => {
     const secretKey = 'ANTHROPIC_API_KEY=sk-ant-api03-supersecretkeyvalue1234567890';
-    processIngestSync(
+    _processIngestSyncForTests(
       db,
       BASE_CONFIG,
       makeBashPayload({
@@ -312,7 +305,7 @@ describe('Bash output redaction', () => {
   });
 
   test('drops Bash payload with blocked command (env)', () => {
-    processIngestSync(
+    _processIngestSyncForTests(
       db,
       BASE_CONFIG,
       makeBashPayload({ input: { command: 'env' } }),
@@ -321,10 +314,61 @@ describe('Bash output redaction', () => {
   });
 
   test('drops Bash payload with blocked command (printenv)', () => {
-    processIngestSync(
+    _processIngestSyncForTests(
       db,
       BASE_CONFIG,
       makeBashPayload({ input: { command: 'printenv HOME' } }),
+    );
+    expect(countNodes(db)).toBe(0);
+  });
+});
+
+// ── session_id FK safety (Fix 1) ──────────────────────────────────────────────
+
+describe('session_id FK safety', () => {
+  test('inserts node even when session_id is a non-null UUID (not a nodes.id)', () => {
+    _processIngestSyncForTests(
+      db,
+      BASE_CONFIG,
+      makeReadPayload({
+        session_id: 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
+        input: { path: '/project/src/fk-safety-test.ts' },
+        response: { content: 'fk-safety-test-content-' + 'x'.repeat(200) },
+      }),
+    );
+    expect(countNodes(db)).toBe(1);
+  });
+});
+
+// ── Bash command anchor regex (Fix 2) ─────────────────────────────────────────
+
+describe('bash command anchor regex', () => {
+  test('does NOT drop "npm run build:env" (false positive fixed)', () => {
+    _processIngestSyncForTests(
+      db,
+      BASE_CONFIG,
+      makeBashPayload({
+        input: { command: 'npm run build:env' },
+        response: { stdout: 'build succeeded ' + 'x'.repeat(200) },
+      }),
+    );
+    expect(countNodes(db)).toBe(1);
+  });
+
+  test('drops "ls && env" (chained blocked command)', () => {
+    _processIngestSyncForTests(
+      db,
+      BASE_CONFIG,
+      makeBashPayload({ input: { command: 'ls && env' } }),
+    );
+    expect(countNodes(db)).toBe(0);
+  });
+
+  test('drops bare "env" command (still blocked)', () => {
+    _processIngestSyncForTests(
+      db,
+      BASE_CONFIG,
+      makeBashPayload({ input: { command: 'env' } }),
     );
     expect(countNodes(db)).toBe(0);
   });
