@@ -53,4 +53,18 @@ describe('memtreeGrep', () => {
     await expect(memtreeGrep(db, DEFAULT_CONFIG, { pattern: 'SECRET', path: '/home/user/.env' }))
       .rejects.toThrow('Path rejected by denylist');
   });
+
+  test('excludes lines from denylisted files in matches and stored content', async () => {
+    writeFileSync(join(FIXTURE_DIR, '.env'), 'SECRET=supersecret\nAPI_KEY=abc123\n');
+    writeFileSync(join(FIXTURE_DIR, 'safe.ts'), 'const SECRET_NAME = "non-secret";\n');
+    const result = await memtreeGrep(db, DEFAULT_CONFIG, {
+      pattern: 'SECRET',
+      path: FIXTURE_DIR,
+    });
+    // .env lines must not appear in returned matches
+    expect(result.matches.every(m => !m.includes('.env'))).toBe(true);
+    // .env lines must not appear in stored tool_output content
+    const node = db.query("SELECT content FROM nodes WHERE kind = 'tool_output' LIMIT 1").get() as { content: string } | null;
+    if (node) expect(node.content).not.toContain('supersecret');
+  });
 });

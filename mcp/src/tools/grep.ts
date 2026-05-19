@@ -5,6 +5,7 @@ import type { Database } from 'bun:sqlite';
 import type { MemtreeConfig } from '../store/types';
 import { insertNode } from '../store/nodes';
 import { shouldDropPath } from '../redaction';
+import { DEFAULT_PATH_DENY_GLOBS } from '../redaction/paths';
 
 export interface GrepParams {
   pattern: string;
@@ -25,14 +26,19 @@ export async function memtreeGrep(
   params: GrepParams
 ): Promise<GrepResult> {
   const { pattern, path = '.', caseInsensitive, fileGlob, maxCount = 500 } = params;
+  const pathDenylistExtra = config.capture.pathDenylistExtra ?? [];
 
-  if (shouldDropPath(path, config.capture.pathDenylistExtra ?? [])) {
+  if (shouldDropPath(path, pathDenylistExtra)) {
     throw new Error(`Path rejected by denylist: ${path}`);
   }
 
   const args: string[] = ['rg', '--line-number', '--no-heading'];
   if (caseInsensitive) args.push('-i');
   if (fileGlob) args.push('--glob', fileGlob);
+  // Exclude denylisted paths at rg level so they are never read.
+  for (const glob of [...DEFAULT_PATH_DENY_GLOBS, ...pathDenylistExtra]) {
+    args.push('--glob', `!${glob}`);
+  }
   args.push('--max-count', String(maxCount));
   args.push('--', pattern, path);
 
@@ -54,7 +60,16 @@ export async function memtreeGrep(
     throw new Error(`rg failed with exit code ${result.status}: ${result.stderr?.toString('utf8')}`);
   }
 
-  const matches = rawOutput.split('\n').filter(Boolean);
+  // Defense-in-depth: post-filter any lines whose file path is denylisted,
+  // in case rg glob exclusions don't cover every path form.
+  const allMatches = rawOutput.split('\n').filter(Boolean);
+  const matches = allMatches.filter(line => {
+    const colonIdx = line.indexOf(':');
+    if (colonIdx <= 0) return true;
+    const filePath = line.slice(0, colonIdx);
+    return !shouldDropPath(filePath, pathDenylistExtra);
+  });
+
   const content = matches.join('\n');
   const originalBytes = Buffer.byteLength(content, 'utf8');
   const truncContent = Buffer.from(content).subarray(0, config.capture.maxBytes).toString('utf8');
@@ -81,7 +96,7 @@ export async function memtreeGrep(
       const colonIdx = line.indexOf(':');
       if (colonIdx <= 0) continue;
       const filePath = line.slice(0, colonIdx);
-      if (shouldDropPath(filePath, config.capture.pathDenylistExtra ?? [])) continue;
+      if (shouldDropPath(filePath, pathDenylistExtra)) continue;
       const rest = line.slice(colonIdx + 1);
       if (!/^\d+:/.test(rest)) continue;
       const arr = fileMatchMap.get(filePath);
