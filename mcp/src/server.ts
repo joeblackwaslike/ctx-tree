@@ -21,6 +21,7 @@ import { memtreeRead } from './tools/read.js';
 import { memtreeGrep } from './tools/grep.js';
 import { memtreeCompose } from './tools/compose.js';
 import type { Filters } from './store/types.js';
+import { loadProviders } from './providers/index.js';
 
 // ── Platform check ────────────────────────────────────────────────────────────
 const SUPPORTED_PLATFORMS = ['darwin-arm64', 'darwin-x64', 'linux-x64', 'linux-arm64'];
@@ -62,6 +63,10 @@ chmodSync(dbPath, 0o600);
 
 // Register this project in projects.tsv
 registerProject(process.env.MEMTREE_CWD ?? process.cwd(), projectHash);
+
+// ── Providers ─────────────────────────────────────────────────────────────────
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const { embedding: _embedding, summarizer: _summarizer } = loadProviders(config);
 
 // ── Walkers ───────────────────────────────────────────────────────────────────
 const walkers = new WalkerCoordinator();

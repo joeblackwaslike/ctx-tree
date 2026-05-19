@@ -94,10 +94,4 @@ export interface SummarizerProvider {
   summarize(content: string, contextHint?: string): Promise<string>;
 }
 
-// Returns null providers in v1; v1.1 factory reads config and returns real impls.
-export function loadProviders(_config: MemtreeConfig): {
-  embedding: EmbeddingProvider | null;
-  summarizer: SummarizerProvider | null;
-} {
-  return { embedding: null, summarizer: null };
-}
+// Provider implementations live in ../providers/index.ts to avoid circular imports.
