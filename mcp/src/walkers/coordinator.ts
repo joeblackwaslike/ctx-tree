@@ -7,6 +7,7 @@ import { runStalenessWalker } from './staleness.js';
 import { runPrunerWalker } from './pruner.js';
 import { runEmbeddingWalker } from './embedding.js';
 import { runSummarizerWalker } from './summarizer.js';
+import { runDedupeWalker } from './dedupe.js';
 
 function withErrorBoundary(name: string, fn: () => void): void {
   try { fn(); } catch (e) {
@@ -52,6 +53,15 @@ export class WalkerCoordinator {
         setInterval(
           () => withErrorBoundary('summarizer', () => runSummarizerWalker(db, config, summarizer)),
           config.walkers.embeddingIdleMs
+        )
+      );
+    }
+
+    if (config.walkers.dedupeIntervalMs > 0) {
+      this.timers.push(
+        setInterval(
+          () => withErrorBoundary('dedupe', () => runDedupeWalker(db, config)),
+          config.walkers.dedupeIntervalMs
         )
       );
     }
