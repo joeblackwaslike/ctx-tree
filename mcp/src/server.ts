@@ -11,7 +11,7 @@ import { mkdirSync, chmodSync } from 'fs';
 import { join } from 'path';
 import { openDb, closeDb } from './store/db.js';
 import { loadConfig } from './config.js';
-import { computeProjectHash } from './project-hash.js';
+import { computeProjectHash, registerProject, deregisterProject } from './project-hash.js';
 import { WalkerCoordinator } from './walkers/coordinator.js';
 import { searchKeyword } from './tools/search.js';
 import { getNeighborsDeep } from './tools/neighbors.js';
@@ -59,6 +59,9 @@ mkdirSync(storeDir, { recursive: true, mode: 0o700 });
 const config = loadConfig(process.env.MEMTREE_CWD ?? process.cwd());
 const db = openDb(dbPath);
 chmodSync(dbPath, 0o600);
+
+// Register this project in projects.tsv
+registerProject(process.env.MEMTREE_CWD ?? process.cwd(), projectHash);
 
 // ── Walkers ───────────────────────────────────────────────────────────────────
 const walkers = new WalkerCoordinator();
@@ -298,6 +301,7 @@ const transport = new StdioServerTransport();
 function shutdown(): void {
   walkers.stop();
   closeDb(db);
+  deregisterProject(projectHash);
   process.exit(0);
 }
 
