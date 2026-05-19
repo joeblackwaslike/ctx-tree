@@ -5,7 +5,7 @@ import type { MemtreeConfig } from './store/types';
 
 export const DEFAULT_CONFIG: MemtreeConfig = {
   embeddingModel: 'nomic-embed-text',
-  summarizerModel: 'claude-haiku-4-5',
+  summarizerModel: 'llama3.2',
   retention: { staleHours: 24, supersededDays: 7 },
   walkers: {
     embeddingIdleMs: 5000,
