@@ -81,12 +81,11 @@ chmodSync(dbPath, 0o600);
 registerProject(process.env.MEMTREE_CWD ?? process.cwd(), projectHash);
 
 // ── Providers ─────────────────────────────────────────────────────────────────
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const { embedding: _embedding, summarizer: _summarizer } = loadProviders(config);
 
 // ── Walkers ───────────────────────────────────────────────────────────────────
 const walkers = new WalkerCoordinator();
-walkers.start(db, config);
+walkers.start(db, config, _embedding);
 
 // ── Ingest socket ─────────────────────────────────────────────────────────────
 const ingestSockPath = join(storeDir, 'ingest.sock');
