@@ -3,6 +3,12 @@ import type { EmbeddingProvider, SummarizerProvider } from '../store/types.js';
 
 // ── OpenAI Embedding Provider ─────────────────────────────────────────────────
 
+const OPENAI_EMBEDDING_DIMS: Record<string, number> = {
+  'text-embedding-3-small': 1536,
+  'text-embedding-3-large': 3072,
+  'text-embedding-ada-002': 1536,
+};
+
 export class OpenAIEmbeddingProvider implements EmbeddingProvider {
   readonly model: string;
   readonly dim: number;
@@ -13,7 +19,7 @@ export class OpenAIEmbeddingProvider implements EmbeddingProvider {
     if (!apiKey) throw new Error('OPENAI_API_KEY is not set');
     this.client = new OpenAI({ apiKey });
     this.model = model || 'text-embedding-3-small';
-    this.dim = 0; // resolved on first embed call
+    this.dim = OPENAI_EMBEDDING_DIMS[this.model] ?? 1536;
   }
 
   async embed(texts: string[]): Promise<number[][]> {
@@ -21,7 +27,13 @@ export class OpenAIEmbeddingProvider implements EmbeddingProvider {
       model: this.model,
       input: texts,
     });
-    return response.data.map(e => e.embedding);
+    const embeddings = response.data.map(e => e.embedding);
+    if (embeddings.length > 0 && embeddings[0].length !== this.dim) {
+      process.stderr.write(
+        `[OpenAIEmbeddingProvider] warning: expected dim=${this.dim} but got ${embeddings[0].length} for model="${this.model}"\n`,
+      );
+    }
+    return embeddings;
   }
 }
 

@@ -2,18 +2,22 @@ import type { EmbeddingProvider, SummarizerProvider } from '../store/types.js';
 
 // ── Ollama Embedding Provider ─────────────────────────────────────────────────
 
+const OLLAMA_BASE_URL = process.env.OLLAMA_HOST ?? 'http://localhost:11434';
+
 export class OllamaEmbeddingProvider implements EmbeddingProvider {
   readonly model: string;
-  readonly dim: number;
-  private readonly baseUrl = 'http://localhost:11434';
+  private _dim: number = 0;
 
-  constructor(model: string, dim = 768) {
+  get dim(): number {
+    return this._dim;
+  }
+
+  constructor(model: string) {
     this.model = model;
-    this.dim = dim;
   }
 
   async embed(texts: string[]): Promise<number[][]> {
-    const response = await fetch(`${this.baseUrl}/api/embed`, {
+    const response = await fetch(`${OLLAMA_BASE_URL}/api/embed`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ model: this.model, input: texts }),
@@ -22,7 +26,11 @@ export class OllamaEmbeddingProvider implements EmbeddingProvider {
       throw new Error(`Ollama embed request failed: ${response.status} ${response.statusText}`);
     }
     const data = (await response.json()) as { embeddings: number[][] };
-    return data.embeddings;
+    const embeddings = data.embeddings;
+    if (embeddings.length > 0 && this._dim === 0) {
+      this._dim = embeddings[0].length;
+    }
+    return embeddings;
   }
 }
 
@@ -30,7 +38,6 @@ export class OllamaEmbeddingProvider implements EmbeddingProvider {
 
 export class OllamaSummarizerProvider implements SummarizerProvider {
   readonly model: string;
-  private readonly baseUrl = 'http://localhost:11434';
 
   constructor(model: string) {
     this.model = model;
@@ -41,7 +48,7 @@ export class OllamaSummarizerProvider implements SummarizerProvider {
       ? `Context: ${contextHint}\n\nSummarize the following:\n\n${content}`
       : `Summarize the following:\n\n${content}`;
 
-    const response = await fetch(`${this.baseUrl}/api/generate`, {
+    const response = await fetch(`${OLLAMA_BASE_URL}/api/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ model: this.model, prompt, stream: false }),
