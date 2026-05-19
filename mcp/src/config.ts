@@ -16,6 +16,7 @@ export const DEFAULT_CONFIG: MemtreeConfig = {
     prunerIntervalMs: 300000,
   },
   capture: { maxBytes: 100000, filterMinSize: 50 },
+  trustedExecution: false,
 };
 
 function readJson(path: string): Partial<MemtreeConfig> {

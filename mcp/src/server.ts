@@ -21,6 +21,7 @@ import { getRecent } from './tools/recent.js';
 import { memtreeRead } from './tools/read.js';
 import { memtreeGrep } from './tools/grep.js';
 import { memtreeCompose } from './tools/compose.js';
+import { memtreeBash } from './tools/bash.js';
 import type { Filters } from './store/types.js';
 import { loadProviders } from './providers/index.js';
 import { processIngest } from './ingest.js';
@@ -232,6 +233,18 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         required: ['node_ids', 'budget_tokens'],
       },
     },
+    {
+      name: 'memtree_bash',
+      description: 'Execute a shell command, redact secrets from output, and store the result in the context store.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          command: { type: 'string', description: 'Shell command to execute' },
+          budget_tokens: { type: 'number', description: 'Token budget for output (default 2000)' },
+        },
+        required: ['command'],
+      },
+    },
   ],
 }));
 
@@ -348,6 +361,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             },
           ],
         };
+      }
+
+      case 'memtree_bash': {
+        const { command, budget_tokens } = args as { command: string; budget_tokens?: number };
+        if (typeof command !== 'string') throw new McpError(ErrorCode.InvalidParams, '"command" is required and must be a string');
+        const result = await memtreeBash(db, config, { command, budget_tokens });
+        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
       }
 
       default:

@@ -55,6 +55,7 @@ export interface MemtreeConfig {
   retention: RetentionConfig;
   walkers: WalkerConfig;
   capture: CaptureConfig;
+  trustedExecution?: boolean;
 }
 
 export interface IngestPayload {
