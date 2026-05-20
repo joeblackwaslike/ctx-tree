@@ -1,0 +1,10 @@
+{
+  "name": "memtree",
+  "private": true,
+  "workspaces": ["mcp"],
+  "scripts": {
+    "build": "bun run --filter @memtree/mcp build",
+    "test": "bun test --filter @memtree/mcp",
+    "dev": "bun run --filter @memtree/mcp dev"
+  }
+}
