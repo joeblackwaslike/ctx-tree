@@ -73,10 +73,9 @@ export function openDb(dbPath: string): Database {
   `);
 
   // Add summary column if it doesn't exist (idempotent migration)
-  try {
+  const cols = db.query('PRAGMA table_info(nodes)').all() as Array<{ name: string }>;
+  if (!cols.some(c => c.name === 'summary')) {
     db.run('ALTER TABLE nodes ADD COLUMN summary TEXT');
-  } catch {
-    // Column already exists — safe to ignore
   }
 
   // Add expression indices on metadata JSON fields (idempotent, SQLite supports these on existing tables)

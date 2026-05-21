@@ -173,7 +173,7 @@ function processPayloadSync(db: Database, config: MemtreeConfig, payload: Ingest
   if (payload.tool === 'Bash') {
     const cmd = payload.input['command'] ?? payload.input['cmd'];
     if (typeof cmd === 'string' && shouldDropBashCommand(cmd)) {
-      process.stderr.write(`[memtree/ingest] dropped: bash command blocked: ${cmd.slice(0, 80)}\n`);
+      process.stderr.write(`[memtree/ingest] dropped: bash command blocked\n`);
       return;
     }
   }
@@ -197,12 +197,8 @@ function processPayloadSync(db: Database, config: MemtreeConfig, payload: Ingest
     process.stderr.write(`[memtree/ingest] dropped: duplicate within dedup window\n`);
     return;
   }
-  recordDedup(key);
 
-  // 7. Content hash
-  const contentHash = createHash('sha256').update(content).digest('hex');
-
-  // 8. Gitignore flag for Read/Grep
+  // 7. Gitignore flag for Read/Grep
   let gitignored = false;
   if (payload.tool === 'Read' || payload.tool === 'Grep') {
     const filePath = payload.input['path'];
@@ -211,11 +207,11 @@ function processPayloadSync(db: Database, config: MemtreeConfig, payload: Ingest
     }
   }
 
-  // 9. Determine node kind and source_uri
+  // 8. Determine node kind and source_uri
   const kind = payload.tool === 'Read' ? 'file_chunk' : 'tool_output';
   const sourceUri = extractSourceUri(payload);
 
-  // 10. Build metadata
+  // 9. Build metadata
   const metadata: Record<string, unknown> = {
     tool: payload.tool,
     session_id: payload.session_id,
@@ -227,16 +223,28 @@ function processPayloadSync(db: Database, config: MemtreeConfig, payload: Ingest
     metadata['path'] = payload.input['path'];
   }
 
-  // 11. Truncation / maxBytes
+  // 10. Truncation / maxBytes (byte-accurate; capture original size before slicing)
   const maxBytes = capture.maxBytes ?? 100_000;
   const originalBytes = Buffer.byteLength(content, 'utf8');
   let truncated = 0;
   if (originalBytes > maxBytes) {
-    content = content.slice(0, maxBytes);
+    let low = 0, high = content.length;
+    while (low < high) {
+      const mid = Math.floor((low + high + 1) / 2);
+      if (Buffer.byteLength(content.slice(0, mid), 'utf8') <= maxBytes) {
+        low = mid;
+      } else {
+        high = mid - 1;
+      }
+    }
+    content = content.slice(0, low);
     truncated = 1;
   }
 
-  // 12. Insert node (fast path — status='live')
+  // 11. Content hash (after truncation so hash matches stored content)
+  const contentHash = createHash('sha256').update(content).digest('hex');
+
+  // 12. Insert node (fast path — status='live'), then record dedup only on success
   try {
     insertNode(db, ulid(), {
       parent_id: null,
@@ -250,6 +258,7 @@ function processPayloadSync(db: Database, config: MemtreeConfig, payload: Ingest
       original_bytes: originalBytes,
       metadata: JSON.stringify(metadata),
     });
+    recordDedup(key);
   } catch (err) {
     process.stderr.write(`[memtree/ingest] insert failed: ${err}\n`);
   }

@@ -2,12 +2,15 @@ import type { Database } from 'bun:sqlite';
 import type { MemtreeConfig } from '../store/types.js';
 import type { EmbeddingProvider } from '../store/types.js';
 
+let inFlight = false;
+
 export function runEmbeddingWalker(
   db: Database,
   config: MemtreeConfig,
   provider: EmbeddingProvider | null
 ): void {
   if (!provider) return;
+  if (inFlight) return;
 
   const batchSize = config.walkers.embeddingBatchSize;
 
@@ -22,6 +25,7 @@ export function runEmbeddingWalker(
 
   if (rows.length === 0) return;
 
+  inFlight = true;
   const texts = rows.map(r => r.content);
 
   provider.embed(texts).then(vectors => {
@@ -40,5 +44,7 @@ export function runEmbeddingWalker(
     insertBatch();
   }).catch((e: unknown) => {
     process.stderr.write(`memtree embedding error: ${e}\n`);
+  }).finally(() => {
+    inFlight = false;
   });
 }

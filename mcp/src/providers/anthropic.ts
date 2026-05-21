@@ -28,7 +28,9 @@ export class AnthropicSummarizerProvider implements SummarizerProvider {
         { role: 'user', content: `Summarize the following:\n\n${content}` },
       ],
     });
-    const block = response.content[0];
-    return block?.type === 'text' ? block.text : '';
+    return response.content
+      .filter((block): block is { type: 'text'; text: string } => block.type === 'text')
+      .map(block => block.text)
+      .join('');
   }
 }

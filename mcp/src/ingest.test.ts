@@ -16,6 +16,7 @@ const BASE_CONFIG: MemtreeConfig = {
   walkers: {
     embeddingIdleMs: 5000,
     embeddingBatchSize: 32,
+    summarizerIdleMs: 5000,
     summarizerSubtreeThreshold: 25,
     dedupeIntervalMs: 60000,
     stalenessIntervalMs: 30000,
@@ -228,24 +229,26 @@ describe('gitignore flag', () => {
       },
     );
 
-    const filePath = '/project/dist/bundle.js';
-    _processIngestSyncForTests(
-      db,
-      BASE_CONFIG,
-      makeReadPayload({
-        input: { path: filePath },
-        response: { content: 'gitignored-file-test-' + 'x'.repeat(200) },
-      }),
-    );
+    try {
+      const filePath = '/project/dist/bundle.js';
+      _processIngestSyncForTests(
+        db,
+        BASE_CONFIG,
+        makeReadPayload({
+          input: { path: filePath },
+          response: { content: 'gitignored-file-test-' + 'x'.repeat(200) },
+        }),
+      );
 
-    const row = db
-      .query<{ metadata: string }, []>('SELECT metadata FROM nodes ORDER BY created_at DESC LIMIT 1')
-      .get();
-    expect(row).not.toBeNull();
-    const meta = JSON.parse(row!.metadata);
-    expect(meta.gitignored).toBe(true);
-
-    spy.mockRestore();
+      const row = db
+        .query<{ metadata: string }, []>('SELECT metadata FROM nodes ORDER BY created_at DESC LIMIT 1')
+        .get();
+      expect(row).not.toBeNull();
+      const meta = JSON.parse(row!.metadata);
+      expect(meta.gitignored).toBe(true);
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   test('does not set metadata.gitignored for non-gitignored path', () => {
@@ -256,24 +259,26 @@ describe('gitignore flag', () => {
       },
     );
 
-    const filePath = '/project/src/not-ignored.ts';
-    _processIngestSyncForTests(
-      db,
-      BASE_CONFIG,
-      makeReadPayload({
-        input: { path: filePath },
-        response: { content: 'not-gitignored-test-' + 'x'.repeat(200) },
-      }),
-    );
+    try {
+      const filePath = '/project/src/not-ignored.ts';
+      _processIngestSyncForTests(
+        db,
+        BASE_CONFIG,
+        makeReadPayload({
+          input: { path: filePath },
+          response: { content: 'not-gitignored-test-' + 'x'.repeat(200) },
+        }),
+      );
 
-    const row = db
-      .query<{ metadata: string }, []>('SELECT metadata FROM nodes ORDER BY created_at DESC LIMIT 1')
-      .get();
-    expect(row).not.toBeNull();
-    const meta = JSON.parse(row!.metadata);
-    expect(meta.gitignored).toBeUndefined();
-
-    spy.mockRestore();
+      const row = db
+        .query<{ metadata: string }, []>('SELECT metadata FROM nodes ORDER BY created_at DESC LIMIT 1')
+        .get();
+      expect(row).not.toBeNull();
+      const meta = JSON.parse(row!.metadata);
+      expect(meta.gitignored).toBeUndefined();
+    } finally {
+      spy.mockRestore();
+    }
   });
 });
 

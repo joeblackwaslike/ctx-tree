@@ -4,12 +4,15 @@ import type { SummarizerProvider } from '../store/types.js';
 
 const CHAR_THRESHOLD_MULTIPLIER = 20; // summarizerSubtreeThreshold (nodes) * 20 = char threshold
 
+let inFlight = false;
+
 export function runSummarizerWalker(
   db: Database,
   config: MemtreeConfig,
   provider: SummarizerProvider | null
 ): void {
   if (!provider) return;
+  if (inFlight) return;
 
   const charThreshold = Math.max(
     500,
@@ -27,6 +30,9 @@ export function runSummarizerWalker(
 
   if (rows.length === 0) return;
 
+  inFlight = true;
+  let pending = rows.length;
+
   for (const row of rows) {
     provider.summarize(row.content, row.source_uri ?? undefined).then(summary => {
       const now = Date.now();
@@ -36,6 +42,9 @@ export function runSummarizerWalker(
       );
     }).catch((e: unknown) => {
       process.stderr.write(`memtree summarizer error: ${e}\n`);
+    }).finally(() => {
+      pending--;
+      if (pending === 0) inFlight = false;
     });
   }
 }

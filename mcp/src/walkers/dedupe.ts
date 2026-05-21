@@ -34,6 +34,7 @@ export function runDedupeWalker(db: Database, _config: MemtreeConfig): void {
       AND n2.kind = 'file_chunk'
       AND n1.status = 'live'
       AND n2.status = 'live'
+      AND v1.embedding_model = v2.embedding_model
     LIMIT 50
   `).all();
 
@@ -43,8 +44,8 @@ export function runDedupeWalker(db: Database, _config: MemtreeConfig): void {
 
   db.transaction(() => {
     for (const pair of pairs) {
-      const a = new Float32Array(new Uint8Array(pair.emb1).buffer);
-      const b = new Float32Array(new Uint8Array(pair.emb2).buffer);
+      const a = new Float32Array(pair.emb1.buffer, pair.emb1.byteOffset, pair.emb1.byteLength / 4);
+      const b = new Float32Array(pair.emb2.buffer, pair.emb2.byteOffset, pair.emb2.byteLength / 4);
       const sim = cosineSimilarity(a, b);
 
       if (sim > 0.95) {

@@ -96,10 +96,18 @@ if (existsSync(ingestSockPath)) {
   try { unlinkSync(ingestSockPath); } catch { /* ignore */ }
 }
 
+const MAX_INGEST_BUF = 1 * 1024 * 1024; // 1 MB — guard against unbounded buffer growth
+
 const ingestServer = net.createServer((socket) => {
   let buf = '';
   socket.on('data', (chunk) => {
     buf += chunk.toString('utf8');
+    if (buf.length > MAX_INGEST_BUF) {
+      process.stderr.write(`[memtree/ingest] socket buffer exceeded limit, closing connection\n`);
+      socket.destroy();
+      buf = '';
+      return;
+    }
     let nl: number;
     while ((nl = buf.indexOf('\n')) !== -1) {
       const line = buf.slice(0, nl).trim();

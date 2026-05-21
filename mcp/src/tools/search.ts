@@ -30,19 +30,32 @@ export function searchKeyword(
   }
 }
 
+// Strip provider prefix so "openai/text-embedding-3-small" matches stored "text-embedding-3-small"
+function normalizeModelName(model: string): string {
+  return model.replace(/^[^/]+\//, '');
+}
+
+// Cache the verified model per db instance to avoid a DB query on every search request.
+// Keyed on db object so test isolation (fresh db per test) is preserved automatically.
+const modelCheckCache = new WeakMap<Database, string>();
+
 function checkModelMismatch(db: Database, config: MemtreeConfig): void {
+  const normalizedConfigModel = normalizeModelName(config.embeddingModel);
+  if (modelCheckCache.get(db) === normalizedConfigModel) return;
+
   const storedModels = db.prepare(
     `SELECT DISTINCT embedding_model FROM nodes_vec LIMIT 2`
   ).all() as { embedding_model: string }[];
   if (
     storedModels.length > 1 ||
-    (storedModels[0] && storedModels[0].embedding_model !== config.embeddingModel)
+    (storedModels[0] && storedModels[0].embedding_model !== normalizedConfigModel)
   ) {
     throw new McpError(
       ErrorCode.InvalidParams,
       `embedding model mismatch: re-embed required before semantic search`
     );
   }
+  modelCheckCache.set(db, normalizedConfigModel);
 }
 
 export async function searchSemantic(

@@ -44,9 +44,9 @@ function readEntries(): Array<[string, string]> {
         const [cwd, hash] = line.split('\t');
         return [cwd, hash] as [string, string];
       });
-  } catch {
-    // File doesn't exist yet
-    return [];
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return [];
+    throw err;
   }
 }
 

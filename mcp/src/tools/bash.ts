@@ -1,4 +1,5 @@
-import { execSync, type SpawnSyncError } from 'child_process';
+import { exec } from 'child_process';
+import { promisify } from 'util';
 import { createHash } from 'crypto';
 import { ulid } from 'ulid';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
@@ -6,6 +7,8 @@ import type { Database } from 'bun:sqlite';
 import type { MemtreeConfig } from '../store/types.js';
 import { shouldDropBashCommand, redactBashOutput } from '../redaction/index.js';
 import { insertNode } from '../store/nodes.js';
+
+const execAsync = promisify(exec);
 
 export interface BashParams {
   command: string;
@@ -49,35 +52,48 @@ export async function memtreeBash(
   let exit_code = 0;
 
   try {
-    rawStdout = execSync(command, {
+    const result = await execAsync(command, {
       encoding: 'utf8',
-      stdio: ['pipe', 'pipe', 'pipe'],
+      maxBuffer: 100 * 1024 * 1024,
     });
+    rawStdout = result.stdout;
+    rawStderr = result.stderr;
   } catch (err: unknown) {
-    // execSync throws on non-zero exit — extract details from the error object
-    const spawnErr = err as SpawnSyncError<string>;
-    rawStdout = spawnErr.stdout ?? '';
-    rawStderr = spawnErr.stderr ?? '';
-    exit_code = spawnErr.status ?? 1;
+    const execErr = err as { stdout?: string; stderr?: string; code?: number };
+    rawStdout = execErr.stdout ?? '';
+    rawStderr = execErr.stderr ?? '';
+    exit_code = execErr.code ?? 1;
   }
 
   // 4. Redaction
   const redactedStdout = redactBashOutput(rawStdout);
   const redactedStderr = redactBashOutput(rawStderr);
 
-  // 5. Budget: apply token budget as char limit
+  // 5. Budget: capture original byte size, then enforce maxBytes cap (byte-accurate),
+  // then apply token budget as a char limit on the already byte-limited string.
+  const maxBytes = config.capture.maxBytes;
   const charBudget = budget_tokens * 4;
   let truncated = false;
   let truncatedStdout = redactedStdout;
-  if (truncatedStdout.length > charBudget) {
-    truncatedStdout = truncatedStdout.slice(0, charBudget);
+
+  const originalBytes = Buffer.byteLength(redactedStdout, 'utf8');
+
+  if (originalBytes > maxBytes) {
+    let low = 0, high = truncatedStdout.length;
+    while (low < high) {
+      const mid = Math.floor((low + high + 1) / 2);
+      if (Buffer.byteLength(truncatedStdout.slice(0, mid), 'utf8') <= maxBytes) {
+        low = mid;
+      } else {
+        high = mid - 1;
+      }
+    }
+    truncatedStdout = truncatedStdout.slice(0, low);
     truncated = true;
   }
 
-  // Also enforce config.capture.maxBytes hard cap
-  const maxBytes = config.capture.maxBytes;
-  if (truncatedStdout.length > maxBytes) {
-    truncatedStdout = truncatedStdout.slice(0, maxBytes);
+  if (truncatedStdout.length > charBudget) {
+    truncatedStdout = truncatedStdout.slice(0, charBudget);
     truncated = true;
   }
 
@@ -88,7 +104,6 @@ export async function memtreeBash(
   if (content.length >= config.capture.filterMinSize) {
     const commandHash = createHash('sha256').update(command).digest('hex').slice(0, 8);
     const contentHash = createHash('sha256').update(content).digest('hex');
-    const originalBytes = Buffer.byteLength(content, 'utf8');
 
     insertNode(db, nodeId, {
       parent_id: null,
