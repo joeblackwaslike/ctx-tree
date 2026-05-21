@@ -7,8 +7,8 @@
   "license": "MIT",
   "mcpServers": {
     "memtree": {
-      "command": "bash",
-      "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/start-mcp.sh"],
+      "command": "bun",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/mcp/dist/server.js"],
       "env": {
         "MEMTREE_CWD": "${workspaceFolder}"
       }
