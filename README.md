@@ -14,6 +14,16 @@ Indexes files and search results in a local SQLite store when you use memtree-ba
 /plugin install memtree@agent-marketplace
 ```
 
+## Development setup
+
+After cloning, activate the tracked git hooks:
+
+```sh
+git config core.hooksPath .githooks
+```
+
+This auto-rebuilds `mcp/dist/server.js` whenever you commit changes to `mcp/src/`.
+
 ## Requirements
 
 - macOS arm64, Linux x64/arm64
