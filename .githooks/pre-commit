@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if git diff --cached --name-only | grep -q '^mcp/src/'; then
+  echo "mcp/src changed — rebuilding dist..."
+  (cd mcp && bun run build)
+  git add mcp/dist/server.js
+fi
