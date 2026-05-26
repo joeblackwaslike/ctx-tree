@@ -1,97 +1,63 @@
 ---
 name: recall
-description: Use when starting work in a familiar codebase, recalling prior context or decisions, reading code files, searching for symbols or patterns, or building token-budget context for a complex task
+description: Use when starting work in a familiar codebase, recalling prior context or decisions, reading code files, searching for symbols or patterns, or building token-budget context for a complex task. Also activates on session start to surface prior session captures.
 ---
 
 # memtree recall
 
-Core principle: The store knows what's true now. Training memory knows what was true when training ended. Always search the store before guessing.
+Core principle: The store knows what's true now. Training memory knows what was true at cutoff. Always search the store before guessing.
 
 ## Session Start Protocol
 
-**Run this immediately when the session-start hook fires or when invoked at startup.**
+Run this immediately when the session-start hook fires or when resuming work in a known project:
 
-Use the `AskUserQuestion` tool with exactly this question:
-
-> It looks like you have memtree installed. Would you like to use memtree for this session?
-
-Options:
-- **Yes** — enable proxy mode (all reads/searches route through memtree/mcp-exec)
-- **No** — skip memtree for this session
-- **Maybe later** — skip for now, user can invoke this skill again
-- **I don't know** — explain what memtree does, then ask again
-
-If **Yes**: activate proxy mode immediately — run:
-```bash
-mkdir -p ~/.memtree && touch ~/.memtree/proxy-mode
 ```
-Then confirm: "Proxy mode is active. I'll route reads and searches through memtree and mcp-exec to keep context slim."
+memtree_recent()                    → surface nodes from prior sessions
+memtree_search("current task topic") → pull relevant stored context
+memtree_compose(nodeIds, 4000)      → build a context bundle from hits
+```
 
-If **No** or **Maybe later**: acknowledge and proceed normally. Do not ask again this session.
+Skip cold reads — if the store has it, compose from it instead.
 
-If **I don't know**: explain briefly —
-> "memtree is a persistent knowledge store. It captures what I read and search across sessions so I can recall it without re-reading files. In proxy mode, I route every Read, Grep, Bash, and Glob through memtree or mcp-exec so only a small result comes back to this context window instead of the full output."
+## Tool Map (always-on)
 
-Then ask again.
+Hooks enforce these redirects automatically. When a hook blocks a native tool, it injects the exact replacement call. Use it.
 
----
+| Instead of | Use |
+|------------|-----|
+| `Read(file_path: "X")` | `memtree_read({ path: "X" })` |
+| `Grep(pattern: "X", path: "Y")` | `memtree_grep({ pattern: "X", path: "Y" })` |
+| `Bash("rg X")` / `Bash("cat X")` | `memtree_grep(...)` / `memtree_read(...)` |
+| `WebFetch(url: "X")` | `memtree_browse({ url: "X" })` |
+| `Edit` / `Write` / `MultiEdit` | Native — write ops don't bloat context |
 
-## Proxy Mode — Tool Map
+## During Work
 
-When proxy mode is active (after the user says Yes), use this table for **every tool call**:
+- After any `memtree_read`, call `memtree_neighbors(nodeId)` to find related code.
+- After `memtree_grep`, inspect the returned nodeIds — they're already in the graph.
+- Use `memtree_compose` to assemble multi-file context within a token budget.
+- Use `memtree_search` before re-reading a file that was already read this session or in a prior one.
 
-| Instead of | Call this |
-|------------|-----------|
-| `Read(file_path: "X")` | `memtree_read({file_path: "X"})` |
-| `Grep(pattern: "X", path: "Y")` | `memtree_grep({pattern: "X", path: "Y"})` |
-| `Bash(command: "...")` | `mcp__mcp-exec__exec({code: "...", runtime: "bash"})` |
-| `Glob(pattern: "X")` | `mcp__mcp-exec__exec({code: "find . -path 'X' \| sort \| head -200", runtime: "bash"})` |
-| `Edit` / `Write` / `MultiEdit` | Native — write ops are fine, they return nothing large |
-
-**The PreToolUse hook will remind you** with the exact rewritten call if you reach for a native tool. Read the reminder and use the rewritten version.
-
-### Key rules in proxy mode
-- `memtree_read` and `memtree_grep` store results in the knowledge graph — prefer them over mcp-exec for reads and searches.
-- `mcp-exec` for bash keeps arbitrary command output out of context — use it for anything else.
-- After `memtree_search` or `memtree_grep` returns nodes, call `memtree_neighbors` to pull related nodes.
-
----
-
-## Non-Proxy Use (memtree tools without full proxy mode)
-
-When proxy mode is off but you still want to use memtree for recall:
-
-### Session start
-1. Call `memtree_recent` — surface what was captured in prior sessions.
-2. Call `memtree_search` with the task topic.
-3. Use `memtree_compose` with found node IDs to build a context bundle.
-
-### During work
-- Prefer `memtree_read` over native `Read` — caches on mtime, indexes in graph.
-- Prefer `memtree_grep` over native `Bash(rg ...)` — stores matches for future recall.
-- After a search hit, call `memtree_neighbors` to find related nodes.
-
-### Tool reference
+## Tool Reference
 
 | Tool | Use when |
 |------|----------|
 | `memtree_recent` | Session start — surface prior session captures |
-| `memtree_search` | Keyword or concept lookup across all stored nodes |
+| `memtree_search` | Keyword lookup across all stored nodes |
 | `memtree_compose` | Token-budget context bundle from seed nodes |
 | `memtree_read` | Read a file — tree-sitter chunks, mtime cache, stored |
 | `memtree_grep` | Ripgrep search — stores matches as nodes |
+| `memtree_browse` | Fetch a URL — compact reference, stored as web_chunk |
 | `memtree_neighbors` | Walk the graph from a node |
 | `memtree_path_to_root` | Walk parent chain to root |
 
----
-
 ## Red Flags — STOP
 
-- "I'll just read the file directly, it's faster." — Use `memtree_read`. Same speed, builds the graph.
-- "I don't need to search, I remember this codebase." — Training memory is stale. Search first.
-- "The store probably doesn't have this yet." — Search before assuming. The PostToolUse hook has been running.
-- "memtree_compose seems like overkill." — Token budget pressure is exactly when it matters most.
-- "Proxy mode is on but this one tool call is fine." — It is not fine. The hook will remind you.
+- "I'll just read the file directly." — Use `memtree_read`. Same content, builds the graph. The hook will block native Read anyway.
+- "I already know this codebase." — Training memory is stale. Search first.
+- "The store probably doesn't have this yet." — Search before assuming. Prior sessions may have it.
+- "memtree_compose seems like overkill." — Token budget pressure is exactly when compose matters most.
+- "This bash command won't return much." — You can't know that before running it. Use `memtree_grep` or `mcp_exec`.
 
 ## Rationalization Table
 
@@ -99,5 +65,5 @@ When proxy mode is off but you still want to use memtree for recall:
 |--------|---------|
 | "Native Read is simpler." | `memtree_read` does the same thing and builds the graph. |
 | "I already know the codebase." | You know what was true at training cutoff. The store knows now. |
-| "Search returned nothing." | Store may be sparse on first run — fall back, but don't skip the search. |
-| "This bash command won't return much." | You cannot know that before running it. Use mcp-exec. |
+| "Search returned nothing." | Store may be sparse on first run — read the file, but use `memtree_read`. |
+| "This bash command is safe." | Unpredictable output size. Route through memtree or mcp-exec. |
