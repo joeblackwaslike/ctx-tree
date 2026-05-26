@@ -17440,8 +17440,10 @@ function windowChunk(lines, windowSize = 200) {
   const chunks = [];
   for (let i = 0;i < lines.length; i += windowSize) {
     const slice = lines.slice(i, i + windowSize);
-    chunks.push({ startLine: i + 1, endLine: i + slice.length, content: slice.join(`
-`) });
+    const startLine = i + 1;
+    const endLine = i + slice.length;
+    chunks.push({ startLine, endLine, content: slice.join(`
+`), symbolName: `L${startLine}-${endLine}` });
   }
   return chunks;
 }
@@ -17457,13 +17459,29 @@ var LANG_MAP = {
 };
 function treeSitterChunk(source, lang) {
   try {
-    let walk = function(node) {
+    let extractSymbolName = function(node) {
+      const queue = [{ n: node, depth: 0 }];
+      while (queue.length > 0) {
+        const { n, depth } = queue.shift();
+        const nameNode = n.childForFieldName("name");
+        if (nameNode)
+          return nameNode.text;
+        if (depth >= 3)
+          continue;
+        for (const child of n.children) {
+          if (child.type === "identifier" || child.type === "property_identifier")
+            return child.text;
+          queue.push({ n: child, depth: depth + 1 });
+        }
+      }
+      return node.type;
+    }, walk = function(node) {
       if (LEAF_TYPES.has(node.type)) {
         const startLine = node.startPosition.row + 1;
         const endLine = node.endPosition.row + 1;
         const content = lines.slice(startLine - 1, endLine).join(`
 `);
-        chunks.push({ startLine, endLine, content, symbolName: node.type });
+        chunks.push({ startLine, endLine, content, symbolName: extractSymbolName(node) });
         return;
       }
       if (node.childCount > 0) {
@@ -17510,15 +17528,6 @@ async function memtreeRead(db, config2, params) {
   }
   const mtime = Math.round(stat.mtimeMs);
   const ext = extname(path).toLowerCase();
-  const lineKey = lines ? `${lines[0]},${lines[1]}` : "all";
-  const cacheUri = `file://${path}?lines=${lineKey}&budget=${budget_tokens}`;
-  const cached2 = getNodeBySourceUri(db, cacheUri);
-  if (cached2 && cached2.mtime === mtime) {
-    const meta2 = JSON.parse(cached2.metadata);
-    return { nodeId: cached2.id, content: cached2.content, truncated: cached2.truncated === 1, chunking: meta2.chunking };
-  }
-  if (cached2)
-    updateNodeStatus(db, cached2.id, "stale");
   markStaleByFilePath(db, path, mtime);
   let raw = readFileSync2(path, "utf8");
   const originalBytes = Buffer.byteLength(raw, "utf8");
@@ -17560,26 +17569,46 @@ async function memtreeRead(db, config2, params) {
     included.push(chunk);
     used += tokens;
   }
+  const nodeIds = [];
+  const seenNames = new Set;
+  function uniqueSymbolKey(chunk) {
+    if (!seenNames.has(chunk.symbolName)) {
+      seenNames.add(chunk.symbolName);
+      return chunk.symbolName;
+    }
+    return `${chunk.symbolName}:L${chunk.startLine}`;
+  }
+  for (const chunk of included) {
+    const chunkUri = `file://${path}#${uniqueSymbolKey(chunk)}`;
+    const contentHash = createHash2("sha256").update(chunk.content).digest("hex");
+    const cached2 = getNodeBySourceUri(db, chunkUri);
+    if (cached2 && cached2.mtime === mtime) {
+      nodeIds.push(cached2.id);
+      continue;
+    }
+    if (cached2)
+      updateNodeStatus(db, cached2.id, "stale");
+    const nodeId = ulid2();
+    insertNode(db, nodeId, {
+      parent_id: null,
+      kind: "file_chunk",
+      source_uri: chunkUri,
+      content: chunk.content,
+      content_hash: contentHash,
+      status: "live",
+      mtime,
+      truncated: truncated ? 1 : 0,
+      original_bytes: originalBytes,
+      metadata: JSON.stringify({ filePath: path, chunking, symbolName: chunk.symbolName })
+    });
+    if (cached2)
+      insertEdge(db, { src_id: nodeId, dst_id: cached2.id, kind: "supersedes" });
+    nodeIds.push(nodeId);
+  }
   const content = included.map((c) => c.content).join(`
 
 `);
-  const contentHash = createHash2("sha256").update(content).digest("hex");
-  const nodeId = ulid2();
-  insertNode(db, nodeId, {
-    parent_id: null,
-    kind: "file_chunk",
-    source_uri: cacheUri,
-    content,
-    content_hash: contentHash,
-    status: "live",
-    mtime,
-    truncated: truncated ? 1 : 0,
-    original_bytes: originalBytes,
-    metadata: JSON.stringify({ filePath: path, chunking, chunkCount: included.length })
-  });
-  if (cached2)
-    insertEdge(db, { src_id: nodeId, dst_id: cached2.id, kind: "supersedes" });
-  return { nodeId, content, truncated, chunking };
+  return { nodeIds, content, truncated, chunking };
 }
 
 // src/tools/grep.ts
