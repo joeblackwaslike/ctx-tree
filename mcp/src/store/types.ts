@@ -1,5 +1,5 @@
 export type NodeStatus = 'pending' | 'live' | 'stale' | 'superseded' | 'pruned';
-export type NodeKind = 'session' | 'file_chunk' | 'tool_output' | 'summary' | 'note' | 'observation';
+export type NodeKind = 'session' | 'file_chunk' | 'tool_output' | 'summary' | 'note' | 'observation' | 'web_chunk';
 export type EdgeKind = 'derived_from' | 'references' | 'summarizes' | 'supersedes';
 
 export interface MemtreeNode {

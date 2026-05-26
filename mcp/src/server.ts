@@ -20,6 +20,7 @@ import { getRecent } from './tools/recent.js';
 import { memtreeRead } from './tools/read.js';
 import { memtreeGrep } from './tools/grep.js';
 import { memtreeCompose } from './tools/compose.js';
+import { memtreeBrowse } from './tools/browse.js';
 import type { Filters } from './store/types.js';
 
 // ── Platform check ────────────────────────────────────────────────────────────
@@ -173,6 +174,19 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         required: ['node_ids', 'budget_tokens'],
       },
     },
+    {
+      name: 'memtree_browse',
+      description: 'Fetch a URL, extract structured text, store as a web_chunk node. Returns a compact reference with title, headings, and body excerpt.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          url: { type: 'string', description: 'HTTP/HTTPS URL to fetch' },
+          budget_tokens: { type: 'number', description: 'Token budget for body content' },
+          force: { type: 'boolean', description: 'Bypass cache and re-fetch' },
+        },
+        required: ['url'],
+      },
+    },
   ],
 }));
 
@@ -279,6 +293,32 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             {
               type: 'text',
               text: result.content + '\n\n---\n' + JSON.stringify(result.manifest),
+            },
+          ],
+        };
+      }
+
+      case 'memtree_browse': {
+        const { url, budget_tokens, force } = args as {
+          url: string;
+          budget_tokens?: number;
+          force?: boolean;
+        };
+        const result = await memtreeBrowse(db, config, { url, budget_tokens, force });
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                nodeId: result.nodeId,
+                url: result.url,
+                title: result.title,
+                description: result.description,
+                headings: result.headings,
+                cached: result.cached,
+                truncated: result.truncated,
+                content: result.content,
+              }),
             },
           ],
         };

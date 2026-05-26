@@ -16955,7 +16955,7 @@ function openDb(dbPath) {
     CREATE TABLE IF NOT EXISTS nodes (
       id            TEXT PRIMARY KEY,
       parent_id     TEXT REFERENCES nodes(id) ON DELETE SET NULL,
-      kind          TEXT NOT NULL CHECK(kind IN ('session','file_chunk','tool_output','summary','note','observation')),
+      kind          TEXT NOT NULL CHECK(kind IN ('session','file_chunk','tool_output','summary','note','observation','web_chunk')),
       source_uri    TEXT,
       content       TEXT NOT NULL DEFAULT '',
       content_hash  TEXT NOT NULL DEFAULT '',
@@ -17012,6 +17012,36 @@ function openDb(dbPath) {
       embedded_at     INTEGER NOT NULL
     );
   `);
+  const nodesSql = db.query(`SELECT sql FROM sqlite_master WHERE type='table' AND name='nodes'`).get()?.sql ?? "";
+  if (!nodesSql.includes("'web_chunk'")) {
+    db.exec(`
+      PRAGMA foreign_keys = OFF;
+      CREATE TABLE nodes_new (
+        id            TEXT PRIMARY KEY,
+        parent_id     TEXT REFERENCES nodes_new(id) ON DELETE SET NULL,
+        kind          TEXT NOT NULL CHECK(kind IN ('session','file_chunk','tool_output','summary','note','observation','web_chunk')),
+        source_uri    TEXT,
+        content       TEXT NOT NULL DEFAULT '',
+        content_hash  TEXT NOT NULL DEFAULT '',
+        status        TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','live','stale','superseded','pruned')),
+        mtime         INTEGER NOT NULL DEFAULT 0,
+        created_at    INTEGER NOT NULL,
+        updated_at    INTEGER NOT NULL,
+        truncated     INTEGER NOT NULL DEFAULT 0,
+        original_bytes INTEGER NOT NULL DEFAULT 0,
+        metadata      TEXT NOT NULL DEFAULT '{}'
+      );
+      INSERT INTO nodes_new SELECT * FROM nodes;
+      DROP TABLE nodes;
+      ALTER TABLE nodes_new RENAME TO nodes;
+      CREATE INDEX IF NOT EXISTS idx_nodes_parent ON nodes(parent_id);
+      CREATE INDEX IF NOT EXISTS idx_nodes_status ON nodes(status);
+      CREATE INDEX IF NOT EXISTS idx_nodes_created ON nodes(created_at, parent_id);
+      CREATE INDEX IF NOT EXISTS idx_nodes_source_uri ON nodes(source_uri);
+      CREATE INDEX IF NOT EXISTS idx_nodes_content_hash ON nodes(content_hash);
+      PRAGMA foreign_keys = ON;
+    `);
+  }
   return db;
 }
 function closeDb(db) {
@@ -17869,6 +17899,134 @@ async function memtreeCompose(db, params) {
   };
 }
 
+// src/tools/browse.ts
+import { createHash as createHash4 } from "crypto";
+function extractTitle(html) {
+  const m = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  return m ? decodeEntities(stripTags(m[1])).trim() : "";
+}
+function extractMeta(html, name) {
+  const byName = html.match(new RegExp(`<meta[^>]+name=["']${name}["'][^>]+content=["']([^"']*?)["']`, "i")) ?? html.match(new RegExp(`<meta[^>]+content=["']([^"']*?)["'][^>]+name=["']${name}["']`, "i"));
+  if (byName)
+    return byName[1].trim();
+  const og = html.match(/<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']*?)["']/i) ?? html.match(/<meta[^>]+content=["']([^"']*?)["'][^>]+property=["']og:description["']/i);
+  return og ? og[1].trim() : "";
+}
+function extractHeadings(html) {
+  const re = /<h([1-3])[^>]*>([\s\S]*?)<\/h\1>/gi;
+  const headings = [];
+  let m;
+  while ((m = re.exec(html)) !== null && headings.length < 12) {
+    const text = decodeEntities(stripTags(m[2])).trim();
+    if (text)
+      headings.push(text);
+  }
+  return headings;
+}
+function extractBodyText(html) {
+  const cleaned = html.replace(/<script[\s\S]*?<\/script>/gi, "").replace(/<style[\s\S]*?<\/style>/gi, "").replace(/<nav[\s\S]*?<\/nav>/gi, "").replace(/<footer[\s\S]*?<\/footer>/gi, "").replace(/<header[\s\S]*?<\/header>/gi, "").replace(/<aside[\s\S]*?<\/aside>/gi, "").replace(/<noscript[\s\S]*?<\/noscript>/gi, "");
+  const main = cleaned.match(/<(?:main|article)[^>]*>([\s\S]*?)<\/(?:main|article)>/i)?.[1] ?? cleaned;
+  return decodeEntities(stripTags(main)).replace(/\n{3,}/g, `
+
+`).replace(/[ \t]{2,}/g, " ").trim();
+}
+function stripTags(s) {
+  return s.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+}
+function decodeEntities(s) {
+  return s.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&nbsp;/g, " ").replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)));
+}
+function estimateTokens3(text) {
+  return Math.ceil(text.length / 4);
+}
+var CACHE_TTL_MS = 60 * 60 * 1000;
+async function memtreeBrowse(db, _config, params) {
+  const { url, budget_tokens = 2000, force = false } = params;
+  if (!url || typeof url !== "string") {
+    throw new McpError(ErrorCode.InvalidParams, '"url" is required and must be a string');
+  }
+  let parsedUrl;
+  try {
+    parsedUrl = new URL(url);
+  } catch {
+    throw new McpError(ErrorCode.InvalidParams, `Invalid URL: ${url}`);
+  }
+  if (!["http:", "https:"].includes(parsedUrl.protocol)) {
+    throw new McpError(ErrorCode.InvalidParams, `Only http/https URLs are supported`);
+  }
+  if (!force) {
+    const cached2 = getNodeBySourceUri(db, url);
+    if (cached2 && Date.now() - cached2.updated_at < CACHE_TTL_MS) {
+      const meta2 = JSON.parse(cached2.metadata);
+      const bodyText2 = budgetContent(cached2.content, budget_tokens);
+      return {
+        nodeId: cached2.id,
+        url,
+        title: meta2.title ?? "",
+        description: meta2.description ?? "",
+        headings: meta2.headings ?? [],
+        content: bodyText2.text,
+        truncated: bodyText2.truncated,
+        cached: true
+      };
+    }
+  }
+  let html;
+  let fetchedBytes;
+  try {
+    const res = await fetch(url, {
+      headers: { "User-Agent": "memtree/1.0 (https://github.com/joeblackwaslike/memtree)" },
+      signal: AbortSignal.timeout(15000)
+    });
+    if (!res.ok) {
+      throw new McpError(ErrorCode.InvalidParams, `HTTP ${res.status} fetching ${url}`);
+    }
+    html = await res.text();
+    fetchedBytes = Buffer.byteLength(html, "utf8");
+  } catch (err) {
+    if (err instanceof McpError)
+      throw err;
+    throw new McpError(ErrorCode.InternalError, `Failed to fetch ${url}: ${err.message}`);
+  }
+  const title = extractTitle(html);
+  const description = extractMeta(html, "description");
+  const headings = extractHeadings(html);
+  const bodyText = extractBodyText(html);
+  const { text: content, truncated } = budgetContent(bodyText, budget_tokens);
+  const contentHash = createHash4("sha256").update(bodyText).digest("hex");
+  const existing = getNodeBySourceUri(db, url);
+  if (existing) {
+    if (existing.content_hash === contentHash) {
+      db.run("UPDATE nodes SET updated_at = ? WHERE id = ?", Date.now(), existing.id);
+      return { nodeId: existing.id, url, title, description, headings, content, truncated, cached: true };
+    }
+    updateNodeStatus(db, existing.id, "stale");
+  }
+  const nodeId = ulid2();
+  insertNode(db, nodeId, {
+    parent_id: null,
+    kind: "web_chunk",
+    source_uri: url,
+    content: bodyText,
+    content_hash: contentHash,
+    status: "live",
+    mtime: Date.now(),
+    truncated: truncated ? 1 : 0,
+    original_bytes: fetchedBytes,
+    metadata: JSON.stringify({ url, title, description, headings })
+  });
+  if (existing) {
+    insertEdge(db, { src_id: nodeId, dst_id: existing.id, kind: "supersedes" });
+  }
+  return { nodeId, url, title, description, headings, content, truncated, cached: false };
+}
+function budgetContent(text, budget) {
+  if (estimateTokens3(text) <= budget)
+    return { text, truncated: false };
+  const charBudget = budget * 4;
+  return { text: text.slice(0, charBudget), truncated: true };
+}
+
 // src/server.ts
 var SUPPORTED_PLATFORMS = ["darwin-arm64", "darwin-x64", "linux-x64", "linux-arm64"];
 var rawPlatform = `${process.platform}-${process.arch}`;
@@ -17997,6 +18155,19 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         },
         required: ["node_ids", "budget_tokens"]
       }
+    },
+    {
+      name: "memtree_browse",
+      description: "Fetch a URL, extract structured text, store as a web_chunk node. Returns a compact reference with title, headings, and body excerpt.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          url: { type: "string", description: "HTTP/HTTPS URL to fetch" },
+          budget_tokens: { type: "number", description: "Token budget for body content" },
+          force: { type: "boolean", description: "Bypass cache and re-fetch" }
+        },
+        required: ["url"]
+      }
     }
   ]
 }));
@@ -18075,6 +18246,27 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
 ---
 ` + JSON.stringify(result.manifest)
+            }
+          ]
+        };
+      }
+      case "memtree_browse": {
+        const { url, budget_tokens, force } = args;
+        const result = await memtreeBrowse(db, config2, { url, budget_tokens, force });
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({
+                nodeId: result.nodeId,
+                url: result.url,
+                title: result.title,
+                description: result.description,
+                headings: result.headings,
+                cached: result.cached,
+                truncated: result.truncated,
+                content: result.content
+              })
             }
           ]
         };

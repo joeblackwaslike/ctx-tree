@@ -14,7 +14,7 @@ export function openDb(dbPath: string): Database {
     CREATE TABLE IF NOT EXISTS nodes (
       id            TEXT PRIMARY KEY,
       parent_id     TEXT REFERENCES nodes(id) ON DELETE SET NULL,
-      kind          TEXT NOT NULL CHECK(kind IN ('session','file_chunk','tool_output','summary','note','observation')),
+      kind          TEXT NOT NULL CHECK(kind IN ('session','file_chunk','tool_output','summary','note','observation','web_chunk')),
       source_uri    TEXT,
       content       TEXT NOT NULL DEFAULT '',
       content_hash  TEXT NOT NULL DEFAULT '',
@@ -71,6 +71,41 @@ export function openDb(dbPath: string): Database {
       embedded_at     INTEGER NOT NULL
     );
   `);
+
+  // Migrate: add 'web_chunk' to the nodes.kind CHECK constraint if absent.
+  // SQLite doesn't support ALTER COLUMN, so we recreate the table.
+  const nodesSql = (db.query<{ sql: string }, []>(
+    `SELECT sql FROM sqlite_master WHERE type='table' AND name='nodes'`
+  ).get())?.sql ?? '';
+  if (!nodesSql.includes("'web_chunk'")) {
+    db.exec(`
+      PRAGMA foreign_keys = OFF;
+      CREATE TABLE nodes_new (
+        id            TEXT PRIMARY KEY,
+        parent_id     TEXT REFERENCES nodes_new(id) ON DELETE SET NULL,
+        kind          TEXT NOT NULL CHECK(kind IN ('session','file_chunk','tool_output','summary','note','observation','web_chunk')),
+        source_uri    TEXT,
+        content       TEXT NOT NULL DEFAULT '',
+        content_hash  TEXT NOT NULL DEFAULT '',
+        status        TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','live','stale','superseded','pruned')),
+        mtime         INTEGER NOT NULL DEFAULT 0,
+        created_at    INTEGER NOT NULL,
+        updated_at    INTEGER NOT NULL,
+        truncated     INTEGER NOT NULL DEFAULT 0,
+        original_bytes INTEGER NOT NULL DEFAULT 0,
+        metadata      TEXT NOT NULL DEFAULT '{}'
+      );
+      INSERT INTO nodes_new SELECT * FROM nodes;
+      DROP TABLE nodes;
+      ALTER TABLE nodes_new RENAME TO nodes;
+      CREATE INDEX IF NOT EXISTS idx_nodes_parent ON nodes(parent_id);
+      CREATE INDEX IF NOT EXISTS idx_nodes_status ON nodes(status);
+      CREATE INDEX IF NOT EXISTS idx_nodes_created ON nodes(created_at, parent_id);
+      CREATE INDEX IF NOT EXISTS idx_nodes_source_uri ON nodes(source_uri);
+      CREATE INDEX IF NOT EXISTS idx_nodes_content_hash ON nodes(content_hash);
+      PRAGMA foreign_keys = ON;
+    `);
+  }
 
   return db;
 }
