@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="assets/readme/logo.svg" width="80" alt="memtree">
+
 # 🌳 memtree
 
 ### Claude Code with a photographic memory
@@ -125,7 +127,7 @@ curl -fsSL https://bun.sh/install | bash && apt install ripgrep  # Linux
 ## How it works
 
 ```
-You call a tool (Read, Grep, WebFetch, Monitor, Agent, Skill, any MCP...)
+You call a tool (Read, Grep, WebFetch, Monitor, Agent, Skill, any MCP...)`  `   
   ↓
 PreToolUse hook fires before execution
   ↓
