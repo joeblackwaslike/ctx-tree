@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * PreToolUse hook — hard-redirects native Read/Grep/Bash/WebFetch/PowerShell
- * to memtree equivalents. Emits permissionDecision:deny so the original call is blocked,
+ * PreToolUse hook — hard-redirects native Read/Grep/Bash/WebFetch/PowerShell/Monitor
+ * to memtree equivalents. Agent enrichment is handled by a separate hook. Emits permissionDecision:deny so the original call is blocked,
  * then injects the exact replacement call as additionalContext.
  */
 

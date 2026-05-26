@@ -28,6 +28,28 @@
             "timeout": 5
           }
         ]
+      },
+      {
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/opt/homebrew/bin/bun ${CLAUDE_PLUGIN_ROOT}/hooks/pretooluse-agent-enrich.mjs",
+            "timeout": 8
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/opt/homebrew/bin/bun ${CLAUDE_PLUGIN_ROOT}/hooks/posttooluse-agent-capture.mjs",
+            "timeout": 8
+          }
+        ]
       }
     ]
   },
