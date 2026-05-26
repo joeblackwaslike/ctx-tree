@@ -17569,6 +17569,31 @@ async function memtreeRead(db, config2, params) {
     included.push(chunk);
     used += tokens;
   }
+  const fileRootUri = `file://${path}`;
+  let fileRootId;
+  const cachedRoot = getNodeBySourceUri(db, fileRootUri);
+  if (cachedRoot && cachedRoot.mtime === mtime) {
+    fileRootId = cachedRoot.id;
+  } else {
+    if (cachedRoot)
+      updateNodeStatus(db, cachedRoot.id, "stale");
+    fileRootId = ulid2();
+    const emptyHash = createHash2("sha256").update("").digest("hex");
+    insertNode(db, fileRootId, {
+      parent_id: null,
+      kind: "file_chunk",
+      source_uri: fileRootUri,
+      content: "",
+      content_hash: emptyHash,
+      status: "live",
+      mtime,
+      truncated: truncated ? 1 : 0,
+      original_bytes: originalBytes,
+      metadata: JSON.stringify({ filePath: path, is_file_root: true })
+    });
+    if (cachedRoot)
+      insertEdge(db, { src_id: fileRootId, dst_id: cachedRoot.id, kind: "supersedes" });
+  }
   const nodeIds = [];
   const seenNames = new Set;
   function uniqueSymbolKey(chunk) {
@@ -17590,7 +17615,7 @@ async function memtreeRead(db, config2, params) {
       updateNodeStatus(db, cached2.id, "stale");
     const nodeId = ulid2();
     insertNode(db, nodeId, {
-      parent_id: null,
+      parent_id: fileRootId,
       kind: "file_chunk",
       source_uri: chunkUri,
       content: chunk.content,

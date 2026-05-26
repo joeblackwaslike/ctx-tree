@@ -189,6 +189,31 @@ export async function memtreeRead(
     used += tokens;
   }
 
+  // Get or create the file root node (navigation anchor; parent of all per-chunk nodes).
+  const fileRootUri = `file://${path}`;
+  let fileRootId: string;
+  const cachedRoot = getNodeBySourceUri(db, fileRootUri);
+  if (cachedRoot && cachedRoot.mtime === mtime) {
+    fileRootId = cachedRoot.id;
+  } else {
+    if (cachedRoot) updateNodeStatus(db, cachedRoot.id, 'stale');
+    fileRootId = ulid();
+    const emptyHash = createHash('sha256').update('').digest('hex');
+    insertNode(db, fileRootId, {
+      parent_id: null,
+      kind: 'file_chunk',
+      source_uri: fileRootUri,
+      content: '',
+      content_hash: emptyHash,
+      status: 'live',
+      mtime,
+      truncated: truncated ? 1 : 0,
+      original_bytes: originalBytes,
+      metadata: JSON.stringify({ filePath: path, is_file_root: true }),
+    });
+    if (cachedRoot) insertEdge(db, { src_id: fileRootId, dst_id: cachedRoot.id, kind: 'supersedes' });
+  }
+
   const nodeIds: string[] = [];
 
   // Deduplicate symbol names within this read (e.g. two anonymous export_statement nodes).
@@ -216,7 +241,7 @@ export async function memtreeRead(
 
     const nodeId = ulid();
     insertNode(db, nodeId, {
-      parent_id: null,
+      parent_id: fileRootId,
       kind: 'file_chunk',
       source_uri: chunkUri,
       content: chunk.content,

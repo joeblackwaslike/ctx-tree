@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
-import { unlinkSync, existsSync, writeFileSync, mkdirSync, rmSync } from 'fs';
+import { unlinkSync, existsSync, writeFileSync, mkdirSync, rmSync, utimesSync } from 'node:fs';
 import { join } from 'path';
 import { openDb, closeDb } from '../store/db';
 import { memtreeRead } from './read';
@@ -35,9 +35,14 @@ describe('memtreeRead', () => {
     const filePath = join(FIXTURE_DIR, 'cached.ts');
     writeFileSync(filePath, 'export function hello() { return "world"; }\n');
     await memtreeRead(db, cfg, { path: filePath, budget_tokens: 500 });
-    const nodes = db.query("SELECT * FROM nodes WHERE kind = 'file_chunk'").all() as Array<{ source_uri: string }>;
-    expect(nodes.length).toBeGreaterThan(0);
-    expect(nodes[0].source_uri).toMatch(/^file:\/\/.*#hello$/);
+    type Row = { id: string; source_uri: string; parent_id: string | null; metadata: string };
+    const nodes = db.query("SELECT id, source_uri, parent_id, metadata FROM nodes WHERE kind = 'file_chunk'").all() as Row[];
+    const root = nodes.find(n => !n.source_uri.includes('#'));
+    const sym  = nodes.find(n => n.source_uri.endsWith('#hello'));
+    expect(root).toBeTruthy();
+    expect(JSON.parse(root!.metadata).is_file_root).toBe(true);
+    expect(sym).toBeTruthy();
+    expect(sym!.parent_id).toBe(root!.id);
   });
 
   test('returns cached result when mtime unchanged', async () => {
@@ -56,13 +61,16 @@ describe('memtreeRead', () => {
     const filePath = join(FIXTURE_DIR, 'shift.ts');
     writeFileSync(filePath, 'function greet() { return "hi"; }\n');
     const r1 = await memtreeRead(db, cfg, { path: filePath, budget_tokens: 500 });
-    const uri1 = (db.query("SELECT source_uri FROM nodes WHERE kind='file_chunk' LIMIT 1").get() as any).source_uri;
+    const uri1 = (db.query("SELECT source_uri FROM nodes WHERE kind='file_chunk' AND source_uri LIKE '%#%' LIMIT 1").get() as any).source_uri;
     expect(uri1).toMatch(/#greet$/);
 
     // Prepend a line — function shifts down but keeps its name.
+    // Force a distinct mtime so the cache invalidates even within the same clock tick.
     writeFileSync(filePath, '// header comment\nfunction greet() { return "hi"; }\n');
+    const future = new Date(Date.now() + 2000);
+    utimesSync(filePath, future, future);
     const r2 = await memtreeRead(db, cfg, { path: filePath, budget_tokens: 500 });
-    const uri2 = (db.query("SELECT source_uri FROM nodes WHERE kind='file_chunk' AND status='live' LIMIT 1").get() as any).source_uri;
+    const uri2 = (db.query("SELECT source_uri FROM nodes WHERE kind='file_chunk' AND status='live' AND source_uri LIKE '%#%' LIMIT 1").get() as any).source_uri;
     expect(uri2).toMatch(/#greet$/);
     expect(uri2).toBe(uri1);
     // New node was created (mtime changed) but URI is identical.
@@ -92,7 +100,7 @@ describe('memtreeRead', () => {
     const result = await memtreeRead(db, cfg, { path: filePath, budget_tokens: 2000 });
     expect(result.content).toBeTruthy();
     const meta = JSON.parse(
-      (db.query("SELECT metadata FROM nodes WHERE kind='file_chunk' LIMIT 1").get() as any).metadata
+      (db.query("SELECT metadata FROM nodes WHERE kind='file_chunk' AND json_extract(metadata,'$.is_file_root') IS NULL LIMIT 1").get() as any).metadata
     );
     expect(meta.chunking).toBe('window');
   });
@@ -101,7 +109,7 @@ describe('memtreeRead', () => {
     const filePath = join(FIXTURE_DIR, 'plain.txt');
     writeFileSync(filePath, Array(10).fill('line').join('\n'));
     await memtreeRead(db, cfg, { path: filePath, budget_tokens: 2000 });
-    const nodes = db.query("SELECT source_uri FROM nodes WHERE kind='file_chunk'").all() as Array<{ source_uri: string }>;
+    const nodes = db.query("SELECT source_uri FROM nodes WHERE kind='file_chunk' AND source_uri LIKE '%#%'").all() as Array<{ source_uri: string }>;
     expect(nodes[0].source_uri).toMatch(/#L\d+-\d+$/);
   });
 
