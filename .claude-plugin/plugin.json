@@ -20,7 +20,7 @@
     ],
     "PreToolUse": [
       {
-        "matcher": "Read|Grep|Bash|WebFetch",
+        "matcher": "Read|Grep|Bash|WebFetch|PowerShell|Monitor",
         "hooks": [
           {
             "type": "command",

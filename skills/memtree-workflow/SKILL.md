@@ -29,6 +29,7 @@ Use this chain instead of reading multiple files sequentially. `compose` assembl
 | `memtree_recent` | Surface what was captured in prior sessions at session start. |
 | `memtree_path_to_root` | Walk the parent chain from any node to understand file structure. |
 | `memtree_browse` | Fetch a URL, strip to readable text, store as web_chunk node. Prefer over WebFetch. |
+| `memtree_monitor` | Run a shell command, capture all output to a stored node, return nodeId + preview. Use instead of Bash/Monitor when output could be large. |
 
 ## Session Start
 

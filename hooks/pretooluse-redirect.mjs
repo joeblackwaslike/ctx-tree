@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * PreToolUse hook — hard-redirects native Read/Grep/Bash/WebFetch to memtree
- * equivalents. Emits permissionDecision:deny so the original call is blocked,
+ * PreToolUse hook — hard-redirects native Read/Grep/Bash/WebFetch/PowerShell
+ * to memtree equivalents. Emits permissionDecision:deny so the original call is blocked,
  * then injects the exact replacement call as additionalContext.
  */
 
@@ -17,8 +17,11 @@ const CODE_EXTENSIONS = new Set([
   '.md', '.mdx', '.rst',
 ]);
 
-const GREP_COMMANDS = new Set(['grep', 'rg', 'ag', 'egrep', 'fgrep', 'ack', 'ripgrep']);
-const CAT_COMMANDS  = new Set(['cat', 'bat']);
+const GREP_COMMANDS    = new Set(['grep', 'rg', 'ag', 'egrep', 'fgrep', 'ack', 'ripgrep']);
+const CAT_COMMANDS     = new Set(['cat', 'bat']);
+const PS_GREP_COMMANDS = new Set(['select-string', 'sls', 'findstr']);
+const PS_CAT_COMMANDS  = new Set(['get-content', 'gc', 'type']);
+const PS_FETCH_COMMANDS = new Set(['invoke-webrequest', 'iwr', 'invoke-restmethod', 'irm', 'curl', 'wget']);
 
 function getExt(filePath) {
   const dot = filePath.lastIndexOf('.');
@@ -108,6 +111,59 @@ if (toolName === 'webfetch') {
   deny(
     `Use memtree_browse instead of WebFetch for "${url}".`,
     `Call: memtree_browse({ url: ${JSON.stringify(url)} })\n\nReturns a compact structured reference (title, key sections, nodeId) instead of raw HTML. Stores the page as a web_chunk node so you can revisit via memtree_neighbors or memtree_search.`,
+  );
+}
+
+// ── PowerShell ────────────────────────────────────────────────────────────────
+if (toolName === 'powershell') {
+  const script = String(toolInput.command ?? toolInput.script ?? toolInput.code ?? '').trim();
+
+  // Skip compound scripts — too risky to partially intercept
+  if (script.includes('|') || script.includes(';')) {
+    process.exit(0);
+  }
+
+  const parts   = script.split(/\s+/);
+  const cmdName = parts[0].toLowerCase();
+
+  if (PS_GREP_COMMANDS.has(cmdName)) {
+    // Select-String -Pattern <pat> [-Path <path>]
+    const patternIdx = parts.findIndex(p => p.toLowerCase() === '-pattern');
+    const pattern = patternIdx >= 0 ? (parts[patternIdx + 1] ?? '') : (parts[1] ?? '');
+    const pathIdx = parts.findIndex(p => p.toLowerCase() === '-path');
+    const searchPath = pathIdx >= 0 ? (parts[pathIdx + 1] ?? '.') : '.';
+    deny(
+      `Use memtree_grep instead of ${parts[0]}.`,
+      `Call: memtree_grep({ pattern: ${JSON.stringify(pattern)}, path: ${JSON.stringify(searchPath)} })\n\nSame results, stored as graph nodes.`,
+    );
+  }
+
+  if (PS_CAT_COMMANDS.has(cmdName)) {
+    const filePath = parts.slice(1).find(p => !p.startsWith('-')) ?? '';
+    if (filePath && CODE_EXTENSIONS.has(getExt(filePath))) {
+      deny(
+        `Use memtree_read instead of ${parts[0]} for "${filePath}".`,
+        `Call: memtree_read({ path: ${JSON.stringify(filePath)} })\n\nReturns the file content and stores symbol-chunked nodes in the session graph.`,
+      );
+    }
+  }
+
+  if (PS_FETCH_COMMANDS.has(cmdName)) {
+    const uriIdx = parts.findIndex(p => p.toLowerCase() === '-uri' || p.toLowerCase() === '-url');
+    const url = uriIdx >= 0 ? (parts[uriIdx + 1] ?? '') : (parts[1] ?? '');
+    deny(
+      `Use memtree_browse instead of ${parts[0]} for "${url}".`,
+      `Call: memtree_browse({ url: ${JSON.stringify(url)} })\n\nReturns a compact structured reference stored as a web_chunk node.`,
+    );
+  }
+}
+
+// ── Monitor ───────────────────────────────────────────────────────────────────
+if (toolName === 'monitor') {
+  const command = String(toolInput.command ?? toolInput.cmd ?? '');
+  deny(
+    `Use memtree_monitor instead of Monitor for "${command.slice(0, 60)}".`,
+    `Call: memtree_monitor({ command: ${JSON.stringify(command)} })\n\nRuns the command, captures ALL output to a stored node, returns a compact reference (nodeId + preview). Output never floods context — retrieve any portion via memtree_compose([nodeId], budget_tokens).`,
   );
 }
 

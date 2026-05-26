@@ -29,6 +29,8 @@ Hooks enforce these redirects automatically. When a hook blocks a native tool, i
 | `Grep(pattern: "X", path: "Y")` | `memtree_grep({ pattern: "X", path: "Y" })` |
 | `Bash("rg X")` / `Bash("cat X")` | `memtree_grep(...)` / `memtree_read(...)` |
 | `WebFetch(url: "X")` | `memtree_browse({ url: "X" })` |
+| `Monitor(command: "X")` | `memtree_monitor({ command: "X" })` |
+| `PowerShell(script: "X")` | `memtree_grep(...)` / `memtree_read(...)` / `memtree_browse(...)` |
 | `Edit` / `Write` / `MultiEdit` | Native — write ops don't bloat context |
 
 ## During Work

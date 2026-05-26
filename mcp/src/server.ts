@@ -21,6 +21,7 @@ import { memtreeRead } from './tools/read.js';
 import { memtreeGrep } from './tools/grep.js';
 import { memtreeCompose } from './tools/compose.js';
 import { memtreeBrowse } from './tools/browse.js';
+import { memtreeMonitor } from './tools/monitor.js';
 import type { Filters } from './store/types.js';
 
 // ── Platform check ────────────────────────────────────────────────────────────
@@ -175,6 +176,19 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
+      name: 'memtree_monitor',
+      description: 'Run a shell command, capture all output as a stored node, and return a compact reference. Use instead of Bash when the command produces large or streaming output — output stays out of context until you ask for it.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          command: { type: 'string', description: 'Shell command to run' },
+          timeout_ms: { type: 'number', description: 'Timeout in milliseconds (default 30000)' },
+          cwd: { type: 'string', description: 'Working directory (default: process cwd)' },
+        },
+        required: ['command'],
+      },
+    },
+    {
       name: 'memtree_browse',
       description: 'Fetch a URL, extract structured text, store as a web_chunk node. Returns a compact reference with title, headings, and body excerpt.',
       inputSchema: {
@@ -293,6 +307,31 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             {
               type: 'text',
               text: result.content + '\n\n---\n' + JSON.stringify(result.manifest),
+            },
+          ],
+        };
+      }
+
+      case 'memtree_monitor': {
+        const { command, timeout_ms, cwd } = args as {
+          command: string;
+          timeout_ms?: number;
+          cwd?: string;
+        };
+        const result = await memtreeMonitor(db, config, { command, timeout_ms, cwd });
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                nodeId: result.nodeId,
+                command: result.command,
+                exit_code: result.exit_code,
+                lines_captured: result.lines_captured,
+                cached: result.cached,
+                preview: result.preview,
+                hint: `Full output stored as node ${result.nodeId}. Call memtree_compose(["${result.nodeId}"], 4000) to retrieve it within a token budget.`,
+              }),
             },
           ],
         };

@@ -18027,6 +18027,82 @@ function budgetContent(text, budget) {
   return { text: text.slice(0, charBudget), truncated: true };
 }
 
+// src/tools/monitor.ts
+import { createHash as createHash5 } from "crypto";
+var DEFAULT_TIMEOUT_MS = 30000;
+var PREVIEW_CHARS = 500;
+async function memtreeMonitor(db, _config, params) {
+  const { command, timeout_ms = DEFAULT_TIMEOUT_MS, cwd } = params;
+  if (!command || typeof command !== "string") {
+    throw new McpError(ErrorCode.InvalidParams, '"command" is required and must be a string');
+  }
+  const sourceUri = `cmd://${createHash5("sha256").update(command).digest("hex").slice(0, 16)}`;
+  let output;
+  let exitCode;
+  try {
+    const proc = Bun.spawn(["sh", "-c", command], {
+      cwd: cwd ?? process.cwd(),
+      stdout: "pipe",
+      stderr: "pipe"
+    });
+    const timeoutId = setTimeout(() => proc.kill(), timeout_ms);
+    const [stdoutBuf, stderrBuf] = await Promise.all([
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text()
+    ]);
+    exitCode = await proc.exited;
+    clearTimeout(timeoutId);
+    output = stdoutBuf + (stderrBuf ? `
+[stderr]
+${stderrBuf}` : "");
+  } catch (err) {
+    throw new McpError(ErrorCode.InternalError, `Failed to run command: ${err.message}`);
+  }
+  const contentHash = createHash5("sha256").update(output).digest("hex");
+  const lines = output.split(`
+`);
+  const preview = output.slice(-PREVIEW_CHARS);
+  const existing = getNodeBySourceUri(db, sourceUri);
+  if (existing) {
+    if (existing.content_hash === contentHash) {
+      db.run("UPDATE nodes SET updated_at = ? WHERE id = ?", Date.now(), existing.id);
+      return {
+        nodeId: existing.id,
+        command,
+        exit_code: exitCode,
+        lines_captured: lines.length,
+        preview,
+        cached: true
+      };
+    }
+    updateNodeStatus(db, existing.id, "stale");
+  }
+  const nodeId = ulid2();
+  insertNode(db, nodeId, {
+    parent_id: null,
+    kind: "tool_output",
+    source_uri: sourceUri,
+    content: output,
+    content_hash: contentHash,
+    status: "live",
+    mtime: Date.now(),
+    truncated: 0,
+    original_bytes: Buffer.byteLength(output, "utf8"),
+    metadata: JSON.stringify({ command, exit_code: exitCode, cwd: cwd ?? process.cwd() })
+  });
+  if (existing) {
+    insertEdge(db, { src_id: nodeId, dst_id: existing.id, kind: "supersedes" });
+  }
+  return {
+    nodeId,
+    command,
+    exit_code: exitCode,
+    lines_captured: lines.length,
+    preview,
+    cached: false
+  };
+}
+
 // src/server.ts
 var SUPPORTED_PLATFORMS = ["darwin-arm64", "darwin-x64", "linux-x64", "linux-arm64"];
 var rawPlatform = `${process.platform}-${process.arch}`;
@@ -18157,6 +18233,19 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       }
     },
     {
+      name: "memtree_monitor",
+      description: "Run a shell command, capture all output as a stored node, and return a compact reference. Use instead of Bash when the command produces large or streaming output \u2014 output stays out of context until you ask for it.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          command: { type: "string", description: "Shell command to run" },
+          timeout_ms: { type: "number", description: "Timeout in milliseconds (default 30000)" },
+          cwd: { type: "string", description: "Working directory (default: process cwd)" }
+        },
+        required: ["command"]
+      }
+    },
+    {
       name: "memtree_browse",
       description: "Fetch a URL, extract structured text, store as a web_chunk node. Returns a compact reference with title, headings, and body excerpt.",
       inputSchema: {
@@ -18246,6 +18335,26 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
 ---
 ` + JSON.stringify(result.manifest)
+            }
+          ]
+        };
+      }
+      case "memtree_monitor": {
+        const { command, timeout_ms, cwd } = args;
+        const result = await memtreeMonitor(db, config2, { command, timeout_ms, cwd });
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({
+                nodeId: result.nodeId,
+                command: result.command,
+                exit_code: result.exit_code,
+                lines_captured: result.lines_captured,
+                cached: result.cached,
+                preview: result.preview,
+                hint: `Full output stored as node ${result.nodeId}. Call memtree_compose(["${result.nodeId}"], 4000) to retrieve it within a token budget.`
+              })
             }
           ]
         };
