@@ -7,3 +7,11 @@ docs/_handoff.md
 .dolt/
 *.db
 .beads-credential-key
+
+# macOS / editor cruft
+.DS_Store
+memtree.code-workspace
+
+# Tool state dirs
+.clawhip/
+.serena/
