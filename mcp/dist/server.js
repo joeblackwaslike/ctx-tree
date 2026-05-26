@@ -17412,8 +17412,20 @@ function getPathToRoot(db, nodeId) {
 }
 
 // src/tools/recent.ts
+var CONTENT_KINDS = [
+  "file_chunk",
+  "tool_output",
+  "summary",
+  "note",
+  "observation",
+  "web_chunk"
+];
 function getRecent(db, since, limit = 50, filters = {}) {
-  const effectiveFilters = { ...filters, ...since ? { since } : {} };
+  const effectiveFilters = {
+    kind: CONTENT_KINDS,
+    ...filters,
+    ...since ? { since } : {}
+  };
   const { where, params } = buildFilterSQL(effectiveFilters);
   return db.query(`
     SELECT * FROM nodes WHERE ${where} ORDER BY created_at DESC LIMIT ?
@@ -18103,6 +18115,36 @@ ${stderrBuf}` : "");
   };
 }
 
+// src/tools/note.ts
+import { createHash as createHash6 } from "crypto";
+function memtreeNote(db, _config, params) {
+  const { content, title } = params;
+  if (!content || typeof content !== "string") {
+    throw new McpError(ErrorCode.InvalidParams, '"content" is required and must be a string');
+  }
+  const derivedTitle = title?.trim() || content.split(`
+`)[0].slice(0, 80);
+  const nodeId = ulid2();
+  const contentHash = createHash6("sha256").update(content).digest("hex");
+  insertNode(db, nodeId, {
+    parent_id: null,
+    kind: "note",
+    source_uri: `note://${contentHash.slice(0, 16)}`,
+    content,
+    content_hash: contentHash,
+    status: "live",
+    mtime: Date.now(),
+    truncated: 0,
+    original_bytes: Buffer.byteLength(content, "utf8"),
+    metadata: JSON.stringify({ title: derivedTitle })
+  });
+  return {
+    nodeId,
+    title: derivedTitle,
+    preview: content.slice(0, 200)
+  };
+}
+
 // src/server.ts
 var SUPPORTED_PLATFORMS = ["darwin-arm64", "darwin-x64", "linux-x64", "linux-arm64"];
 var rawPlatform = `${process.platform}-${process.arch}`;
@@ -18233,6 +18275,18 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       }
     },
     {
+      name: "memtree_note",
+      description: "Store a note or observation in the graph. Use to persist decisions, summaries, or any context you want retrievable in future sessions.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          content: { type: "string", description: "Note content" },
+          title: { type: "string", description: "Optional short title (derived from first line if omitted)" }
+        },
+        required: ["content"]
+      }
+    },
+    {
       name: "memtree_monitor",
       description: "Run a shell command, capture all output as a stored node, and return a compact reference. Use instead of Bash when the command produces large or streaming output \u2014 output stays out of context until you ask for it.",
       inputSchema: {
@@ -18337,6 +18391,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 ` + JSON.stringify(result.manifest)
             }
           ]
+        };
+      }
+      case "memtree_note": {
+        const { content, title } = args;
+        const result = memtreeNote(db, config2, { content, title });
+        return {
+          content: [{ type: "text", text: JSON.stringify(result) }]
         };
       }
       case "memtree_monitor": {

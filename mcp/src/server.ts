@@ -22,6 +22,7 @@ import { memtreeGrep } from './tools/grep.js';
 import { memtreeCompose } from './tools/compose.js';
 import { memtreeBrowse } from './tools/browse.js';
 import { memtreeMonitor } from './tools/monitor.js';
+import { memtreeNote } from './tools/note.js';
 import type { Filters } from './store/types.js';
 
 // ── Platform check ────────────────────────────────────────────────────────────
@@ -176,6 +177,18 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
+      name: 'memtree_note',
+      description: 'Store a note or observation in the graph. Use to persist decisions, summaries, or any context you want retrievable in future sessions.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          content: { type: 'string', description: 'Note content' },
+          title:   { type: 'string', description: 'Optional short title (derived from first line if omitted)' },
+        },
+        required: ['content'],
+      },
+    },
+    {
       name: 'memtree_monitor',
       description: 'Run a shell command, capture all output as a stored node, and return a compact reference. Use instead of Bash when the command produces large or streaming output — output stays out of context until you ask for it.',
       inputSchema: {
@@ -309,6 +322,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               text: result.content + '\n\n---\n' + JSON.stringify(result.manifest),
             },
           ],
+        };
+      }
+
+      case 'memtree_note': {
+        const { content, title } = args as { content: string; title?: string };
+        const result = memtreeNote(db, config, { content, title });
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result) }],
         };
       }
 
