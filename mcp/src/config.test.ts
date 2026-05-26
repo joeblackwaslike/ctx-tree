@@ -15,17 +15,18 @@ describe('loadConfig', () => {
     expect(cfg.capture.maxBytes).toBe(100000);
   });
 
-  test('per-project key replaces global key wholesale', () => {
+  test('partial nested override preserves sibling defaults', () => {
     const projectRoot = TMP;
     mkdirSync(join(projectRoot, '.memtree'), { recursive: true });
     writeFileSync(
       join(projectRoot, '.memtree', 'config.json'),
-      JSON.stringify({ capture: { maxBytes: 50000, filterMinSize: 100 } })
+      JSON.stringify({ capture: { maxBytes: 50000 } })
     );
     const cfg = loadConfig(projectRoot);
     expect(cfg.capture.maxBytes).toBe(50000);
-    expect(cfg.capture.filterMinSize).toBe(100);
-    expect(cfg.walkers.stalenessIntervalMs).toBe(30000);
+    // sibling defaults must survive the partial override
+    expect(cfg.capture.filterMinSize).toBe(DEFAULT_CONFIG.capture.filterMinSize);
+    expect(cfg.walkers.stalenessIntervalMs).toBe(DEFAULT_CONFIG.walkers.stalenessIntervalMs);
   });
 
   test('per-project capture.bash=false is preserved', () => {

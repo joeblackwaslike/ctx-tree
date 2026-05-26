@@ -16,6 +16,7 @@ export interface MemtreeNode {
   truncated: number;     // 0 | 1
   original_bytes: number;
   metadata: string;      // JSON blob
+  summary?: string | null;  // optional summary text (v1.1+)
 }
 
 export interface MemtreeEdge {
@@ -28,6 +29,7 @@ export interface MemtreeEdge {
 export interface WalkerConfig {
   embeddingIdleMs: number;
   embeddingBatchSize: number;
+  summarizerIdleMs: number;
   summarizerSubtreeThreshold: number;
   dedupeIntervalMs: number;
   stalenessIntervalMs: number;
@@ -54,6 +56,7 @@ export interface MemtreeConfig {
   retention: RetentionConfig;
   walkers: WalkerConfig;
   capture: CaptureConfig;
+  trustedExecution?: boolean;
 }
 
 export interface IngestPayload {
@@ -69,8 +72,9 @@ export type FilterResult = { action: 'accept' } | { action: 'drop'; reason: stri
 
 export interface ComposeManifest {
   included: string[];
-  dropped: Array<{ id: string; reason: 'over_budget' | 'superseded' | 'pruned' | 'filtered' }>;
+  dropped: Array<{ id: string; reason: 'over_budget' | 'superseded' | 'pruned' | 'filtered' | 'over_budget_no_summary' }>;
   truncated: string[];
+  summary_substituted?: string[];  // node IDs where summary was substituted for raw content
 }
 
 export interface Filters {
@@ -80,6 +84,12 @@ export interface Filters {
   until?: number;
   parent_id?: string;
   session_id?: string;
+  // v1.1: metadata sub-filters
+  metadata?: {
+    tool?: string;        // exact match on metadata.tool
+    session_id?: string;  // exact match on metadata.session_id
+    gitignored?: boolean; // filter on metadata.gitignored flag
+  };
 }
 
 // Provider interfaces — implementations are v1.1 (Ollama, OpenAI, Anthropic adapters).
@@ -94,10 +104,4 @@ export interface SummarizerProvider {
   summarize(content: string, contextHint?: string): Promise<string>;
 }
 
-// Returns null providers in v1; v1.1 factory reads config and returns real impls.
-export function loadProviders(_config: MemtreeConfig): {
-  embedding: EmbeddingProvider | null;
-  summarizer: SummarizerProvider | null;
-} {
-  return { embedding: null, summarizer: null };
-}
+// Provider implementations live in ../providers/index.ts to avoid circular imports.

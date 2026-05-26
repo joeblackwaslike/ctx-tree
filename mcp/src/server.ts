@@ -7,20 +7,25 @@ import {
   McpError,
 } from '@modelcontextprotocol/sdk/types.js';
 import { execSync } from 'child_process';
-import { mkdirSync, chmodSync } from 'fs';
+import { mkdirSync, chmodSync, unlinkSync, existsSync } from 'fs';
+import * as net from 'net';
 import { join } from 'path';
 import { openDb, closeDb } from './store/db.js';
 import { loadConfig } from './config.js';
-import { computeProjectHash } from './project-hash.js';
+import { computeProjectHash, registerProject, deregisterProject } from './project-hash.js';
 import { WalkerCoordinator } from './walkers/coordinator.js';
-import { searchKeyword } from './tools/search.js';
+import { searchKeyword, searchSemantic, searchHybrid } from './tools/search.js';
 import { getNeighborsDeep } from './tools/neighbors.js';
 import { getPathToRoot } from './tools/path-to-root.js';
 import { getRecent } from './tools/recent.js';
 import { memtreeRead } from './tools/read.js';
 import { memtreeGrep } from './tools/grep.js';
 import { memtreeCompose } from './tools/compose.js';
+import { memtreeBash } from './tools/bash.js';
 import type { Filters } from './store/types.js';
+import { loadProviders } from './providers/index.js';
+import { processIngest } from './ingest.js';
+import type { IngestPayload } from './store/types.js';
 
 // ── Platform check ────────────────────────────────────────────────────────────
 const SUPPORTED_PLATFORMS = ['darwin-arm64', 'darwin-x64', 'linux-x64', 'linux-arm64'];
@@ -41,14 +46,25 @@ if (!effectivePlatform) {
 }
 
 // ── ripgrep check ─────────────────────────────────────────────────────────────
+let rgAvailable = false;
 try {
   execSync('rg --version', { stdio: 'pipe' });
+  rgAvailable = true;
 } catch {
-  process.stderr.write(
-    'memtree: `rg` (ripgrep) is not installed or not in PATH.\n' +
-      'Install it via: brew install ripgrep  (macOS) or  apt install ripgrep  (Debian/Ubuntu)\n',
-  );
-  process.exit(1);
+  process.stderr.write('memtree: `rg` not found — memtree_grep will be unavailable.\n');
+}
+
+// ── jq & socat checks (for capture hook) ──────────────────────────────────────
+for (const bin of ['jq', 'socat'] as const) {
+  try {
+    execSync(`${bin} --version`, { stdio: 'pipe' });
+  } catch {
+    process.stderr.write(
+      `memtree: \`${bin}\` not found — passive capture hook will not function.\n` +
+      `  Install: brew install ${bin}\n`,
+    );
+    // Non-fatal: server still starts; capture.sh will silently exit 0 without the binary.
+  }
 }
 
 // ── DB path setup ─────────────────────────────────────────────────────────────
@@ -62,9 +78,61 @@ const config = loadConfig(process.env.MEMTREE_CWD ?? process.cwd());
 const db = openDb(dbPath);
 chmodSync(dbPath, 0o600);
 
+// Register this project in projects.tsv
+registerProject(process.env.MEMTREE_CWD ?? process.cwd(), projectHash);
+
+// ── Providers ─────────────────────────────────────────────────────────────────
+const { embedding, summarizer: _summarizer } = loadProviders(config);
+
 // ── Walkers ───────────────────────────────────────────────────────────────────
 const walkers = new WalkerCoordinator();
-walkers.start(db, config);
+walkers.start(db, config, embedding, _summarizer);
+
+// ── Ingest socket ─────────────────────────────────────────────────────────────
+const ingestSockPath = join(storeDir, 'ingest.sock');
+
+// Remove stale socket file if it exists from a previous run
+if (existsSync(ingestSockPath)) {
+  try { unlinkSync(ingestSockPath); } catch { /* ignore */ }
+}
+
+const MAX_INGEST_BUF = 1 * 1024 * 1024; // 1 MB — guard against unbounded buffer growth
+
+const ingestServer = net.createServer((socket) => {
+  let buf = '';
+  socket.on('data', (chunk) => {
+    buf += chunk.toString('utf8');
+    if (buf.length > MAX_INGEST_BUF) {
+      process.stderr.write(`[memtree/ingest] socket buffer exceeded limit, closing connection\n`);
+      socket.destroy();
+      buf = '';
+      return;
+    }
+    let nl: number;
+    while ((nl = buf.indexOf('\n')) !== -1) {
+      const line = buf.slice(0, nl).trim();
+      buf = buf.slice(nl + 1);
+      if (!line) continue;
+      try {
+        const payload = JSON.parse(line) as IngestPayload;
+        processIngest(db, config, payload);
+      } catch (err) {
+        process.stderr.write(`[memtree/ingest] failed to parse line: ${err}\n`);
+      }
+    }
+  });
+  socket.on('error', (err) => {
+    process.stderr.write(`[memtree/ingest] socket connection error: ${err}\n`);
+  });
+});
+
+ingestServer.listen(ingestSockPath, () => {
+  try { chmodSync(ingestSockPath, 0o600); } catch { /* ignore on platforms that don't support it */ }
+});
+
+ingestServer.on('error', (err) => {
+  process.stderr.write(`[memtree/ingest] server error: ${err}\n`);
+});
 
 // ── MCP server ────────────────────────────────────────────────────────────────
 const server = new Server(
@@ -76,12 +144,12 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: [
     {
       name: 'memtree_search',
-      description: 'Keyword search over the memtree store.',
+      description: 'Search over the memtree store. Supports keyword (BM25), semantic (cosine similarity), and hybrid (RRF fusion) modes.',
       inputSchema: {
         type: 'object',
         properties: {
           query: { type: 'string', description: 'Search query' },
-          mode: { type: 'string', enum: ['keyword'], description: 'Search mode (only "keyword" supported)' },
+          mode: { type: 'string', enum: ['keyword', 'semantic', 'hybrid'], description: 'Search mode: "keyword" (BM25), "semantic" (vector cosine), or "hybrid" (RRF fusion). Defaults to "keyword".' },
           limit: { type: 'number', description: 'Max results to return' },
           filters: { type: 'object', description: 'Optional filters' },
         },
@@ -166,11 +234,23 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         properties: {
           node_ids: { type: 'array', items: { type: 'string' }, description: 'Seed node IDs' },
           budget_tokens: { type: 'number', description: 'Token budget for output' },
-          format: { type: 'string', enum: ['raw', 'outline'], description: 'Output format' },
+          format: { type: 'string', enum: ['raw', 'outline', 'mixed'], description: 'Output format: "raw" (full content), "outline" (first-line previews), or "mixed" (summary-substituted for over-budget nodes)' },
           query: { type: 'string', description: 'Optional query for relevance scoring' },
           depth: { type: 'number', description: 'BFS expansion depth' },
         },
         required: ['node_ids', 'budget_tokens'],
+      },
+    },
+    {
+      name: 'memtree_bash',
+      description: 'Execute a shell command, redact secrets from output, and store the result in the context store.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          command: { type: 'string', description: 'Shell command to execute' },
+          budget_tokens: { type: 'number', description: 'Token budget for output (default 2000)' },
+        },
+        required: ['command'],
       },
     },
   ],
@@ -189,10 +269,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           filters?: Filters;
         };
         if (typeof query !== 'string') throw new McpError(ErrorCode.InvalidParams, '"query" is required and must be a string');
-        if (mode !== undefined && mode !== 'keyword') {
+        if (mode === 'semantic') {
+          const result = await searchSemantic(db, config, embedding, query, limit, filters);
+          return { content: [{ type: 'text', text: JSON.stringify(result) }] };
+        } else if (mode === 'hybrid') {
+          const result = await searchHybrid(db, config, embedding, query, limit, filters);
+          return { content: [{ type: 'text', text: JSON.stringify(result) }] };
+        } else if (mode !== undefined && mode !== 'keyword') {
           throw new McpError(
             ErrorCode.InvalidParams,
-            `Unsupported mode: "${mode}". Only "keyword" is supported.`,
+            `Unsupported mode: "${mode}". Supported modes: "keyword", "semantic", "hybrid".`,
           );
         }
         const result = searchKeyword(db, query, limit, filters);
@@ -248,6 +334,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           file_glob?: string;
         };
         if (typeof pattern !== 'string') throw new McpError(ErrorCode.InvalidParams, '"pattern" is required and must be a string');
+        if (!rgAvailable) throw new McpError(ErrorCode.InvalidParams, '`rg` (ripgrep) is not installed. Install via: brew install ripgrep');
         const result = await memtreeGrep(db, config, {
           pattern,
           path,
@@ -261,7 +348,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const { node_ids, budget_tokens, format, query, depth } = args as {
           node_ids: string[];
           budget_tokens: number;
-          format?: 'raw' | 'outline';
+          format?: 'raw' | 'outline' | 'mixed';
           query?: string;
           depth?: number;
         };
@@ -284,6 +371,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
 
+      case 'memtree_bash': {
+        const { command, budget_tokens } = args as { command: string; budget_tokens?: number };
+        if (typeof command !== 'string') throw new McpError(ErrorCode.InvalidParams, '"command" is required and must be a string');
+        const result = await memtreeBash(db, config, { command, budget_tokens });
+        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      }
+
       default:
         throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
     }
@@ -297,8 +391,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 const transport = new StdioServerTransport();
 
 function shutdown(): void {
+  ingestServer.close();
+  try { unlinkSync(ingestSockPath); } catch { /* already gone */ }
   walkers.stop();
   closeDb(db);
+  deregisterProject(projectHash);
   process.exit(0);
 }
 

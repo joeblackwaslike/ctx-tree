@@ -72,6 +72,25 @@ export function openDb(dbPath: string): Database {
     );
   `);
 
+  // Add summary column if it doesn't exist (idempotent migration)
+  const cols = db.query('PRAGMA table_info(nodes)').all() as Array<{ name: string }>;
+  if (!cols.some(c => c.name === 'summary')) {
+    db.run('ALTER TABLE nodes ADD COLUMN summary TEXT');
+  }
+
+  // Add expression indices on metadata JSON fields (idempotent, SQLite supports these on existing tables)
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_nodes_meta_tool
+      ON nodes(json_extract(metadata, '$.tool'))
+      WHERE json_extract(metadata, '$.tool') IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS idx_nodes_meta_session_id
+      ON nodes(json_extract(metadata, '$.session_id'))
+      WHERE json_extract(metadata, '$.session_id') IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS idx_nodes_meta_gitignored
+      ON nodes(json_extract(metadata, '$.gitignored'))
+      WHERE json_extract(metadata, '$.gitignored') = 1;
+  `);
+
   return db;
 }
 

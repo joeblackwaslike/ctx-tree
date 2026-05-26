@@ -1,6 +1,6 @@
 {
   "name": "memtree",
-  "description": "Tree/graph-based persistent context store with surgical recall. Exposes memtree.read, memtree.grep, memtree.compose, memtree.search, memtree.neighbors for budget-bounded recall.",
+  "description": "Tree/graph-based persistent context store with passive capture and surgical recall. Captures Read/Grep/Bash tool outputs via PostToolUse hook.",
   "author": { "name": "Joe Black", "email": "joeblackwaslike@gmail.com" },
   "homepage": "https://github.com/joeblackwaslike/memtree",
   "repository": "https://github.com/joeblackwaslike/memtree",
@@ -47,5 +47,15 @@
         "MEMTREE_CWD": "${workspaceFolder}"
       }
     }
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Read|Grep|Bash",
+        "hooks": [
+          { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/mcp/hooks/capture.sh" }
+        ]
+      }
+    ]
   }
 }

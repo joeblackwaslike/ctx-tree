@@ -1,8 +1,13 @@
 import type { Database } from 'bun:sqlite';
-import type { MemtreeConfig } from '../store/types';
-import { runFilterWalker } from './filter';
-import { runStalenessWalker } from './staleness';
-import { runPrunerWalker } from './pruner';
+import type { MemtreeConfig } from '../store/types.js';
+import type { EmbeddingProvider } from '../store/types.js';
+import type { SummarizerProvider } from '../store/types.js';
+import { runFilterWalker } from './filter.js';
+import { runStalenessWalker } from './staleness.js';
+import { runPrunerWalker } from './pruner.js';
+import { runEmbeddingWalker } from './embedding.js';
+import { runSummarizerWalker } from './summarizer.js';
+import { runDedupeWalker } from './dedupe.js';
 
 function withErrorBoundary(name: string, fn: () => void): void {
   try { fn(); } catch (e) {
@@ -25,7 +30,7 @@ export class WalkerCoordinator {
     if (swept > 0) process.stderr.write(`memtree: startup sweep processed pending rows in ${swept} passes\n`);
   }
 
-  start(db: Database, config: MemtreeConfig): void {
+  start(db: Database, config: MemtreeConfig, embedding?: EmbeddingProvider | null, summarizer?: SummarizerProvider | null): void {
     this.startupSweep(db, config);
 
     this.timers.push(
@@ -33,6 +38,33 @@ export class WalkerCoordinator {
       setInterval(() => withErrorBoundary('staleness', () => runStalenessWalker(db, config)), config.walkers.stalenessIntervalMs),
       setInterval(() => withErrorBoundary('pruner', () => runPrunerWalker(db, config)), config.walkers.prunerIntervalMs),
     );
+
+    if (embedding) {
+      this.timers.push(
+        setInterval(
+          () => withErrorBoundary('embedding', () => runEmbeddingWalker(db, config, embedding)),
+          config.walkers.embeddingIdleMs
+        )
+      );
+    }
+
+    if (summarizer) {
+      this.timers.push(
+        setInterval(
+          () => withErrorBoundary('summarizer', () => runSummarizerWalker(db, config, summarizer)),
+          config.walkers.summarizerIdleMs
+        )
+      );
+    }
+
+    if (config.walkers.dedupeIntervalMs > 0) {
+      this.timers.push(
+        setInterval(
+          () => withErrorBoundary('dedupe', () => runDedupeWalker(db, config)),
+          config.walkers.dedupeIntervalMs
+        )
+      );
+    }
   }
 
   stop(): void {
