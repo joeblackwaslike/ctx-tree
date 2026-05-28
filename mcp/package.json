@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "build": "bun build src/server.ts --target bun --outdir dist --external tree-sitter --external tree-sitter-typescript --external tree-sitter-javascript --external tree-sitter-python --external tree-sitter-rust --external tree-sitter-go --external tree-sitter-bash",
+    "build": "bun build src/server.ts --target bun --outdir dist --external tree-sitter --external tree-sitter-typescript --external tree-sitter-javascript --external tree-sitter-python --external tree-sitter-rust --external tree-sitter-go --external tree-sitter-bash && cp src/visualize/ui.html dist/ui.html",
     "postinstall": "bun run scripts/postinstall.ts",
     "test": "bun test",
     "dev": "bun run src/server.ts"
