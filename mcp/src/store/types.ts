@@ -1,6 +1,6 @@
 export type NodeStatus = 'pending' | 'live' | 'stale' | 'superseded' | 'pruned';
-export type NodeKind = 'session' | 'file_chunk' | 'tool_output' | 'summary' | 'note' | 'observation' | 'web_chunk';
-export type EdgeKind = 'derived_from' | 'references' | 'summarizes' | 'supersedes';
+export type NodeKind = 'session' | 'file_chunk' | 'tool_output' | 'summary' | 'note' | 'observation' | 'web_chunk' | 'prompt' | 'thinking' | 'response';
+export type EdgeKind = 'derived_from' | 'references' | 'summarizes' | 'supersedes' | 'follows';
 
 export interface MemtreeNode {
   id: string;            // ULID

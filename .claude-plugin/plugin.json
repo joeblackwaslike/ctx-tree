@@ -94,6 +94,18 @@
           }
         ]
       }
+    ],
+    "Stop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/opt/homebrew/bin/bun ${CLAUDE_PLUGIN_ROOT}/hooks/stop-response-capture.mjs",
+            "timeout": 10
+          }
+        ]
+      }
     ]
   },
   "mcpServers": {

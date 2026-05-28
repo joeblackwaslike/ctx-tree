@@ -16955,7 +16955,7 @@ function openDb(dbPath) {
     CREATE TABLE IF NOT EXISTS nodes (
       id            TEXT PRIMARY KEY,
       parent_id     TEXT REFERENCES nodes(id) ON DELETE SET NULL,
-      kind          TEXT NOT NULL CHECK(kind IN ('session','file_chunk','tool_output','summary','note','observation','web_chunk')),
+      kind          TEXT NOT NULL CHECK(kind IN ('session','file_chunk','tool_output','summary','note','observation','web_chunk','prompt','thinking','response')),
       source_uri    TEXT,
       content       TEXT NOT NULL DEFAULT '',
       content_hash  TEXT NOT NULL DEFAULT '',
@@ -16977,7 +16977,7 @@ function openDb(dbPath) {
     CREATE TABLE IF NOT EXISTS edges (
       src_id     TEXT NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
       dst_id     TEXT NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
-      kind       TEXT NOT NULL CHECK(kind IN ('derived_from','references','summarizes','supersedes')),
+      kind       TEXT NOT NULL CHECK(kind IN ('derived_from','references','summarizes','supersedes','follows')),
       created_at INTEGER NOT NULL,
       PRIMARY KEY (src_id, dst_id, kind)
     );
@@ -17019,7 +17019,7 @@ function openDb(dbPath) {
       CREATE TABLE nodes_new (
         id            TEXT PRIMARY KEY,
         parent_id     TEXT REFERENCES nodes_new(id) ON DELETE SET NULL,
-        kind          TEXT NOT NULL CHECK(kind IN ('session','file_chunk','tool_output','summary','note','observation','web_chunk')),
+        kind          TEXT NOT NULL CHECK(kind IN ('session','file_chunk','tool_output','summary','note','observation','web_chunk','prompt','thinking','response')),
         source_uri    TEXT,
         content       TEXT NOT NULL DEFAULT '',
         content_hash  TEXT NOT NULL DEFAULT '',
@@ -17039,6 +17039,54 @@ function openDb(dbPath) {
       CREATE INDEX IF NOT EXISTS idx_nodes_created ON nodes(created_at, parent_id);
       CREATE INDEX IF NOT EXISTS idx_nodes_source_uri ON nodes(source_uri);
       CREATE INDEX IF NOT EXISTS idx_nodes_content_hash ON nodes(content_hash);
+      PRAGMA foreign_keys = ON;
+    `);
+  }
+  const nodesSql2 = db.query(`SELECT sql FROM sqlite_master WHERE type='table' AND name='nodes'`).get()?.sql ?? "";
+  if (!nodesSql2.includes("'prompt'")) {
+    db.exec(`
+      PRAGMA foreign_keys = OFF;
+      CREATE TABLE nodes_new (
+        id            TEXT PRIMARY KEY,
+        parent_id     TEXT REFERENCES nodes_new(id) ON DELETE SET NULL,
+        kind          TEXT NOT NULL CHECK(kind IN ('session','file_chunk','tool_output','summary','note','observation','web_chunk','prompt','thinking','response')),
+        source_uri    TEXT,
+        content       TEXT NOT NULL DEFAULT '',
+        content_hash  TEXT NOT NULL DEFAULT '',
+        status        TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','live','stale','superseded','pruned')),
+        mtime         INTEGER NOT NULL DEFAULT 0,
+        created_at    INTEGER NOT NULL,
+        updated_at    INTEGER NOT NULL,
+        truncated     INTEGER NOT NULL DEFAULT 0,
+        original_bytes INTEGER NOT NULL DEFAULT 0,
+        metadata      TEXT NOT NULL DEFAULT '{}'
+      );
+      INSERT INTO nodes_new SELECT * FROM nodes;
+      DROP TABLE nodes;
+      ALTER TABLE nodes_new RENAME TO nodes;
+      CREATE INDEX IF NOT EXISTS idx_nodes_parent ON nodes(parent_id);
+      CREATE INDEX IF NOT EXISTS idx_nodes_status ON nodes(status);
+      CREATE INDEX IF NOT EXISTS idx_nodes_created ON nodes(created_at, parent_id);
+      CREATE INDEX IF NOT EXISTS idx_nodes_source_uri ON nodes(source_uri);
+      CREATE INDEX IF NOT EXISTS idx_nodes_content_hash ON nodes(content_hash);
+      PRAGMA foreign_keys = ON;
+    `);
+  }
+  const edgesSql = db.query(`SELECT sql FROM sqlite_master WHERE type='table' AND name='edges'`).get()?.sql ?? "";
+  if (!edgesSql.includes("'follows'")) {
+    db.exec(`
+      PRAGMA foreign_keys = OFF;
+      CREATE TABLE edges_new (
+        src_id     TEXT NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
+        dst_id     TEXT NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
+        kind       TEXT NOT NULL CHECK(kind IN ('derived_from','references','summarizes','supersedes','follows')),
+        created_at INTEGER NOT NULL,
+        PRIMARY KEY (src_id, dst_id, kind)
+      );
+      INSERT INTO edges_new SELECT * FROM edges;
+      DROP TABLE edges;
+      ALTER TABLE edges_new RENAME TO edges;
+      CREATE INDEX IF NOT EXISTS idx_edges_dst ON edges(dst_id);
       PRAGMA foreign_keys = ON;
     `);
   }

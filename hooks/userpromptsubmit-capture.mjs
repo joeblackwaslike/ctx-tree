@@ -1,16 +1,16 @@
 /**
- * UserPromptSubmit hook — stores the user's prompt as a `prompt` node
+ * UserPromptSubmit hook — stores every non-empty prompt as a `prompt` node
  * and injects a compact nodeId reference back into Claude's context.
  *
- * Payoff: subagents can be handed the nodeId instead of the full prompt text;
- * prior prompts surface via memtree_search in future sessions; the Agent
- * enrichment hook will find relevant prompts in FTS and include them.
+ * Wires: prompt --follows--> previous_response (if one exists this session).
  */
 
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { Database } from 'bun:sqlite';
+import { ulid } from './lib/ulid.mjs';
+import { getOrCreateSession, lastNode, countNodes, insertEdge } from './lib/db.mjs';
 
 // ── Read stdin ────────────────────────────────────────────────────────────────
 const chunks = [];
@@ -35,39 +35,43 @@ try {
   process.exit(0);
 }
 
+// ── Session node ──────────────────────────────────────────────────────────────
+const sessionNodeId = getOrCreateSession(db, sessionId);
+
 // ── Dedup by content hash ─────────────────────────────────────────────────────
 const contentHash = createHash('sha256').update(userPrompt).digest('hex');
-const existing = db.query('SELECT id FROM nodes WHERE content_hash = $h LIMIT 1').get({ $h: contentHash });
+const existing = db.query(
+  `SELECT id FROM nodes WHERE content_hash=? AND kind='prompt' LIMIT 1`
+).get(contentHash);
 if (existing) {
-  // Identical prompt already stored — just surface the existing nodeId
   process.stdout.write(JSON.stringify({
     systemMessage: `[memtree] Prompt already stored → node ${existing.id}. Pass to subagents: memtree_compose(["${existing.id}"], budget).`,
   }));
   process.exit(0);
 }
 
-// ── Store as prompt node ──────────────────────────────────────────────────────
-const nodeId = randomUUID();
-const now    = Date.now();
-const title  = userPrompt.slice(0, 80).replace(/\n/g, ' ');
+// ── Store prompt node ─────────────────────────────────────────────────────────
+const nodeId    = ulid();
+const now       = Date.now();
+const title     = userPrompt.slice(0, 80).replaceAll('\n', ' ');
+const turnIndex = countNodes(db, sessionNodeId, 'prompt');
 
-db.run(`
-  INSERT OR IGNORE INTO nodes
-    (id, parent_id, kind, source_uri, content, content_hash,
-     status, mtime, created_at, updated_at, truncated, original_bytes, metadata)
-  VALUES
-    ($id, $parent, 'prompt', $uri, $content, $hash,
-     'live', $now, $now, $now, 0, $bytes, $meta)
-`, {
-  $id:      nodeId,
-  $parent:  `session_${sessionId}`,
-  $uri:     `prompt://${contentHash.slice(0, 16)}`,
-  $content: userPrompt,
-  $hash:    contentHash,
-  $now:     now,
-  $bytes:   Buffer.byteLength(userPrompt, 'utf8'),
-  $meta:    JSON.stringify({ session_id: sessionId, title, cwd }),
-});
+db.run(
+  `INSERT OR IGNORE INTO nodes
+     (id, parent_id, kind, source_uri, content, content_hash,
+      status, mtime, created_at, updated_at, truncated, original_bytes, metadata)
+   VALUES (?,?,'prompt',?,?,?,'live',0,?,?,0,?,?)`,
+  nodeId, sessionNodeId,
+  `prompt://${contentHash.slice(0, 16)}`,
+  userPrompt, contentHash,
+  now, now,
+  Buffer.byteLength(userPrompt, 'utf8'),
+  JSON.stringify({ session_id: sessionId, title, cwd, turn_index: turnIndex })
+);
+
+// ── Wire follows edge: prompt → previous response ─────────────────────────────
+const prevResponse = lastNode(db, sessionNodeId, 'response');
+if (prevResponse) insertEdge(db, nodeId, prevResponse.id, 'follows', now);
 
 process.stdout.write(JSON.stringify({
   systemMessage: `[memtree] Prompt stored → node ${nodeId} ("${title.slice(0, 60)}…"). Pass full context to subagents: memtree_compose(["${nodeId}"], budget).`,
