@@ -1,0 +1,28 @@
+{
+  "name": "@joeblackwaslike/memtree-viz",
+  "version": "0.1.0",
+  "description": "Real-time graph visualizer CLI for the memtree context store",
+  "type": "module",
+  "bin": {
+    "memtree-viz": "./dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "mkdir -p dist && bun build src/cli.ts --target bun --outfile dist/cli.js && cp ../../mcp/src/visualize/ui.html dist/ui.html",
+    "prepublishOnly": "bun run build"
+  },
+  "engines": {
+    "bun": ">=1.0.0"
+  },
+  "keywords": ["memtree", "visualizer", "graph", "sqlite", "context"],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/joeblackwaslike/memtree"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.1.0"
+  }
+}
