@@ -10,7 +10,7 @@ export async function memtreeVisualize(
 ): Promise<{ url: string; port: number; nodeCount: number; edgeCount: number }> {
   if (!vizServer) {
     const port =
-      parseInt(process.env.MEMTREE_VIZ_PORT ?? '', 10) || params.port ?? 7777;
+      parseInt(process.env.MEMTREE_VIZ_PORT ?? '', 10) || (params.port ?? 7777);
     vizServer = new VisualizeServer(db, { port });
     await vizServer.start();
   }

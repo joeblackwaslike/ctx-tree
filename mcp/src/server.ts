@@ -25,6 +25,7 @@ import { memtreeBrowse } from './tools/browse.js';
 import { memtreeMonitor } from './tools/monitor.js';
 import { memtreeNote } from './tools/note.js';
 import { memtreeBash } from './tools/bash.js';
+import { memtreeVisualize } from './tools/visualize.js';
 import type { Filters } from './store/types.js';
 import { loadProviders } from './providers/index.js';
 import { processIngest } from './ingest.js';
@@ -294,6 +295,17 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         required: ['command'],
       },
     },
+    {
+      name: 'memtree_visualize',
+      description: 'Start (or return the URL of) the real-time graph visualizer. Opens a browser tab showing all nodes and edges with live updates. Idempotent — safe to call multiple times.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          port: { type: 'number', description: 'Port to bind (default: 7777, overridden by MEMTREE_VIZ_PORT env)' },
+          open: { type: 'boolean', description: 'Open the browser automatically (default: true)' },
+        },
+      },
+    },
   ],
 }));
 
@@ -478,6 +490,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
       }
 
+      case 'memtree_visualize': {
+        const { port, open } = args as { port?: number; open?: boolean };
+        const result = await memtreeVisualize(db, { port, open });
+        return {
+          content: [{
+            type: 'text',
+            text: `Visualizer running at ${result.url}\n${result.nodeCount} nodes · ${result.edgeCount} edges`,
+          }],
+        };
+      }
 
       default:
         throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);

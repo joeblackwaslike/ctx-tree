@@ -25818,7 +25818,7 @@ class StdioServerTransport {
 import { execSync as execSync2 } from "child_process";
 import { mkdirSync as mkdirSync3, chmodSync, unlinkSync, existsSync as existsSync2 } from "fs";
 import * as net from "net";
-import { join as join6 } from "path";
+import { join as join7 } from "path";
 
 // src/store/db.ts
 import { Database } from "bun:sqlite";
@@ -27525,6 +27525,247 @@ async function memtreeBash(db, config2, params) {
     exit_code,
     truncated
   };
+}
+
+// src/tools/visualize.ts
+import { spawnSync as spawnSync2 } from "child_process";
+
+// src/visualize/server.ts
+import { readFileSync as readFileSync4 } from "fs";
+import { join as join3 } from "path";
+
+// src/visualize/watcher.ts
+class DbWatcher {
+  db;
+  intervalMs;
+  listeners = new Set;
+  timer = null;
+  lastMs = 0;
+  knownNodeIds = new Set;
+  knownEdgeIds = new Set;
+  nodesSince;
+  edgesSince;
+  constructor(db, intervalMs = 200) {
+    this.db = db;
+    this.intervalMs = intervalMs;
+    this.nodesSince = db.query("SELECT * FROM nodes WHERE updated_at >= ?");
+    this.edgesSince = db.query("SELECT * FROM edges WHERE created_at >= ?");
+  }
+  start() {
+    if (this.timer)
+      return;
+    this.lastMs = Date.now();
+    for (const n of this.db.query("SELECT id FROM nodes").all()) {
+      this.knownNodeIds.add(n.id);
+    }
+    for (const e of this.db.query("SELECT src_id, dst_id, kind FROM edges").all()) {
+      this.knownEdgeIds.add(`${e.src_id}:${e.dst_id}:${e.kind}`);
+    }
+    this.timer = setInterval(() => this._poll(), this.intervalMs);
+  }
+  stop() {
+    if (this.timer) {
+      clearInterval(this.timer);
+      this.timer = null;
+    }
+  }
+  on(listener) {
+    this.listeners.add(listener);
+    if (!this.timer)
+      this.start();
+    return () => {
+      this.listeners.delete(listener);
+      if (this.listeners.size === 0)
+        this.stop();
+    };
+  }
+  _poll() {
+    if (this.listeners.size === 0)
+      return;
+    const since = this.lastMs;
+    this.lastMs = Date.now();
+    const changedNodes = this.nodesSince.all(since);
+    for (const node of changedNodes) {
+      const op = this.knownNodeIds.has(node.id) ? "update" : "insert";
+      this.knownNodeIds.add(node.id);
+      this.emit({ op, table: "nodes", id: node.id, data: node });
+    }
+    const newEdges = this.edgesSince.all(since);
+    for (const edge of newEdges) {
+      const compositeId = `${edge.src_id}:${edge.dst_id}:${edge.kind}`;
+      if (!this.knownEdgeIds.has(compositeId)) {
+        this.knownEdgeIds.add(compositeId);
+        this.emit({ op: "insert", table: "edges", id: compositeId, data: edge });
+      }
+    }
+  }
+  emit(event) {
+    for (const listener of this.listeners) {
+      try {
+        listener(event);
+      } catch {}
+    }
+  }
+}
+
+// src/visualize/server.ts
+var VALID_STATUSES = new Set(["pending", "live", "stale", "superseded", "pruned"]);
+var VALID_KINDS = new Set([
+  "session",
+  "file_chunk",
+  "tool_output",
+  "summary",
+  "note",
+  "observation",
+  "web_chunk",
+  "prompt",
+  "thinking",
+  "response"
+]);
+
+class VisualizeServer {
+  db;
+  httpServer = null;
+  watcher;
+  unsubscribe = null;
+  clients = new Set;
+  ui;
+  started = false;
+  host;
+  port;
+  constructor(db, options = {}) {
+    this.db = db;
+    this.host = options.host ?? "127.0.0.1";
+    this.port = options.port ?? 7777;
+    this.watcher = new DbWatcher(db);
+    this.ui = readFileSync4(join3(import.meta.dir, "ui.html"), "utf8");
+  }
+  async start() {
+    if (this.started)
+      return { url: this.url, port: this.port };
+    const effectivePort = this.port === 0 ? 0 : await findFreePort(this.port);
+    const self = this;
+    this.httpServer = Bun.serve({
+      hostname: this.host,
+      port: effectivePort,
+      fetch(req, server) {
+        const url = new URL(req.url);
+        if (url.pathname === "/api/events") {
+          if (server.upgrade(req))
+            return;
+          return new Response("WebSocket upgrade failed", { status: 400 });
+        }
+        if (url.pathname === "/" || url.pathname === "") {
+          return new Response(self.ui, { headers: { "Content-Type": "text/html; charset=utf-8" } });
+        }
+        if (url.pathname === "/api/state") {
+          const { nodes, edges } = self.snapshot(url.searchParams);
+          return Response.json({ nodes, edges });
+        }
+        if (url.pathname.startsWith("/api/node/")) {
+          const id = url.pathname.slice("/api/node/".length);
+          const node = self.db.query("SELECT * FROM nodes WHERE id = ?").get(id);
+          return node ? Response.json(node) : new Response("Not found", { status: 404 });
+        }
+        if (url.pathname === "/health") {
+          return Response.json(self.stats());
+        }
+        return new Response("Not found", { status: 404 });
+      },
+      websocket: {
+        open(ws) {
+          self.clients.add(ws);
+          const { nodes, edges } = self.snapshot(new URLSearchParams);
+          ws.send(JSON.stringify({ op: "snapshot", nodes, edges }));
+        },
+        message() {},
+        close(ws) {
+          self.clients.delete(ws);
+        }
+      }
+    });
+    this.port = this.httpServer.port;
+    this.unsubscribe = this.watcher.on((event) => {
+      const msg = JSON.stringify(event);
+      for (const ws of this.clients) {
+        try {
+          ws.send(msg);
+        } catch {}
+      }
+    });
+    this.started = true;
+    return { url: this.url, port: this.port };
+  }
+  get url() {
+    return `http://${this.host}:${this.port}`;
+  }
+  stats() {
+    const nodeCount = this.db.query("SELECT COUNT(*) as count FROM nodes").get()?.count ?? 0;
+    const edgeCount = this.db.query("SELECT COUNT(*) as count FROM edges").get()?.count ?? 0;
+    return { status: "ok", nodeCount, edgeCount };
+  }
+  async stop() {
+    this.unsubscribe?.();
+    this.unsubscribe = null;
+    this.httpServer?.stop(true);
+    this.httpServer = null;
+    this.clients.clear();
+    this.started = false;
+  }
+  snapshot(params) {
+    const conditions = [];
+    const args = [];
+    const rawKinds = (params.get("kind") ?? "").split(",").filter((k) => VALID_KINDS.has(k));
+    if (rawKinds.length) {
+      conditions.push(`kind IN (${rawKinds.map(() => "?").join(",")})`);
+      args.push(...rawKinds);
+    }
+    const rawStatuses = (params.get("status") ?? "").split(",").filter((s) => VALID_STATUSES.has(s));
+    if (rawStatuses.length) {
+      conditions.push(`status IN (${rawStatuses.map(() => "?").join(",")})`);
+      args.push(...rawStatuses);
+    } else {
+      conditions.push(`status != 'pruned'`);
+    }
+    const sessionId = params.get("session_id");
+    if (sessionId) {
+      conditions.push(`json_extract(metadata, '$.session_id') = ?`);
+      args.push(sessionId);
+    }
+    const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+    const nodes = this.db.query(`SELECT * FROM nodes ${where}`).all(...args);
+    const edges = this.db.query("SELECT * FROM edges").all();
+    return { nodes, edges };
+  }
+}
+async function findFreePort(start) {
+  for (let p = start;p < start + 10; p++) {
+    try {
+      const s = Bun.serve({ port: p, hostname: "127.0.0.1", fetch: () => new Response("") });
+      const assignedPort = s.port;
+      s.stop(true);
+      return assignedPort;
+    } catch {
+      continue;
+    }
+  }
+  throw new Error(`No free port found in range ${start}\u2013${start + 9}`);
+}
+
+// src/tools/visualize.ts
+var vizServer = null;
+async function memtreeVisualize(db, params) {
+  if (!vizServer) {
+    const port = parseInt(process.env.MEMTREE_VIZ_PORT ?? "", 10) || (params.port ?? 7777);
+    vizServer = new VisualizeServer(db, { port });
+    await vizServer.start();
+  }
+  const { nodeCount, edgeCount } = vizServer.stats();
+  if (params.open !== false) {
+    const opener = process.platform === "darwin" ? "open" : "xdg-open";
+    spawnSync2(opener, [vizServer.url], { stdio: "ignore" });
+  }
+  return { url: vizServer.url, port: vizServer.port, nodeCount, edgeCount };
 }
 
 // src/providers/ollama.ts
@@ -35104,8 +35345,8 @@ for (const bin of ["jq", "socat"]) {
   }
 }
 var projectHash = computeProjectHash(process.env.MEMTREE_CWD ?? process.cwd());
-var storeDir = join6(process.env.HOME ?? "/tmp", ".memtree", projectHash);
-var dbPath = join6(storeDir, "store.db");
+var storeDir = join7(process.env.HOME ?? "/tmp", ".memtree", projectHash);
+var dbPath = join7(storeDir, "store.db");
 mkdirSync3(storeDir, { recursive: true, mode: 448 });
 var config2 = loadConfig(process.env.MEMTREE_CWD ?? process.cwd());
 var db = openDb(dbPath);
@@ -35114,7 +35355,7 @@ registerProject(process.env.MEMTREE_CWD ?? process.cwd(), projectHash);
 var { embedding, summarizer: _summarizer } = loadProviders(config2);
 var walkers = new WalkerCoordinator;
 walkers.start(db, config2, embedding, _summarizer);
-var ingestSockPath = join6(storeDir, "ingest.sock");
+var ingestSockPath = join7(storeDir, "ingest.sock");
 if (existsSync2(ingestSockPath)) {
   try {
     unlinkSync(ingestSockPath);
@@ -35313,6 +35554,17 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         },
         required: ["command"]
       }
+    },
+    {
+      name: "memtree_visualize",
+      description: "Start (or return the URL of) the real-time graph visualizer. Opens a browser tab showing all nodes and edges with live updates. Idempotent \u2014 safe to call multiple times.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          port: { type: "number", description: "Port to bind (default: 7777, overridden by MEMTREE_VIZ_PORT env)" },
+          open: { type: "boolean", description: "Open the browser automatically (default: true)" }
+        }
+      }
     }
   ]
 }));
@@ -35457,6 +35709,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           throw new McpError(ErrorCode.InvalidParams, '"command" is required and must be a string');
         const result = await memtreeBash(db, config2, { command, budget_tokens });
         return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      }
+      case "memtree_visualize": {
+        const { port, open: open3 } = args;
+        const result = await memtreeVisualize(db, { port, open: open3 });
+        return {
+          content: [{
+            type: "text",
+            text: `Visualizer running at ${result.url}
+${result.nodeCount} nodes \xB7 ${result.edgeCount} edges`
+          }]
+        };
       }
       default:
         throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
