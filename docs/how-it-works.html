@@ -238,6 +238,7 @@ nav{position:sticky;top:0;z-index:100;background:rgba(8,14,26,.95);backdrop-filt
 .he-post{background:rgba(74,222,128,.08);color:#4ade80;border:1px solid rgba(74,222,128,.25)}
 .he-start{background:rgba(56,189,248,.08);color:#38bdf8;border:1px solid rgba(56,189,248,.25)}
 .he-prompt{background:rgba(192,132,252,.08);color:#c084fc;border:1px solid rgba(192,132,252,.25)}
+.he-stop{background:rgba(251,146,60,.08);color:#fb923c;border:1px solid rgba(251,146,60,.25)}
 .hook-file{font-family:var(--mono);font-size:10px;color:var(--dim);flex:1}
 .hook-tool-tag{font-family:var(--mono);font-size:9px;padding:2px 7px;border-radius:12px;background:var(--bg3);color:var(--muted);border:1px solid var(--border);flex-shrink:0}
 .hook-card-body{display:grid;grid-template-columns:1fr 1fr;gap:0}
@@ -671,17 +672,17 @@ footer{padding:36px 0;border-top:1px solid var(--border);text-align:center;color
 <div class="container">
   <div class="sect-hdr">
     <div class="sect-icon">💬</div>
-    <div><h2>Prompt Anatomy</h2><p style="color:var(--muted);font-size:13px;margin-top:2px">Every turn is a linear graph: observation → thinking → response → tool_calls → questions → choices</p></div>
+    <div><h2>Prompt Anatomy</h2><p style="color:var(--muted);font-size:13px;margin-top:2px">Every turn is a linear graph: prompt → thinking → response → tool_calls → questions → choices</p></div>
   </div>
-  <p class="tool-tag">Turns descend from sessions. Each turn contains a sequential chain: user observation, LLM thinking blocks, response text, tool calls, and AskUserQuestion nodes with choice nodes. Selected choices continue the conversation (green).</p>
+  <p class="tool-tag">Turns descend from sessions. Each turn contains a sequential chain: user prompt, LLM thinking blocks, response text, tool calls, and AskUserQuestion nodes with choice nodes. Selected choices continue the conversation (green).</p>
   <div class="graph-wrap" id="g-prompt">
     <div class="graph-top">
-      <span class="graph-lbl">💬 Prompt anatomy · session → turn → observation → thinking → response → question → choices</span>
+      <span class="graph-lbl">💬 Prompt anatomy · session → turn → prompt → thinking → response → question → choices</span>
       <div class="graph-ctrls"><button class="btn btn-play">▶ Play</button><button class="btn btn-rst">↺ Reset</button></div>
     </div>
     <div class="graph-svg" style="height:400px"></div>
     <div class="g-leg">
-      <span class="gl-item"><span class="gl-dot" style="background:#7e22ce"></span>observation</span>
+      <span class="gl-item"><span class="gl-dot" style="background:#7e22ce"></span>prompt</span>
       <span class="gl-item"><span class="gl-dot" style="background:#4338ca"></span>thinking</span>
       <span class="gl-item"><span class="gl-dot" style="background:#075985"></span>response</span>
       <span class="gl-item"><span class="gl-dot" style="background:#b45309"></span>question</span>
@@ -717,7 +718,7 @@ footer{padding:36px 0;border-top:1px solid var(--border);text-align:center;color
 <div class="container">
   <div class="sect-hdr">
     <div class="sect-icon">⧖</div>
-    <div><h2>Hook Pipeline</h2><p style="color:var(--muted);font-size:13px;margin-top:2px">PreToolUse · PostToolUse · SessionStart · SessionStop · Turn hooks</p></div>
+    <div><h2>Hook Pipeline</h2><p style="color:var(--muted);font-size:13px;margin-top:2px">PreToolUse · PostToolUse · SessionStart · UserPromptSubmit · Stop</p></div>
   </div>
   <div class="graph-wrap" id="g-hooks">
     <div class="graph-top">
@@ -914,6 +915,25 @@ footer{padding:36px 0;border-top:1px solid var(--border);text-align:center;color
       </div>
     </div>
 
+    <!-- stop-response-capture -->
+    <div class="hook-card">
+      <div class="hook-card-hdr">
+        <span class="hook-event he-stop">Stop</span>
+        <span class="hook-file">stop-response-capture.mjs</span>
+        <span class="hook-tool-tag">end of every response turn</span>
+      </div>
+      <div class="hook-card-body">
+        <div class="hook-col">
+          <div class="hook-col-lbl">When it fires</div>
+          <div class="hook-col-body">After Claude finishes generating each response turn. Skips re-entrant calls (<code>stop_hook_active</code>). Requires the memtree store to be initialized and a valid <code>transcript_path</code> in the hook payload.</div>
+        </div>
+        <div class="hook-col">
+          <div class="hook-col-lbl">What it does</div>
+          <div class="hook-col-body">Reads the session transcript JSONL, extracts the last assistant message, and stores up to two nodes: a <code>thinking</code> node (if thinking blocks are present, including redacted) and a <code>response</code> node (text blocks concatenated). Wires the full conversation chain via <code>follows</code> edges (<code>prompt → thinking → response</code>) and causal <code>derived_from</code> edges. Position-based dedup via <code>source_uri</code> prevents double-storing on replay.<br><span class="hook-result-badge hr-silent">◉ silent — no context injected</span></div>
+        </div>
+      </div>
+    </div>
+
   </div>
 </div>
 </div>
@@ -1078,8 +1098,8 @@ const NK = {
   file:        '#0369a1', file_chunk:  '#0ea5e9', web_content: '#16a34a',
   web_result:  '#0f766e', web_result_err:'#b91c1c', output_chunk:'#ea580c',
   input_chunk: '#059669', skill:       '#92400e', skill_chunk: '#d97706',
-  sub_graph:   '#7f1d1d', observation: '#7e22ce', thinking:    '#4338ca',
-  response:    '#075985', question:    '#b45309', choice:      '#475569',
+  sub_graph:   '#7f1d1d', observation: '#7e22ce', prompt:      '#7e22ce',
+  thinking:    '#4338ca', response:    '#075985', question:    '#b45309', choice:      '#475569',
   choice_sel:  '#166534', hook:        '#be123c', memory:      '#065f46',
   mcp_server:  '#5b21b6', mcp_tool:    '#7c3aed', plugin:      '#6b21a8',
   slash_cmd:   '#9d174d', summary:     '#831843', file_asset:  '#0c4a6e',
@@ -1088,7 +1108,7 @@ const NI = {
   session:'⬡', turn:'◎', tool_call:'⚡', file:'▤', file_chunk:'{}',
   web_content:'⊕', web_result:'⊞', web_result_err:'⊠', output_chunk:'▶',
   input_chunk:'◀', skill:'✦', skill_chunk:'◈', sub_graph:'⬡',
-  observation:'◉', thinking:'⊗', response:'◍', question:'?', choice:'○',
+  observation:'◉', prompt:'◉', thinking:'⊗', response:'◍', question:'?', choice:'○',
   choice_sel:'●', hook:'⧖', memory:'◆', mcp_server:'⚙', mcp_tool:'⊡',
   plugin:'◩', slash_cmd:'/', summary:'◈', file_asset:'▤',
 };
@@ -1098,6 +1118,7 @@ const EK = {
   derived_from:{ color:'#818cf8', dash:'' },
   summarizes:  { color:'#f59e0b', dash:'' },
   supersedes:  { color:'#f87171', dash:'' },
+  follows:     { color:'#4ade80', dash:'4,2' },
   next:        { color:'#4ade80', dash:'' },
   result:      { color:'#fb923c', dash:'' },
   triggers:    { color:'#f472b6', dash:'5,3' },
@@ -1122,9 +1143,10 @@ const nodeLegendItems = [
   ['input_chunk','◀','Stdin sent to process'],
   ['skill','✦','Skill definition'],
   ['skill_chunk','◈','Skill step / diagram'],
-  ['observation','◉','User prompt captured'],
+  ['prompt','◉','User prompt node'],
   ['thinking','⊗','LLM thinking block'],
   ['response','◍','LLM response node'],
+  ['observation','◉','Stored observation'],
   ['question','?','AskUserQuestion'],
   ['choice_sel','●','Selected choice'],
   ['hook','⧖','Hook event'],
@@ -2003,23 +2025,23 @@ function renderConvoGraph() {
     { id:'fc2', kind:'file_chunk', label:'validateToken()', props:{ symbol:'validateToken', size:312 }, uri:'file:///src/auth/login.ts#chunk:2' },
     { id:'fc3', kind:'file_chunk', label:'logout()', props:{ symbol:'logout', size:198 }, uri:'file:///src/auth/login.ts#chunk:3' },
     // Turn 1 prompt/response
-    { id:'ob1', kind:'observation', label:'Read login.ts', props:{ role:'user', tokens:7 }, uri:'observation://abc123/1/1' },
+    { id:'ob1', kind:'prompt', label:'Read login.ts', props:{ role:'user', tokens:7 }, uri:'prompt://abc123/1/1' },
     { id:'th1', kind:'thinking', label:'Thinking', props:{ tokens:84 }, uri:'thinking://abc123/1/1' },
     { id:'re1', kind:'response', label:'Response', props:{ tokens:142 }, uri:'response://abc123/1/1' },
     // Turn 2 - webfetch
-    { id:'ob2', kind:'observation', label:'Fetch docs', props:{ role:'user', tokens:9 }, uri:'observation://abc123/2/1' },
+    { id:'ob2', kind:'prompt', label:'Fetch docs', props:{ role:'user', tokens:9 }, uri:'prompt://abc123/2/1' },
     { id:'wc1', kind:'web_content', label:'docs.anthropic.com', props:{ status:200, cached:true }, uri:'https://docs.anthropic.com/claude/docs/tool-use' },
     // Turn 3 - websearch
-    { id:'ob3', kind:'observation', label:'Search examples', props:{ role:'user', tokens:5 }, uri:'observation://abc123/3/1' },
+    { id:'ob3', kind:'prompt', label:'Search examples', props:{ role:'user', tokens:5 }, uri:'prompt://abc123/3/1' },
     { id:'wr1', kind:'web_result', label:'anthropic.com', props:{ status:200, rank:1 }, uri:'https://anthropic.com/news/tool-use' },
     { id:'wr2', kind:'web_result', label:'cookbook', props:{ status:200, rank:2 }, uri:'https://github.com/anthropics/anthropic-cookbook' },
     { id:'wr3', kind:'web_result_err', label:'medium.com (404)', props:{ status:404 }, uri:'https://medium.com/404' },
     // Turn 4 - monitor
-    { id:'ob4', kind:'observation', label:'Run tests', props:{ role:'user', tokens:4 }, uri:'observation://abc123/4/1' },
+    { id:'ob4', kind:'prompt', label:'Run tests', props:{ role:'user', tokens:4 }, uri:'prompt://abc123/4/1' },
     { id:'oc1', kind:'output_chunk', label:'PASS auth.test', props:{ stream:'stdout', chunk_index:0 }, uri:'output://abc123/4/1/chunk:0' },
     { id:'oc2', kind:'output_chunk', label:'FAIL users.test', props:{ stream:'stderr', chunk_index:1 }, uri:'output://abc123/4/1/chunk:1' },
     // Turn 5 - agent
-    { id:'ob5', kind:'observation', label:'Spawn agent', props:{ role:'user', tokens:12 }, uri:'observation://abc123/5/1' },
+    { id:'ob5', kind:'prompt', label:'Spawn agent', props:{ role:'user', tokens:12 }, uri:'prompt://abc123/5/1' },
     { id:'sum1', kind:'summary', label:'Agent summary', props:{ tokens:87, content_preview:'JWT TTL hardcoded...' }, uri:'summary://abc123/5/Agent/1' },
     // Memories
     { id:'mem1', kind:'memory', label:'jwt-findings', props:{ content:'JWT TTL hardcoded to 1h' }, uri:'memory://abc123/jwt-findings' },
@@ -2352,7 +2374,7 @@ const searchDefs = {
       { score:'0.98', badge:'file_chunk', color:'#0ea5e9', uri:'file:///src/components/Header.tsx#useAuthContext', preview:'const { user } = useAuthContext() — exact FTS5 match + semantic hit' },
       { score:'0.91', badge:'file_chunk', color:'#0ea5e9', uri:'file:///src/components/Sidebar.tsx#useAuthContext', preview:'const { permissions } = useAuthContext()' },
       { score:'0.84', badge:'file_chunk', color:'#0ea5e9', uri:'file:///src/ctx/auth.ts#chunk:0', preview:'export const AuthContext = createContext<AuthState>(...)' },
-      { score:'0.77', badge:'observation',color:'#7e22ce', uri:'observation://abc123/5/1', preview:'"Find all useAuthContext usages" — semantic match on query intent' },
+      { score:'0.77', badge:'prompt',color:'#7e22ce', uri:'prompt://abc123/5/1', preview:'"Find all useAuthContext usages" — semantic match on query intent' },
     ],
   },
   compose: {
@@ -2390,13 +2412,13 @@ const searchDefs = {
   },
   neighbors: {
     title: 'memtree.neighbors',
-    query: 'memtree_neighbors({ node_id: "fc-c3d4", hops: 2, kinds: ["file_chunk","observation"] })',
+    query: 'memtree_neighbors({ node_id: "fc-c3d4", hops: 2, kinds: ["file_chunk","prompt"] })',
     desc: 'BFS from a seed node — returns all nodes within N hops, filtered by kind',
     results: [
       { score:'hop 0', badge:'file_chunk', color:'#0ea5e9', uri:'file:///src/auth/login.ts#chunk:2', preview:'validateToken() — seed node (hop 0)' },
       { score:'hop 1', badge:'file_chunk', color:'#0ea5e9', uri:'file:///src/auth/login.ts#chunk:1', preview:'login() — connected via ←next (hop 1)' },
       { score:'hop 1', badge:'file_chunk', color:'#0ea5e9', uri:'file:///src/auth/login.ts#chunk:3', preview:'logout() — connected via next→ (hop 1)' },
-      { score:'hop 2', badge:'observation',color:'#7e22ce', uri:'observation://abc123/3/1', preview:'"Read login.ts" — turn that referenced login.ts (hop 2)' },
+      { score:'hop 2', badge:'prompt',color:'#7e22ce', uri:'prompt://abc123/3/1', preview:'"Read login.ts" — turn that referenced login.ts (hop 2)' },
     ],
   },
   pathroot: {
@@ -2412,7 +2434,7 @@ const searchDefs = {
   },
   recent: {
     title: 'memtree.recent',
-    query: 'memtree_recent({ window: "1h", kinds: ["file_chunk","web_content","observation"], limit: 4 })',
+    query: 'memtree_recent({ window: "1h", kinds: ["file_chunk","web_content","prompt"], limit: 4 })',
     desc: 'Returns the most recently created or accessed nodes within a sliding time window, sorted by recency',
     results: [
       { score:'14:36:08', badge:'output_chunk', color:'#ea580c', uri:'output://abc123/6/Bash/2/chunk:1', preview:'Python REPL stdout: 56154 — 2 min ago' },

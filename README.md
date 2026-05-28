@@ -118,7 +118,7 @@ curl -fsSL https://bun.sh/install | bash && apt install ripgrep  # Linux
 
 **98–99% context reduction per operation.** Every read, search, and fetch that used to cost thousands of tokens now costs tens. Operations you've already run cost *nothing* — the graph remembers.
 
-**Zero configuration. Total interception.** Nine hooks fire automatically across every native Claude Code tool and every MCP tool you have installed. Nothing slips through. No per-project setup. No flags to flip.
+**Zero configuration. Total interception.** Ten hooks fire automatically across every native Claude Code tool and every MCP tool you have installed. Nothing slips through. No per-project setup. No flags to flip.
 
 **Knowledge that outlasts the session.** Prior reads, searches, and web fetches are available next week via `memtree_search` and `memtree_compose`. The graph grows with every session. The context stays lean.
 
@@ -175,12 +175,13 @@ flowchart LR
 
 ## Hooks
 
-Nine hooks, installed automatically. You don't configure them.
+Ten hooks, installed automatically. You don't configure them.
 
 | Event | Hook | What it intercepts |
 | ----- | ---- | ------------------ |
 | `SessionStart` | `session-start.mjs` | Injects tool guide and redirect reminders on startup / resume |
-| `UserPromptSubmit` | `userpromptsubmit-capture.mjs` | Stores every prompt as a `prompt` node for cross-session recall |
+| `UserPromptSubmit` | `userpromptsubmit-capture.mjs` | Stores every prompt as a `prompt` node; wires `follows` edge to preceding response |
+| `Stop` | `stop-response-capture.mjs` | Reads transcript; stores `thinking` + `response` nodes; wires full `follows` + `derived_from` chain per turn |
 | `PreToolUse` | `pretooluse-redirect.mjs` | **Read, Grep, Bash (grep/cat), WebFetch, Monitor** → denied + replaced with memtree equivalent |
 | `PreToolUse` | `pretooluse-agent-enrich.mjs` | **Agent** → subagent prompt enriched with memtree tool map + FTS context hits from prior work |
 | `PreToolUse` | `pretooluse-skill-recall.mjs` | **Skill** → cache hit returns stored node; cache miss passes through and stores for next time |
