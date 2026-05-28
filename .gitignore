@@ -15,3 +15,7 @@ memtree.code-workspace
 # Tool state dirs
 .clawhip/
 .serena/
+node_modules
+website/build
+website/node_modules
+website/.docusaurus

@@ -22,7 +22,7 @@ Your Claude session is doing real work — reading source files, grepping for sy
 
 By the time you're 60% through a complex task, the window is stuffed with file contents that already answered their question, grep output nobody needs anymore, and a web page from two subtasks ago. Claude starts forgetting the beginning. You lose the thread. The session dies before the work is done.
 
-**That's context rot. Every developer using Claude Code hits it. memtree eliminates it.**
+**That's context rot. Every developer using Claude Code hits it. memtree aims to eliminate it.**
 
 Every tool call — native *and* MCP — is intercepted by a hook, the result is stored in a persistent SQLite property graph, and Claude gets back a compact `nodeId` reference instead of raw bytes. The same file read next week costs zero tokens. It's already in the graph.
 
