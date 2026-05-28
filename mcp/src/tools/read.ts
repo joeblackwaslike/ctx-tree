@@ -46,20 +46,44 @@ function windowChunk(lines: string[], windowSize = 200): Chunk[] {
 
 type TreeSitterLanguage = { [key: string]: unknown };
 
-const LANG_MAP: Record<string, () => TreeSitterLanguage> = {
-  '.ts': () => require('tree-sitter-typescript').typescript,
-  '.tsx': () => require('tree-sitter-typescript').tsx,
-  '.js': () => require('tree-sitter-javascript'),
-  '.jsx': () => require('tree-sitter-javascript'),
-  '.py': () => require('tree-sitter-python'),
-  '.rs': () => require('tree-sitter-rust'),
-  '.go': () => require('tree-sitter-go'),
-  '.sh': () => require('tree-sitter-bash'),
+const LANG_MAP: Record<string, () => Promise<TreeSitterLanguage>> = {
+  '.ts': async () => {
+    const { typescript } = await import('tree-sitter-typescript');
+    return typescript;
+  },
+  '.tsx': async () => {
+    const { tsx } = await import('tree-sitter-typescript');
+    return tsx;
+  },
+  '.js': async () => {
+    const defaultExport = await import('tree-sitter-javascript');
+    return defaultExport.default;
+  },
+  '.jsx': async () => {
+    const defaultExport = await import('tree-sitter-javascript');
+    return defaultExport.default;
+  },
+  '.py': async () => {
+    const defaultExport = await import('tree-sitter-python');
+    return defaultExport.default;
+  },
+  '.rs': async () => {
+    const defaultExport = await import('tree-sitter-rust');
+    return defaultExport.default;
+  },
+  '.go': async () => {
+    const defaultExport = await import('tree-sitter-go');
+    return defaultExport.default;
+  },
+  '.sh': async () => {
+    const defaultExport = await import('tree-sitter-bash');
+    return defaultExport.default;
+  },
 };
 
-function treeSitterChunk(source: string, lang: TreeSitterLanguage): Chunk[] {
+async function treeSitterChunk(source: string, lang: TreeSitterLanguage): Promise<Chunk[]> {
   try {
-    const Parser = require('tree-sitter');
+    const { default: Parser } = await import('tree-sitter');
     const parser = new Parser();
     parser.setLanguage(lang);
     const tree = parser.parse(source);
@@ -159,8 +183,8 @@ export async function memtreeRead(
 
   if (langLoader) {
     try {
-      const lang = langLoader();
-      chunks = treeSitterChunk(raw, lang);
+      const lang = await langLoader();
+      chunks = await treeSitterChunk(raw, lang);
       chunking = 'treesitter';
     } catch {
       chunks = windowChunk(raw.split('\n'));

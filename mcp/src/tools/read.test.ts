@@ -119,4 +119,36 @@ describe('memtreeRead', () => {
     await expect(memtreeRead(db, cfg, { path: filePath, budget_tokens: 200 }))
       .rejects.toThrow('Path rejected by denylist');
   });
+
+  test('uses treesitter chunking for .ts files when parsers are installed', async () => {
+    const filePath = join(FIXTURE_DIR, 'functions.ts');
+    writeFileSync(filePath, `
+export function greet(name: string): string {
+  return \`Hello, \${name}\`;
+}
+
+export function farewell(name: string): string {
+  return \`Goodbye, \${name}\`;
+}
+
+export class Greeter {
+  greet(name: string) {
+    return greet(name);
+  }
+}
+`);
+    const result = await memtreeRead(db, cfg, { path: filePath, budget_tokens: 2000 });
+    expect(result.content).toBeTruthy();
+    // Verify that the chunking strategy is 'treesitter', not 'window'
+    expect(result.chunking).toBe('treesitter');
+    
+    // Check the persisted metadata for proof of actual tree-sitter parsing
+    const nodeRow = db.query(
+      "SELECT metadata FROM nodes WHERE kind='file_chunk' ORDER BY rowid DESC LIMIT 1"
+    ).get() as any;
+    expect(nodeRow).toBeTruthy();
+    const meta = JSON.parse(nodeRow.metadata);
+    expect(meta.chunking).toBe('treesitter');
+    expect(meta.chunkCount).toBeGreaterThan(1);
+  });
 });

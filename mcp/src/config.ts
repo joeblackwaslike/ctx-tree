@@ -5,17 +5,19 @@ import type { MemtreeConfig } from './store/types';
 
 export const DEFAULT_CONFIG: MemtreeConfig = {
   embeddingModel: 'nomic-embed-text',
-  summarizerModel: 'claude-haiku-4-5',
+  summarizerModel: 'llama3.2',
   retention: { staleHours: 24, supersededDays: 7 },
   walkers: {
     embeddingIdleMs: 5000,
     embeddingBatchSize: 32,
+    summarizerIdleMs: 30000,
     summarizerSubtreeThreshold: 25,
     dedupeIntervalMs: 60000,
     stalenessIntervalMs: 30000,
     prunerIntervalMs: 300000,
   },
   capture: { maxBytes: 100000, filterMinSize: 50 },
+  trustedExecution: false,
 };
 
 function readJson(path: string): Partial<MemtreeConfig> {
@@ -24,6 +26,22 @@ function readJson(path: string): Partial<MemtreeConfig> {
   } catch {
     return {};
   }
+}
+
+function deepMergeConfig(base: MemtreeConfig, override: Partial<MemtreeConfig>): MemtreeConfig {
+  const result = { ...base } as Record<string, unknown>;
+  for (const key of Object.keys(override) as (keyof MemtreeConfig)[]) {
+    const val = override[key];
+    if (val === undefined) continue;
+    const baseVal = base[key];
+    if (val !== null && typeof val === 'object' && !Array.isArray(val) &&
+        baseVal !== null && typeof baseVal === 'object' && !Array.isArray(baseVal)) {
+      result[key] = { ...baseVal as object, ...val as object };
+    } else {
+      result[key] = val;
+    }
+  }
+  return result as MemtreeConfig;
 }
 
 export function loadConfig(projectRoot?: string): MemtreeConfig {
@@ -37,5 +55,5 @@ export function loadConfig(projectRoot?: string): MemtreeConfig {
     ? readJson(projectPath)
     : {};
 
-  return { ...DEFAULT_CONFIG, ...globalOverride, ...projectOverride };
+  return deepMergeConfig(deepMergeConfig(DEFAULT_CONFIG, globalOverride), projectOverride);
 }

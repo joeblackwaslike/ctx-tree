@@ -108,10 +108,6 @@ export async function memtreeCompose(
   const { node_ids, budget_tokens, format = 'raw', query } = params;
   const depth = Math.min(params.depth ?? 2, 2);
 
-  if (format === 'mixed') {
-    throw new Error("format='mixed' is deferred to v1.1 — summary nodes not available in v1");
-  }
-
   const distanceMap = expandGraph(db, node_ids, depth);
   if (distanceMap.size === 0) {
     return { content: '', manifest: { included: [], dropped: [], truncated: [] } };
@@ -136,15 +132,38 @@ export async function memtreeCompose(
     score: scoreNode(node, distanceMap.get(node.id) ?? 99, ftsRanks.get(node.id) ?? 0, hasQuery),
   })).sort((a, b) => b.score - a.score);
 
+  // contentItems preserves scored order for mixed format
+  const contentItems: Array<{ id: string; text: string }> = [];
   const included: MemtreeNode[] = [];
   const dropped: ComposeManifest['dropped'] = [];
+  const summarySubstituted: string[] = [];
   let usedTokens = 0;
 
   for (const { node } of scored) {
     const tokens = estimateTokens(format === 'outline' ? formatOutline(node) : node.content);
     if (usedTokens + tokens <= budget_tokens) {
       included.push(node);
+      contentItems.push({ id: node.id, text: format === 'outline' ? formatOutline(node) : node.content });
       usedTokens += tokens;
+    } else if (format === 'mixed') {
+      // Try summary substitution
+      const summary = node.summary ?? null;
+      if (summary && summary.trim()) {
+        const summaryTokens = estimateTokens(summary);
+        if (usedTokens + summaryTokens <= budget_tokens) {
+          // Use summary instead of raw content
+          included.push(node);
+          contentItems.push({ id: node.id, text: summary });
+          summarySubstituted.push(node.id);
+          usedTokens += summaryTokens;
+        } else {
+          // Summary also too big — drop
+          dropped.push({ id: node.id, reason: 'over_budget_no_summary' });
+        }
+      } else {
+        // No summary available — drop
+        dropped.push({ id: node.id, reason: 'over_budget_no_summary' });
+      }
     } else {
       dropped.push({ id: node.id, reason: 'over_budget' });
     }
@@ -164,13 +183,21 @@ export async function memtreeCompose(
 
   let content: string;
   if (format === 'outline') {
-    content = included.map(formatOutline).join('\n');
+    content = contentItems.map(item => item.text).join('\n');
+  } else if (format === 'mixed') {
+    content = contentItems.map(item => item.text).join('\n\n---\n\n');
   } else {
-    content = included.map(n => n.content).join('\n\n---\n\n');
+    content = contentItems.map(item => item.text).join('\n\n---\n\n');
   }
 
-  return {
-    content,
-    manifest: { included: included.map(n => n.id), dropped, truncated },
+  const manifest: ComposeManifest = {
+    included: included.map(n => n.id),
+    dropped,
+    truncated,
   };
+  if (format === 'mixed' && summarySubstituted.length > 0) {
+    manifest.summary_substituted = summarySubstituted;
+  }
+
+  return { content, manifest };
 }
