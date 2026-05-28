@@ -17516,6 +17516,23 @@ var DEFAULT_PATH_DENY_GLOBS = [
 ];
 
 // src/redaction/index.ts
+var OUTPUT_REDACTION_PATTERNS = [
+  { pattern: /\b(AKIA|ASIA)[A-Z0-9]{16}\b/g, tag: "AWS_ACCESS_KEY" },
+  { pattern: /\bgh[poshur]_[A-Za-z0-9_]{30,}\b/g, tag: "GITHUB_TOKEN" },
+  { pattern: /\bey[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/g, tag: "JWT" },
+  { pattern: /(AWS_SECRET_ACCESS_KEY|AWS_SESSION_TOKEN)=[^\s\n]+/gi, tag: "AWS_SECRET" },
+  { pattern: /ANTHROPIC_API_KEY=[^\s\n]+/gi, tag: "ANTHROPIC_API_KEY" },
+  { pattern: /OPENAI_API_KEY=[^\s\n]+/gi, tag: "OPENAI_API_KEY" },
+  { pattern: /\b(secret|token|password|key)\s*=\s*['"]?[A-Fa-f0-9]{32,}['"]?/gi, tag: "SECRET_HEX" },
+  { pattern: /\b(secret|token|password|key)\s*=\s*['"]?[A-Za-z0-9+/]{40,}={0,2}['"]?/gi, tag: "SECRET_B64" }
+];
+function redactBashOutput(output) {
+  let result = output;
+  for (const { pattern, tag } of OUTPUT_REDACTION_PATTERNS) {
+    result = result.replace(pattern, `[REDACTED:${tag}]`);
+  }
+  return result;
+}
 function shouldDropPath(filePath, extraGlobs = []) {
   const allGlobs = [...DEFAULT_PATH_DENY_GLOBS, ...extraGlobs];
   const basename = filePath.split("/").pop() ?? "";
@@ -18112,9 +18129,9 @@ async function memtreeMonitor(db, _config, params) {
     ]);
     exitCode = await proc.exited;
     clearTimeout(timeoutId);
-    output = stdoutBuf + (stderrBuf ? `
+    output = redactBashOutput(stdoutBuf + (stderrBuf ? `
 [stderr]
-${stderrBuf}` : "");
+${stderrBuf}` : ""));
   } catch (err) {
     throw new McpError(ErrorCode.InternalError, `Failed to run command: ${err.message}`);
   }
@@ -18336,7 +18353,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: "memtree_monitor",
-      description: "Run a shell command, capture all output as a stored node, and return a compact reference. Use instead of Bash when the command produces large or streaming output \u2014 output stays out of context until you ask for it.",
+      description: "Run a shell command via the system shell (sh -c), capture output as a stored node, and return a compact reference. WARNING: executes directly \u2014 not sandboxed by Claude Code permission model. Sensitive values are redacted before storage. Use instead of Bash when the command produces large or streaming output.",
       inputSchema: {
         type: "object",
         properties: {

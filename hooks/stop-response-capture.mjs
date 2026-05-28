@@ -18,6 +18,7 @@ import { join } from 'node:path';
 import { Database } from 'bun:sqlite';
 import { ulid } from './lib/ulid.mjs';
 import { getOrCreateSession, lastNode, countNodes, insertEdge } from './lib/db.mjs';
+import { computeProjectHash } from './lib/project-hash.mjs';
 
 // ── Read stdin ────────────────────────────────────────────────────────────────
 const chunks = [];
@@ -34,7 +35,7 @@ const transcriptPath = String(input.transcript_path ?? '');
 if (!transcriptPath || !existsSync(transcriptPath)) process.exit(0);
 
 // ── Locate DB ─────────────────────────────────────────────────────────────────
-const projectHash = createHash('sha256').update(cwd).digest('hex').slice(0, 16);
+const projectHash = computeProjectHash(cwd);
 const dbPath      = join(process.env.HOME ?? '/tmp', '.memtree', projectHash, 'store.db');
 if (!existsSync(dbPath)) process.exit(0);
 

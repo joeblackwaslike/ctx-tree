@@ -13,6 +13,7 @@
 
 import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, readFileSync, unlinkSync } from 'node:fs';
+import { computeProjectHash } from './lib/project-hash.mjs';
 import { join } from 'node:path';
 import { Database } from 'bun:sqlite';
 
@@ -40,7 +41,7 @@ try {
 const { sessionNodeId, ts, taskPreview } = state;
 
 // ── Open DB ───────────────────────────────────────────────────────────────────
-const projectHash = createHash('sha256').update(cwd).digest('hex').slice(0, 16);
+const projectHash = computeProjectHash(cwd);
 const dbPath      = join(process.env.HOME ?? '/tmp', '.memtree', projectHash, 'store.db');
 if (!existsSync(dbPath)) process.exit(0);
 

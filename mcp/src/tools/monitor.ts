@@ -5,6 +5,7 @@ import type { MemtreeConfig } from '../store/types';
 import { insertNode, getNodeBySourceUri, updateNodeStatus } from '../store/nodes';
 import { insertEdge } from '../store/edges';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
+import { redactBashOutput } from '../redaction';
 
 export interface MonitorParams {
   command: string;
@@ -56,7 +57,7 @@ export async function memtreeMonitor(
     exitCode = await proc.exited;
     clearTimeout(timeoutId);
 
-    output = stdoutBuf + (stderrBuf ? `\n[stderr]\n${stderrBuf}` : '');
+    output = redactBashOutput(stdoutBuf + (stderrBuf ? `\n[stderr]\n${stderrBuf}` : ''));
   } catch (err) {
     throw new McpError(ErrorCode.InternalError, `Failed to run command: ${(err as Error).message}`);
   }

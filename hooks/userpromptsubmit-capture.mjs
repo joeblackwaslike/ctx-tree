@@ -11,6 +11,7 @@ import { join } from 'node:path';
 import { Database } from 'bun:sqlite';
 import { ulid } from './lib/ulid.mjs';
 import { getOrCreateSession, lastNode, countNodes, insertEdge } from './lib/db.mjs';
+import { computeProjectHash } from './lib/project-hash.mjs';
 
 // ── Read stdin ────────────────────────────────────────────────────────────────
 const chunks = [];
@@ -19,12 +20,12 @@ const input = JSON.parse(Buffer.concat(chunks).toString('utf8'));
 
 const sessionId  = String(input.session_id ?? '');
 const cwd        = String(input.cwd ?? process.cwd());
-const userPrompt = String(input.user_prompt ?? '').trim();
+const userPrompt = String(input.prompt ?? '').trim();
 
 if (!userPrompt) process.exit(0);
 
 // ── Locate DB ─────────────────────────────────────────────────────────────────
-const projectHash = createHash('sha256').update(cwd).digest('hex').slice(0, 16);
+const projectHash = computeProjectHash(cwd);
 const dbPath      = join(process.env.HOME ?? '/tmp', '.memtree', projectHash, 'store.db');
 if (!existsSync(dbPath)) process.exit(0);
 
@@ -45,7 +46,9 @@ const existing = db.query(
 ).get(contentHash);
 if (existing) {
   process.stdout.write(JSON.stringify({
-    systemMessage: `[memtree] Prompt already stored → node ${existing.id}. Pass to subagents: memtree_compose(["${existing.id}"], budget).`,
+    hookSpecificOutput: {
+      additionalContext: `[memtree] Prompt already stored → node ${existing.id}. Pass to subagents: memtree_compose(["${existing.id}"], budget).`,
+    },
   }));
   process.exit(0);
 }
@@ -74,6 +77,8 @@ const prevResponse = lastNode(db, sessionNodeId, 'response');
 if (prevResponse) insertEdge(db, nodeId, prevResponse.id, 'follows', now);
 
 process.stdout.write(JSON.stringify({
-  systemMessage: `[memtree] Prompt stored → node ${nodeId} ("${title.slice(0, 60)}…"). Pass full context to subagents: memtree_compose(["${nodeId}"], budget).`,
+  hookSpecificOutput: {
+    additionalContext: `[memtree] Prompt stored → node ${nodeId} ("${title.slice(0, 60)}…"). Pass full context to subagents: memtree_compose(["${nodeId}"], budget).`,
+  },
 }));
 process.exit(0);

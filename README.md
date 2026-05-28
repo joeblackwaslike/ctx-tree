@@ -22,9 +22,9 @@ Your Claude session is doing real work — reading source files, grepping for sy
 
 By the time you're 60% through a complex task, the window is stuffed with file contents that already answered their question, grep output nobody needs anymore, and a web page from two subtasks ago. Claude starts forgetting the beginning. You lose the thread. The session dies before the work is done.
 
-**That's context rot. Every developer using Claude Code hits it. memtree eliminates it.**
+**That's context rot. Every developer using Claude Code hits it. memtree fights it.**
 
-Every tool call — native *and* MCP — is intercepted by a hook, the result is stored in a persistent SQLite property graph, and Claude gets back a compact `nodeId` reference instead of raw bytes. The same file read next week costs zero tokens. It's already in the graph.
+Every tool call — native *and* MCP — is intercepted by a hook and routed through the memtree MCP tools. Results are stored in a persistent SQLite property graph and returned with a `nodeId` reference. The first read is the same cost as today. The payoff comes on re-access: `memtree_compose(nodeIds, budget)` reconstructs any prior context without re-reading a single file. Across sessions, the graph grows — the same work never costs twice.
 
 ---
 
@@ -39,15 +39,15 @@ Every tool call — native *and* MCP — is intercepted by a hook, the result is
 <td>
 
 ```
-Read auth.ts         →  4,200 tokens burned
+Read auth.ts         →  4,200 tokens, session only
                         gone when context scrolls
                         re-read it again next session
 
-Grep 'handleToken'   →  8,400 tokens burned
+Grep 'handleToken'   →  8,400 tokens, session only
                         8 files inline, all forgotten
                         same grep, same cost, next week
 
-WebFetch API docs    → 11,000 tokens burned
+WebFetch API docs    → 11,000 tokens, session only
                         full HTML, 90% noise
                         re-fetched every session
 
@@ -59,32 +59,27 @@ Start over.
 <td>
 
 ```
-Read auth.ts         →     60 tokens (nodeId)
-                        stored in graph, forever
-                        free recall next session
+Read auth.ts         →  stored in graph
+                        nodeId returned alongside content
+                        free recall next session via compose
 
-Grep 'handleToken'   →    160 tokens (8 nodes)
+Grep 'handleToken'   →  stored as typed graph nodes
                         searchable across sessions
                         neighbors found in one call
 
-WebFetch API docs    →    110 tokens (reference)
-                        compact a11y tree stored
+WebFetch API docs    →  a11y tree stored as web_chunk
+                        nodeId for future recall
                         never re-fetched
 
+Compose prior work:  →  budget-bounded recall, zero re-reads
 Session runs to completion.
-Keep going.
 ```
 
 </td>
 </tr>
 </table>
 
-| Operation | Without | With | Saved |
-| --------- | ------- | ---- | ----- |
-| Read file | ~4,200 tok | ~60 tok | **98.6%** |
-| Grep (8 files) | ~8,400 tok | ~160 tok | **98.1%** |
-| WebFetch | ~11,000 tok | ~110 tok | **99.0%** |
-| MCP tool | ~3,600 tok | ~70 tok | **98.1%** |
+**Where memtree saves tokens:** The first read costs the same as without memtree. The savings compound on *re-access*: `memtree_compose(nodeIds, budget)` reconstructs any prior context without re-reading a file, `memtree_search` finds nodes across sessions without re-running searches, and `memtree_neighbors` surfaces related code without additional reads. Over a multi-session project the graph accumulates — work you've already done costs nothing to revisit.
 
 ---
 
@@ -116,7 +111,7 @@ curl -fsSL https://bun.sh/install | bash && apt install ripgrep  # Linux
 
 ## What you get
 
-**98–99% context reduction per operation.** Every read, search, and fetch that used to cost thousands of tokens now costs tens. Operations you've already run cost *nothing* — the graph remembers.
+**Zero re-read cost on revisit.** Every read, search, and fetch is stored permanently. Re-accessing any prior result via `memtree_compose` costs only the tokens needed to describe what you want — not the tokens to re-execute the operation. Operations you've already run cost *nothing* the second time — the graph remembers.
 
 **Zero configuration. Total interception.** Ten hooks fire automatically across every native Claude Code tool and every MCP tool you have installed. Nothing slips through. No per-project setup. No flags to flip.
 

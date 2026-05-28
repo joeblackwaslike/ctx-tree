@@ -11,6 +11,7 @@ import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { Database } from 'bun:sqlite';
+import { computeProjectHash } from './lib/project-hash.mjs';
 
 // ── Read stdin ────────────────────────────────────────────────────────────────
 const chunks = [];
@@ -29,7 +30,7 @@ const skillContent = typeof toolResult === 'string'
 if (!skillName || !skillContent || skillContent.length < 50) process.exit(0);
 
 // ── Open DB ───────────────────────────────────────────────────────────────────
-const projectHash = createHash('sha256').update(cwd).digest('hex').slice(0, 16);
+const projectHash = computeProjectHash(cwd);
 const dbPath      = join(process.env.HOME ?? '/tmp', '.memtree', projectHash, 'store.db');
 if (!existsSync(dbPath)) process.exit(0);
 

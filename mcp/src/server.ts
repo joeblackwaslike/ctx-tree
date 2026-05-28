@@ -190,7 +190,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'memtree_monitor',
-      description: 'Run a shell command, capture all output as a stored node, and return a compact reference. Use instead of Bash when the command produces large or streaming output — output stays out of context until you ask for it.',
+      description: 'Run a shell command via the system shell (sh -c), capture output as a stored node, and return a compact reference. WARNING: executes directly — not sandboxed by Claude Code permission model. Sensitive values are redacted before storage. Use instead of Bash when the command produces large or streaming output.',
       inputSchema: {
         type: 'object',
         properties: {

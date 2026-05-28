@@ -9,6 +9,7 @@
 
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { computeProjectHash } from './lib/project-hash.mjs';
 import { join } from 'node:path';
 import { Database } from 'bun:sqlite';
 
@@ -25,7 +26,7 @@ const taskText = String(toolInput.prompt ?? toolInput.description ?? '').trim();
 if (!taskText) process.exit(0);
 
 // ── Locate DB ─────────────────────────────────────────────────────────────────
-const projectHash = createHash('sha256').update(cwd).digest('hex').slice(0, 16);
+const projectHash = computeProjectHash(cwd);
 const dbPath      = join(process.env.HOME ?? '/tmp', '.memtree', projectHash, 'store.db');
 const hooksDir    = join(process.env.HOME ?? '/tmp', '.memtree', 'hooks');
 mkdirSync(hooksDir, { recursive: true, mode: 0o700 });

@@ -35,7 +35,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/opt/homebrew/bin/bun ${CLAUDE_PLUGIN_ROOT}/hooks/pretooluse-agent-enrich.mjs",
+            "command": "/usr/bin/env bun ${CLAUDE_PLUGIN_ROOT}/hooks/pretooluse-agent-enrich.mjs",
             "timeout": 8
           }
         ]
@@ -45,7 +45,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/opt/homebrew/bin/bun ${CLAUDE_PLUGIN_ROOT}/hooks/pretooluse-skill-recall.mjs",
+            "command": "/usr/bin/env bun ${CLAUDE_PLUGIN_ROOT}/hooks/pretooluse-skill-recall.mjs",
             "timeout": 5
           }
         ]
@@ -57,7 +57,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/opt/homebrew/bin/bun ${CLAUDE_PLUGIN_ROOT}/hooks/posttooluse-agent-capture.mjs",
+            "command": "/usr/bin/env bun ${CLAUDE_PLUGIN_ROOT}/hooks/posttooluse-agent-capture.mjs",
             "timeout": 8
           }
         ]
@@ -67,7 +67,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/opt/homebrew/bin/bun ${CLAUDE_PLUGIN_ROOT}/hooks/posttooluse-skill-capture.mjs",
+            "command": "/usr/bin/env bun ${CLAUDE_PLUGIN_ROOT}/hooks/posttooluse-skill-capture.mjs",
             "timeout": 5
           }
         ]
@@ -77,7 +77,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/opt/homebrew/bin/bun ${CLAUDE_PLUGIN_ROOT}/hooks/posttooluse-websearch-capture.mjs",
+            "command": "/usr/bin/env bun ${CLAUDE_PLUGIN_ROOT}/hooks/posttooluse-websearch-capture.mjs",
             "timeout": 5
           }
         ]
@@ -89,7 +89,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/opt/homebrew/bin/bun ${CLAUDE_PLUGIN_ROOT}/hooks/userpromptsubmit-capture.mjs",
+            "command": "/usr/bin/env bun ${CLAUDE_PLUGIN_ROOT}/hooks/userpromptsubmit-capture.mjs",
             "timeout": 5
           }
         ]
@@ -101,7 +101,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/opt/homebrew/bin/bun ${CLAUDE_PLUGIN_ROOT}/hooks/stop-response-capture.mjs",
+            "command": "/usr/bin/env bun ${CLAUDE_PLUGIN_ROOT}/hooks/stop-response-capture.mjs",
             "timeout": 10
           }
         ]
@@ -110,8 +110,8 @@
   },
   "mcpServers": {
     "memtree": {
-      "command": "/opt/homebrew/bin/bun",
-      "args": ["run", "${CLAUDE_PLUGIN_ROOT}/mcp/dist/server.js"]
+      "command": "/usr/bin/env",
+      "args": ["bun", "run", "${CLAUDE_PLUGIN_ROOT}/mcp/dist/server.js"]
     },
     "mcp-exec": {
       "command": "node",
