@@ -8,9 +8,10 @@ import type { MemtreeConfig } from '../store/types';
 const config = {} as MemtreeConfig;
 
 let db: Database;
+const _realFetch = globalThis.fetch;
 
 beforeEach(() => { db = openDb(':memory:'); });
-afterEach(() => { db.close(); });
+afterEach(() => { db.close(); globalThis.fetch = _realFetch; });
 
 // ── fetch mock ────────────────────────────────────────────────────────────────
 function mockFetch(html: string, status = 200) {
