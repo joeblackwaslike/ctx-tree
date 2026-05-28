@@ -1,10 +1,10 @@
 {
-  "name": "@joeblackwaslike/memtree-viz",
+  "name": "memtree",
   "version": "0.1.0",
-  "description": "Real-time graph visualizer CLI for the memtree context store",
+  "description": "CLI for the memtree context store — visualize, inspect, and manage your AI session graph",
   "type": "module",
   "bin": {
-    "memtree-viz": "./dist/cli.js"
+    "memtree": "./dist/cli.js"
   },
   "files": [
     "dist"
@@ -16,7 +16,7 @@
   "engines": {
     "bun": ">=1.0.0"
   },
-  "keywords": ["memtree", "visualizer", "graph", "sqlite", "context"],
+  "keywords": ["memtree", "visualizer", "graph", "sqlite", "claude", "mcp", "context"],
   "license": "MIT",
   "repository": {
     "type": "git",
