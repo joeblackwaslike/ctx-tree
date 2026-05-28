@@ -22,6 +22,7 @@ memtree is a persistent graph store for codebase and web content. Every read and
 - Use \`memtree_read\` instead of \`Read\` — same content, symbol-chunked nodes stored in graph
 - Use \`memtree_grep\` instead of \`Grep\` or \`Bash(rg/grep/cat)\` — same results, stored as nodes
 - Use \`memtree_browse\` instead of \`WebFetch\` — compact reference returned, page stored as node
+- Use \`mcp__mcp-exec__exec({code, runtime})\` instead of \`Bash\` for arbitrary shell commands — sandboxed, only final output enters context
 
 **Graph navigation (use after any read/grep):**
 - \`memtree_neighbors(nodeId)\` — find related code: callers, imports, same-module siblings
