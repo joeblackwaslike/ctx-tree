@@ -126,24 +126,8 @@ curl -fsSL https://bun.sh/install | bash && apt install ripgrep  # Linux
 
 ## How it works
 
-```
-You call a tool (Read, Grep, WebFetch, Monitor, Agent, Skill, any MCP...)`  `   
-  ↓
-PreToolUse hook fires before execution
-  ↓
-Native call denied — raw data never enters context
-  ↓
-memtree_* MCP tool runs instead
-  ↓
-Result chunked, embedded, stored in SQLite property graph
-  ↓
-Claude receives: nodeId reference (~60 tokens)
-  ↓
-Future recall: memtree_compose(nodeIds, budget) — zero re-read cost
-```
-
 ```mermaid
-flowchart LR
+flowchart TD
     A["🔧 Tool call\nRead · Grep · WebFetch\nMonitor · Agent · MCP"] -->|"PreToolUse\nhook fires"| B["🚫 Native denied\nno raw data"]
     B --> C["🌳 memtree_*\nMCP tool runs"]
     C --> D["💾 Node stored\nchunked + indexed"]
