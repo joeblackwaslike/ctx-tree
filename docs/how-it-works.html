@@ -368,17 +368,17 @@ footer{padding:36px 0;border-top:1px solid var(--border);text-align:center;color
     <div><h2>The Property Graph</h2><p style="color:var(--muted);font-size:13px;margin-top:2px">SQLite · FTS5 · Per-project · Content-hash deduplication · Click any node to explore</p></div>
   </div>
   <div class="flow">
-    <div class="flow-step accent"><div class="flow-step-ico">🔗</div><div class="flow-step-t">Hook fires</div><div class="flow-step-s">PreToolUse</div></div>
+    <div class="flow-step accent" style="cursor:pointer" onclick="openPropPanel({kind:'hook',uri:'flow://hook-fires',props:{event:'PreToolUse',fires_on:'Read · Grep · Bash · WebFetch · PowerShell · Monitor · Agent · Skill · MCP',action:'Intercepts every matching tool call before execution',hook_file:'pretooluse-redirect.mjs'}})"><div class="flow-step-ico">🔗</div><div class="flow-step-t">Hook fires</div><div class="flow-step-s">PreToolUse</div></div>
     <div class="flow-arr">→</div>
-    <div class="flow-step"><div class="flow-step-ico">🚫</div><div class="flow-step-t">Deny native</div><div class="flow-step-s">tool blocked</div></div>
+    <div class="flow-step" style="cursor:pointer" onclick="openPropPanel({kind:'tool_call',uri:'flow://deny-native',props:{action:'Native tool call denied',result:'Raw output never enters context window',mechanism:'Hook returns {action:&quot;deny&quot;} to Claude Code runtime',benefit:'Prevents thousands of tokens of raw data'}})"><div class="flow-step-ico">🚫</div><div class="flow-step-t">Deny native</div><div class="flow-step-s">tool blocked</div></div>
     <div class="flow-arr">→</div>
-    <div class="flow-step accent"><div class="flow-step-ico">🌳</div><div class="flow-step-t">memtree_*</div><div class="flow-step-s">MCP tool runs</div></div>
+    <div class="flow-step accent" style="cursor:pointer" onclick="openPropPanel({kind:'mcp_tool',uri:'flow://memtree-mcp',props:{tools:'memtree_read · memtree_grep · memtree_browse · memtree_search · memtree_compose · memtree_neighbors · memtree_monitor · memtree_note · memtree_recent · memtree_path_to_root',server:'memtree MCP server (Bun)',transport:'stdio'}})"><div class="flow-step-ico">🌳</div><div class="flow-step-t">memtree_*</div><div class="flow-step-s">MCP tool runs</div></div>
     <div class="flow-arr">→</div>
-    <div class="flow-step"><div class="flow-step-ico">💾</div><div class="flow-step-t">Node stored</div><div class="flow-step-s">SQLite graph</div></div>
+    <div class="flow-step" style="cursor:pointer" onclick="openPropPanel({kind:'file_chunk',uri:'flow://node-stored',props:{storage:'SQLite property graph (~/.memtree/<project-hash>/store.db)',indexed:'FTS5 full-text search',chunking:'tree-sitter semantic chunking for code',dedup:'content_hash deduplication — same file costs 0 tokens on re-read',edges:'parent → child, references, derived_from, follows, summarizes'}})"><div class="flow-step-ico">💾</div><div class="flow-step-t">Node stored</div><div class="flow-step-s">SQLite graph</div></div>
     <div class="flow-arr">→</div>
-    <div class="flow-step accent"><div class="flow-step-ico">📎</div><div class="flow-step-t">Reference</div><div class="flow-step-s">returned to Claude</div></div>
+    <div class="flow-step accent" style="cursor:pointer" onclick="openPropPanel({kind:'file_chunk',uri:'flow://node-ref',props:{format:'nodeId (ULID — 26 chars)',example:'01HZQX9F4C2B7T8N3M5K6J0P1A',token_cost:'~60 tokens vs ~4200 for raw file',usage:'pass to memtree_compose() for budget-bounded recall',recall:'free on repeat — already in graph'}})"><div class="flow-step-ico">📎</div><div class="flow-step-t">Reference</div><div class="flow-step-s">returned to Claude</div></div>
     <div class="flow-arr">→</div>
-    <div class="flow-step"><div class="flow-step-ico">🎯</div><div class="flow-step-t">compose()</div><div class="flow-step-s">budget-bounded recall</div></div>
+    <div class="flow-step" style="cursor:pointer" onclick="openPropPanel({kind:'summary',uri:'flow://compose',props:{tool:'memtree_compose(nodeIds, budget)',budget:'token limit — compose stops when budget exhausted',traversal:'BFS from seed nodes, prioritises high-relevance neighbors',returns:'full content of each node up to budget',cross_session:'works across sessions — graph is persistent'}})"><div class="flow-step-ico">🎯</div><div class="flow-step-t">compose()</div><div class="flow-step-s">budget-bounded recall</div></div>
   </div>
   <h3 style="margin:20px 0 4px;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.07em">Node types — click any to inspect</h3>
   <div class="node-legend" id="legend-nodes"></div>
