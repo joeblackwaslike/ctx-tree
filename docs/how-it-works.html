@@ -767,16 +767,16 @@ footer{padding:36px 0;border-top:1px solid var(--border);text-align:center;color
       <div class="hook-card-hdr">
         <span class="hook-event he-prompt">UserPromptSubmit</span>
         <span class="hook-file">userpromptsubmit-capture.mjs</span>
-        <span class="hook-tool-tag">prompt ≥ 100 chars</span>
+        <span class="hook-tool-tag">all prompts</span>
       </div>
       <div class="hook-card-body">
         <div class="hook-col">
           <div class="hook-col-lbl">When it fires</div>
-          <div class="hook-col-body">Every time the user submits a prompt with at least 100 characters. Short confirmations and commands are skipped. Requires memtree store to be initialized for the project.</div>
+          <div class="hook-col-body">Every time the user submits a non-empty prompt. Requires memtree store to be initialized for the project.</div>
         </div>
         <div class="hook-col">
           <div class="hook-col-lbl">What it does</div>
-          <div class="hook-col-body">Stores the prompt as an <code>observation</code> node in the graph with a content-hash URI. Injects the resulting <code>nodeId</code> into context so subagents can reference the prompt without re-reading it. Prior prompts surface in future sessions via <code>memtree_search</code>.<br><span class="hook-result-badge hr-inject">✦ nodeId injected</span></div>
+          <div class="hook-col-body">Stores the prompt as a <code>prompt</code> node in the graph with a content-hash URI. Injects the resulting <code>nodeId</code> into context so subagents can reference the prompt without re-reading it. Prior prompts surface in future sessions via <code>memtree_search</code>.<br><span class="hook-result-badge hr-inject">✦ nodeId injected</span></div>
         </div>
       </div>
     </div>
@@ -1760,8 +1760,8 @@ const PROMPT_SCENARIO = {
     { id:'s1', kind:'session', label:'Session abc123', x:65, y:75, isNew:false, uri:'session://abc123', props:{ id:'abc123' }},
     { id:'t1', kind:'turn', label:'Turn #11', x:65, y:185, isNew:false,
       uri:'turn://abc123/11', props:{ index:11, timestamp:'2026-05-26T15:00:00Z' }},
-    { id:'ob1', kind:'observation', label:'User prompt', x:220, y:185, isNew:false,
-      uri:'observation://abc123/11/1',
+    { id:'ob1', kind:'prompt', label:'User prompt', x:220, y:185, isNew:false,
+      uri:'prompt://abc123/11/1',
       props:{ role:'user', content:'What deployment strategy should we use for this Workers app?', tokens:13, timestamp:'2026-05-26T15:00:00Z' }},
     { id:'th1', kind:'thinking', label:'Thinking block', x:390, y:185, isNew:true, delay:100,
       uri:'thinking://abc123/11/1',
@@ -2341,7 +2341,7 @@ const searchDefs = {
       { score:'0.94', badge:'file_chunk', color:'#0ea5e9', uri:'file:///src/auth/login.ts#chunk:2', preview:'validateToken() — jwt.verify(token, SECRET) with exp check' },
       { score:'0.89', badge:'file_chunk', color:'#0ea5e9', uri:'file:///src/auth/refresh.ts#chunk:1', preview:'refreshAccessToken() — checks exp, issues new token' },
       { score:'0.81', badge:'web_chunk',  color:'#16a34a', uri:'https://jwt.io/introduction#expiry', preview:'JWT expiry (exp claim) — Unix timestamp...' },
-      { score:'0.73', badge:'observation',color:'#7e22ce', uri:'observation://abc123/8/1', preview:'User prompt: "analyze the JWT expiry logic"' },
+      { score:'0.73', badge:'prompt',color:'#7e22ce', uri:'prompt://abc123/8/1', preview:'User prompt: "analyze the JWT expiry logic"' },
     ],
   },
   hybrid: {

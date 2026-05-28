@@ -180,7 +180,7 @@ Nine hooks, installed automatically. You don't configure them.
 | Event | Hook | What it intercepts |
 | ----- | ---- | ------------------ |
 | `SessionStart` | `session-start.mjs` | Injects tool guide and redirect reminders on startup / resume |
-| `UserPromptSubmit` | `userpromptsubmit-capture.mjs` | Stores prompts ≥100 chars as `observation` nodes for cross-session recall |
+| `UserPromptSubmit` | `userpromptsubmit-capture.mjs` | Stores every prompt as a `prompt` node for cross-session recall |
 | `PreToolUse` | `pretooluse-redirect.mjs` | **Read, Grep, Bash (grep/cat), WebFetch, Monitor** → denied + replaced with memtree equivalent |
 | `PreToolUse` | `pretooluse-agent-enrich.mjs` | **Agent** → subagent prompt enriched with memtree tool map + FTS context hits from prior work |
 | `PreToolUse` | `pretooluse-skill-recall.mjs` | **Skill** → cache hit returns stored node; cache miss passes through and stores for next time |

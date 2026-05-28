@@ -1,20 +1,16 @@
 /**
- * UserPromptSubmit hook — stores the user's prompt as an `observation` node
+ * UserPromptSubmit hook — stores the user's prompt as a `prompt` node
  * and injects a compact nodeId reference back into Claude's context.
  *
  * Payoff: subagents can be handed the nodeId instead of the full prompt text;
  * prior prompts surface via memtree_search in future sessions; the Agent
  * enrichment hook will find relevant prompts in FTS and include them.
- *
- * Skips prompts under MIN_CHARS (short commands, confirmations, etc.).
  */
 
 import { createHash, randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { Database } from 'bun:sqlite';
-
-const MIN_CHARS = 100;
 
 // ── Read stdin ────────────────────────────────────────────────────────────────
 const chunks = [];
@@ -25,7 +21,7 @@ const sessionId  = String(input.session_id ?? '');
 const cwd        = String(input.cwd ?? process.cwd());
 const userPrompt = String(input.user_prompt ?? '').trim();
 
-if (userPrompt.length < MIN_CHARS) process.exit(0);
+if (!userPrompt) process.exit(0);
 
 // ── Locate DB ─────────────────────────────────────────────────────────────────
 const projectHash = createHash('sha256').update(cwd).digest('hex').slice(0, 16);
@@ -50,7 +46,7 @@ if (existing) {
   process.exit(0);
 }
 
-// ── Store as observation node ─────────────────────────────────────────────────
+// ── Store as prompt node ──────────────────────────────────────────────────────
 const nodeId = randomUUID();
 const now    = Date.now();
 const title  = userPrompt.slice(0, 80).replace(/\n/g, ' ');
@@ -60,7 +56,7 @@ db.run(`
     (id, parent_id, kind, source_uri, content, content_hash,
      status, mtime, created_at, updated_at, truncated, original_bytes, metadata)
   VALUES
-    ($id, $parent, 'observation', $uri, $content, $hash,
+    ($id, $parent, 'prompt', $uri, $content, $hash,
      'live', $now, $now, $now, 0, $bytes, $meta)
 `, {
   $id:      nodeId,
