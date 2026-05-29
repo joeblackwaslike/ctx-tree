@@ -65,12 +65,31 @@ async function openVisualizer(ctx: vscode.ExtensionContext): Promise<void> {
   }, null, ctx.subscriptions);
 }
 
-function startServer(cwd: string): Promise<VizInfo> {
+function findMemtreeBin(): Promise<string> {
+  if (process.platform === 'win32') {
+    return new Promise((resolve, reject) =>
+      cp.exec('where memtree', { timeout: 5_000 }, (err, stdout) => {
+        const p = stdout.split('\n')[0]?.trim();
+        if (p) resolve(p); else reject(Object.assign(new Error('memtree not found'), { code: 'ENOENT' }));
+      })
+    );
+  }
+  const shell = process.env.SHELL || '/bin/zsh';
+  return new Promise((resolve, reject) =>
+    cp.exec(`${shell} -l -c 'which memtree 2>/dev/null'`, { timeout: 5_000 }, (err, stdout) => {
+      const p = stdout.trim();
+      if (p) resolve(p); else reject(Object.assign(new Error('memtree not found'), { code: 'ENOENT' }));
+    })
+  );
+}
+
+async function startServer(cwd: string): Promise<VizInfo> {
+  const bin = await findMemtreeBin();
   return new Promise((resolve, reject) => {
     const child = cp.spawn(
-      'memtree',
+      bin,
       ['viz', 'server', 'start', '--cwd', cwd, '--no-open', '--json'],
-      { stdio: ['ignore', 'pipe', 'pipe'], shell: process.platform === 'win32' }
+      { stdio: ['ignore', 'pipe', 'pipe'] }
     );
     activeProc = child;
 
