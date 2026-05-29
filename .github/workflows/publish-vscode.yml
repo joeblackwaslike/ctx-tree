@@ -1,0 +1,30 @@
+name: Publish memtree VS Code Extension
+
+on:
+  push:
+    tags:
+      - 'vscode-v*'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        working-directory: packages/memtree-vscode
+        run: npm ci
+
+      - name: Build
+        working-directory: packages/memtree-vscode
+        run: npm run build
+
+      - name: Publish to VS Code Marketplace
+        working-directory: packages/memtree-vscode
+        run: npx vsce publish --pat ${{ secrets.VSCE_PAT }}

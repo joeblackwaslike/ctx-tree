@@ -354,7 +354,7 @@ function applyFilters() {
 // ── WebSocket ──────────────────────────────────────────────────────────────────
 function connect() {
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const ws = new WebSocket(`${proto}//${location.host}/api/events`);
+  const ws = new WebSocket(globalThis.MEMTREE_WS_URL || `${proto}//${location.host}/api/events`);
 
   ws.onopen = () => {
     document.getElementById('ws-status').innerHTML = '<span class="live">● live</span>';
