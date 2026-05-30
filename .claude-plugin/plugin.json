@@ -81,6 +81,16 @@
             "timeout": 5
           }
         ]
+      },
+      {
+        "matcher": "mcp__plugin_serena_serena__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/usr/bin/env bun ${CLAUDE_PLUGIN_ROOT}/hooks/posttooluse-serena-capture.mjs",
+            "timeout": 5
+          }
+        ]
       }
     ],
     "UserPromptSubmit": [
