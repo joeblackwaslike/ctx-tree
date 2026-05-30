@@ -1,0 +1,2651 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>memtree · How It Works</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#080e1a;--bg1:#0f1a2e;--bg2:#162032;--bg3:#1c2940;
+  --border:#1e3452;--borderhi:#2d4d7a;
+  --text:#dde6f0;--muted:#7a9ab8;--dim:#3d5a78;
+  --sky:#38bdf8;--green:#4ade80;--orange:#fb923c;
+  --purple:#c084fc;--pink:#f472b6;--red:#f87171;--indigo:#818cf8;
+  --r:10px;--rsm:6px;
+  --mono:'SF Mono','JetBrains Mono','Fira Code',Consolas,monospace;
+}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Inter','Segoe UI',sans-serif;font-size:14px;line-height:1.6;overflow-x:hidden}
+h1{font-size:2.4rem;font-weight:800;letter-spacing:-.03em}
+h2{font-size:1.2rem;font-weight:700;letter-spacing:-.01em}
+h3{font-size:1rem;font-weight:600}
+code,pre,tt{font-family:var(--mono)}
+
+/* NAV */
+nav{position:sticky;top:0;z-index:100;background:rgba(8,14,26,.95);backdrop-filter:blur(14px);border-bottom:1px solid var(--border);padding:8px 0}
+.nav-inner{display:flex;align-items:center;gap:4px;padding:0 20px;overflow-x:auto;scrollbar-width:none}
+.nav-inner::-webkit-scrollbar{display:none}
+.nav-logo{font-size:.95rem;font-weight:800;color:var(--sky);text-decoration:none;white-space:nowrap;margin-right:10px}
+.nav-logo span{color:var(--muted);font-weight:400}
+.nav-sep{color:var(--border);margin:0 2px;font-size:10px}
+.nav-link{display:flex;align-items:center;gap:3px;padding:3px 9px;border-radius:16px;color:var(--muted);text-decoration:none;white-space:nowrap;font-size:11.5px;transition:all .15s;border:1px solid transparent}
+.nav-link:hover,.nav-link.active{color:var(--text);background:var(--bg2);border-color:var(--border)}
+
+/* HERO */
+.hero{padding:64px 0 48px;text-align:center}
+.hero-badge{display:inline-flex;align-items:center;gap:6px;padding:4px 14px;background:rgba(56,189,248,.08);border:1px solid rgba(56,189,248,.25);border-radius:20px;color:var(--sky);font-size:12px;font-weight:500;margin-bottom:16px}
+.hero h1{margin-bottom:12px;background:linear-gradient(130deg,#e2e8f0 0%,#38bdf8 60%,#818cf8 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.hero-sub{font-size:1rem;color:var(--muted);max-width:560px;margin:0 auto 36px}
+.container{max-width:1160px;margin:0 auto;padding:0 24px}
+
+/* CONTEXT BARS */
+.ctx-compare{display:grid;grid-template-columns:1fr 1fr;gap:14px;max-width:680px;margin:0 auto}
+.ctx-card{background:var(--bg1);border:1px solid var(--border);border-radius:var(--r);padding:18px}
+.ctx-card h3{margin-bottom:12px;font-size:.85rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
+.ctx-row{display:flex;align-items:center;gap:8px;margin-bottom:7px;font-size:11px}
+.ctx-lbl{width:90px;color:var(--muted);flex-shrink:0;font-family:var(--mono);font-size:10px;text-align:right}
+.ctx-bg{flex:1;height:16px;background:var(--bg3);border-radius:3px;overflow:hidden}
+.ctx-bar{height:100%;border-radius:3px}
+.ctx-val{width:60px;text-align:right;font-size:10px;font-family:var(--mono);color:var(--dim)}
+
+/* SECTIONS */
+.section{padding:52px 0;border-top:1px solid var(--border);scroll-margin-top:50px}
+.tool-section{padding:52px 0;border-top:1px solid var(--border);scroll-margin-top:50px}
+.sect-hdr{display:flex;align-items:center;gap:10px;margin-bottom:24px}
+.sect-icon{width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:17px;background:var(--bg2);border:1px solid var(--border)}
+.tool-hdr{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:10px}
+.tool-title{display:flex;align-items:baseline;gap:8px}
+.tool-name{font-size:1.45rem;font-weight:800;letter-spacing:-.02em}
+.tool-arrow{color:var(--dim)}
+.tool-target{color:var(--sky);font-family:var(--mono);font-size:1.1rem}
+.badges{display:flex;gap:6px;align-items:center;padding-top:4px}
+.badge{padding:3px 9px;border-radius:14px;font-size:10px;font-weight:600;font-family:var(--mono);border:1px solid}
+.b-pre{color:#fb923c;background:rgba(249,115,22,.08);border-color:rgba(249,115,22,.3)}
+.b-post{color:#4ade80;background:rgba(74,222,128,.08);border-color:rgba(74,222,128,.3)}
+.b-deny{color:#f87171;background:rgba(248,113,113,.07);border-color:rgba(248,113,113,.25)}
+.b-enrich{color:#c084fc;background:rgba(192,132,252,.07);border-color:rgba(192,132,252,.25)}
+.b-capture{color:#4ade80;background:rgba(74,222,128,.07);border-color:rgba(74,222,128,.25)}
+.b-mcp{color:#818cf8;background:rgba(129,140,248,.07);border-color:rgba(129,140,248,.25)}
+.tool-tag{color:var(--muted);font-size:13px;margin-bottom:22px}
+
+/* BEFORE/AFTER */
+.ba{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px}
+@media(max-width:740px){.ba{grid-template-columns:1fr}}
+.ba-panel{background:var(--bg1);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
+.ba-hdr{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid var(--border);font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase}
+.ba-hdr.before{color:#f87171;background:rgba(248,113,113,.04)}
+.ba-hdr.after{color:#4ade80;background:rgba(74,222,128,.04)}
+.tok{font-family:var(--mono);font-size:10px;background:var(--bg2);padding:2px 7px;border-radius:4px}
+.tok.hi{color:#f87171}.tok.lo{color:#4ade80}
+.ba-body{padding:14px}
+.lbl{font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.07em;margin-bottom:5px}
+.cb{background:var(--bg);border:1px solid var(--border);border-radius:var(--rsm);padding:11px 13px;font-family:var(--mono);font-size:11px;line-height:1.5;margin-bottom:11px;overflow-x:auto;white-space:pre}
+.cb .k{color:#c084fc}.cb .s{color:#4ade80}.cb .p{color:#38bdf8}
+.cb .n{color:#fb923c}.cb .c{color:#3d5a78}.cb .f{color:#facc15}.cb .hl{color:#f87171}
+.ob{background:var(--bg);border:1px solid;border-radius:var(--rsm);padding:11px 13px;font-family:var(--mono);font-size:11px;line-height:1.5;position:relative;overflow:hidden;max-height:90px}
+.ob.raw{border-color:rgba(248,113,113,.2)}.ob.compact{border-color:rgba(74,222,128,.2)}
+.ob-fade{position:absolute;bottom:0;left:0;right:0;height:36px;background:linear-gradient(transparent,var(--bg))}
+.savings{display:flex;align-items:center;gap:8px;padding:7px 11px;background:rgba(74,222,128,.07);border:1px solid rgba(74,222,128,.18);border-radius:var(--rsm);font-size:11.5px;color:#4ade80;margin-top:8px}
+.savings b{font-family:var(--mono);font-size:13px}
+
+/* GRAPH */
+.graph-wrap{background:var(--bg1);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
+.graph-top{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid var(--border)}
+.graph-lbl{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
+.graph-ctrls{display:flex;gap:8px;align-items:center}
+.btn{padding:4px 13px;border-radius:5px;border:1px solid;cursor:pointer;font-size:11px;font-weight:600;font-family:inherit;transition:all .15s;outline:none}
+.btn-play{background:rgba(56,189,248,.1);border-color:rgba(56,189,248,.4);color:var(--sky)}
+.btn-play:hover{background:rgba(56,189,248,.2)}.btn-play:disabled{opacity:.35;cursor:not-allowed}
+.btn-rst{background:transparent;border-color:var(--border);color:var(--muted)}
+.btn-rst:hover{background:var(--bg2);color:var(--text)}
+.graph-svg{position:relative}
+.graph-svg svg{width:100%;height:100%}
+.g-leg{display:flex;align-items:center;gap:12px;padding:8px 14px;border-top:1px solid var(--border);background:var(--bg2);flex-wrap:wrap}
+.gl-item{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--muted)}
+.gl-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.gl-line{width:18px;height:2px;border-radius:1px;flex-shrink:0}
+.gl-dash{width:18px;height:1px;flex-shrink:0;background:repeating-linear-gradient(90deg,currentColor 0,currentColor 3px,transparent 3px,transparent 6px)}
+
+/* LEGEND GRIDS */
+.node-legend{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:7px;margin-top:16px}
+.edge-legend{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:7px;margin-top:12px}
+.leg-item{display:flex;align-items:center;gap:9px;padding:8px 11px;background:var(--bg1);border:1px solid var(--border);border-radius:var(--rsm);cursor:default}
+.leg-dot{width:11px;height:11px;border-radius:50%;flex-shrink:0}
+.leg-icon{width:18px;height:18px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:9px;font-family:var(--mono);font-weight:700;flex-shrink:0}
+.leg-txt{font-family:var(--mono);font-size:10px;color:var(--text);line-height:1.2}
+.leg-desc{font-size:9.5px;color:var(--muted);margin-top:1px}
+.leg-line-wrap{display:flex;align-items:center;gap:6px}
+.leg-line{height:2px;width:28px;border-radius:1px}
+.leg-arrow{color:var(--muted);font-size:10px}
+
+/* FLOW STEPS */
+.flow{display:flex;align-items:center;gap:0;margin:20px 0;overflow-x:auto;padding-bottom:4px}
+.flow-step{display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 13px;background:var(--bg1);border:1px solid var(--border);border-radius:8px;min-width:105px;text-align:center;flex-shrink:0}
+.flow-step-ico{font-size:17px}
+.flow-step-t{font-size:11px;font-weight:600}
+.flow-step-s{font-size:10px;color:var(--muted)}
+.flow-arr{color:var(--dim);font-size:17px;padding:0 4px;flex-shrink:0}
+.flow-step.accent{border-color:rgba(56,189,248,.35);background:rgba(56,189,248,.06)}
+.flow-step.accent .flow-step-t{color:var(--sky)}
+
+/* PROPERTY PANEL */
+.prop-panel{position:fixed;right:0;top:0;bottom:0;width:310px;background:var(--bg1);border-left:1px solid var(--borderhi);z-index:300;transform:translateX(100%);transition:transform .24s cubic-bezier(.32,.72,0,1);overflow-y:auto;display:flex;flex-direction:column;box-shadow:-12px 0 40px rgba(0,0,0,.7)}
+.prop-panel.open{transform:translateX(0)}
+.prop-overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:299;opacity:0;pointer-events:none;transition:opacity .24s}
+.prop-overlay.open{opacity:1;pointer-events:all}
+.pp-hdr{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--bg1);z-index:1}
+.pp-kind{font-family:var(--mono);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;padding:3px 8px;border-radius:4px;display:flex;align-items:center;gap:5px}
+.pp-icon-txt{font-size:13px}
+.pp-close{background:none;border:1px solid transparent;color:var(--muted);cursor:pointer;font-size:15px;padding:3px 6px;border-radius:4px;line-height:1}
+.pp-close:hover{color:var(--text);background:var(--bg2);border-color:var(--border)}
+.pp-uri{font-family:var(--mono);font-size:9px;color:var(--dim);padding:7px 14px;border-bottom:1px solid var(--border);word-break:break-all;line-height:1.45}
+.pp-body{flex:1;padding:10px 0}
+.pp-section{margin-bottom:2px}
+.pp-section-title{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--dim);padding:6px 14px 4px}
+.pp-row{display:flex;gap:8px;padding:3px 14px;font-size:10.5px;line-height:1.4}
+.pp-row:hover{background:var(--bg2)}
+.pp-key{width:100px;flex-shrink:0;color:var(--muted);font-family:var(--mono);font-size:9.5px;padding-top:1px}
+.pp-val{flex:1;color:var(--text);font-family:var(--mono);font-size:9.5px;word-break:break-all}
+.pp-val.num{color:#fb923c}.pp-val.bool-t{color:#4ade80}.pp-val.bool-f{color:#f87171}
+.pp-val.str{color:#38bdf8}.pp-val.uri{color:#818cf8;font-size:8.5px}
+.pp-divider{height:1px;background:var(--border);margin:8px 0}
+
+/* ACCESSIBILITY TREE */
+.a11y-wrap{padding:4px 14px}
+.a11y-item{display:flex;align-items:center;gap:5px;padding:3px 5px;border-radius:4px;cursor:pointer;font-size:9.5px;margin-bottom:1px}
+.a11y-item:hover{background:var(--bg2)}
+.a11y-role{font-family:var(--mono);font-size:8.5px;padding:1px 5px;border-radius:3px;background:rgba(56,189,248,.12);color:#38bdf8;flex-shrink:0;white-space:nowrap}
+.a11y-name{color:var(--text);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.a11y-ref{font-family:var(--mono);font-size:8px;color:#4ade80;flex-shrink:0}
+.a11y-meta{font-family:var(--mono);font-size:8px;color:var(--dim);flex-shrink:0}
+
+/* CHUNK LIST IN PANEL */
+.chunk-list{padding:4px 14px}
+.chunk-item{background:var(--bg2);border:1px solid var(--border);border-radius:5px;padding:7px 9px;margin-bottom:5px;cursor:pointer}
+.chunk-item:hover{border-color:var(--borderhi)}
+.chunk-item-hdr{display:flex;align-items:center;gap:6px;margin-bottom:3px}
+.chunk-sym{font-family:var(--mono);font-size:9.5px;color:#facc15;font-weight:600}
+.chunk-idx{font-family:var(--mono);font-size:8.5px;color:var(--dim)}
+.chunk-sz{font-family:var(--mono);font-size:8.5px;color:var(--muted);margin-left:auto}
+.chunk-prev{font-family:var(--mono);font-size:8.5px;color:var(--muted);line-height:1.3;white-space:pre-wrap;overflow:hidden;max-height:42px}
+
+/* SUBGRAPH BOX */
+.subgraph-label{font-family:var(--mono);font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em}
+
+/* TABS */
+.tab-bar{display:flex;gap:4px;margin-bottom:0;border-bottom:1px solid var(--border);padding:0 14px}
+.tab-btn{padding:7px 13px;border:none;background:none;color:var(--muted);font-size:11.5px;font-weight:600;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .15s;font-family:inherit}
+.tab-btn.active{color:var(--sky);border-bottom-color:var(--sky)}
+.tab-btn:hover{color:var(--text)}
+.tab-pane{display:none}.tab-pane.active{display:block}
+
+/* PIPELINE STEPS */
+.pipeline{display:flex;align-items:stretch;gap:0;overflow-x:auto;padding:20px 0 8px}
+.pipe-step{display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px 16px;background:var(--bg1);border:1px solid var(--border);border-radius:8px;min-width:120px;text-align:center;flex-shrink:0;position:relative}
+.pipe-step-ico{font-size:22px}
+.pipe-step-t{font-size:11.5px;font-weight:700}
+.pipe-step-s{font-size:10px;color:var(--muted);line-height:1.3}
+.pipe-arr{color:var(--dim);font-size:20px;padding:0 6px;display:flex;align-items:center;flex-shrink:0}
+.pipe-step.hi{border-color:rgba(56,189,248,.4);background:rgba(56,189,248,.06)}
+.pipe-step.hi .pipe-step-t{color:var(--sky)}
+.pipe-step.pulse{animation:pulse-border 1.8s ease-in-out infinite}
+@keyframes pulse-border{0%,100%{border-color:rgba(250,204,21,.25)}50%{border-color:rgba(250,204,21,.7)}}
+
+/* STATE MACHINE */
+.state-grid{display:flex;gap:12px;flex-wrap:wrap;margin:16px 0}
+.state-card{padding:10px 14px;border-radius:8px;border:2px solid;min-width:120px;text-align:center;cursor:pointer;transition:all .15s}
+.state-card:hover{transform:translateY(-2px)}
+.state-name{font-family:var(--mono);font-size:11px;font-weight:700}
+.state-desc{font-size:10px;color:var(--muted);margin-top:2px}
+.state-transitions{margin-top:14px;display:flex;flex-direction:column;gap:6px}
+.state-trans{display:flex;align-items:center;gap:8px;padding:7px 11px;background:var(--bg1);border:1px solid var(--border);border-radius:5px;font-size:11px}
+.trans-from{font-family:var(--mono);font-size:10px;padding:2px 6px;border-radius:3px}
+.trans-arrow{color:var(--dim);font-size:13px}
+.trans-to{font-family:var(--mono);font-size:10px;padding:2px 6px;border-radius:3px}
+.trans-trigger{color:var(--muted);font-size:10px;margin-left:auto;font-style:italic}
+
+/* SEARCH VIS */
+.search-result-row{display:flex;gap:8px;align-items:center;padding:5px 10px;border-radius:5px;font-size:10.5px;cursor:pointer}
+.search-result-row:hover{background:var(--bg2)}
+.sr-score{font-family:var(--mono);font-size:9.5px;width:38px;text-align:right;flex-shrink:0}
+.sr-badge{font-family:var(--mono);font-size:8.5px;padding:1px 5px;border-radius:3px;flex-shrink:0}
+.sr-uri{font-family:var(--mono);font-size:9px;color:var(--muted);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sr-preview{font-size:9.5px;color:var(--text)}
+
+/* TOOLTIP (edge hover) */
+.edge-tt{position:absolute;background:var(--bg2);border:1px solid var(--borderhi);border-radius:6px;padding:5px 9px;font-family:var(--mono);font-size:9.5px;color:var(--text);pointer-events:none;z-index:50;opacity:0;transition:opacity .1s;white-space:nowrap}
+.edge-tt.vis{opacity:1}
+
+/* WHY GRID */
+.why-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;max-width:900px;margin:36px auto 0}
+@media(max-width:740px){.why-grid{grid-template-columns:1fr}}
+.why-card{background:var(--bg1);border:1px solid var(--border);border-radius:var(--r);padding:22px 20px}
+.why-ico{font-size:24px;margin-bottom:10px}
+.why-ttl{font-size:.95rem;font-weight:700;margin-bottom:8px}
+.why-body{font-size:12.5px;color:var(--muted);line-height:1.65}
+.why-body code{font-family:var(--mono);color:var(--sky);font-size:11px}
+.spec-link{display:inline-flex;align-items:center;gap:6px;padding:8px 20px;background:rgba(56,189,248,.08);border:1px solid rgba(56,189,248,.3);border-radius:20px;color:var(--sky);font-size:13px;font-weight:600;text-decoration:none;transition:all .15s}
+.spec-link:hover{background:rgba(56,189,248,.16);border-color:rgba(56,189,248,.6)}
+
+/* HOOK REFERENCE */
+.hook-ref-grid{display:flex;flex-direction:column;gap:10px;margin-top:20px}
+.hook-card{background:var(--bg1);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
+.hook-card-hdr{display:flex;align-items:center;gap:10px;padding:11px 16px;border-bottom:1px solid var(--border);background:var(--bg2)}
+.hook-event{font-family:var(--mono);font-size:9.5px;font-weight:700;padding:2px 8px;border-radius:4px;flex-shrink:0}
+.he-pre{background:rgba(249,115,22,.12);color:#fb923c;border:1px solid rgba(249,115,22,.3)}
+.he-post{background:rgba(74,222,128,.08);color:#4ade80;border:1px solid rgba(74,222,128,.25)}
+.he-start{background:rgba(56,189,248,.08);color:#38bdf8;border:1px solid rgba(56,189,248,.25)}
+.he-prompt{background:rgba(192,132,252,.08);color:#c084fc;border:1px solid rgba(192,132,252,.25)}
+.he-stop{background:rgba(251,146,60,.08);color:#fb923c;border:1px solid rgba(251,146,60,.25)}
+.hook-file{font-family:var(--mono);font-size:10px;color:var(--dim);flex:1}
+.hook-tool-tag{font-family:var(--mono);font-size:9px;padding:2px 7px;border-radius:12px;background:var(--bg3);color:var(--muted);border:1px solid var(--border);flex-shrink:0}
+.hook-card-body{display:grid;grid-template-columns:1fr 1fr;gap:0}
+@media(max-width:740px){.hook-card-body{grid-template-columns:1fr}}
+.hook-col{padding:12px 16px}
+.hook-col+.hook-col{border-left:1px solid var(--border)}
+.hook-col-lbl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--dim);margin-bottom:6px}
+.hook-col-body{font-size:11.5px;color:var(--text);line-height:1.6}
+.hook-col-body code{font-family:var(--mono);font-size:10.5px;color:var(--sky)}
+.hook-col-body em{color:var(--muted);font-style:normal;font-size:11px}
+.hook-result-badge{display:inline-flex;align-items:center;gap:4px;font-family:var(--mono);font-size:9px;padding:2px 7px;border-radius:3px;margin-top:5px}
+.hr-deny{background:rgba(248,113,113,.1);color:#f87171;border:1px solid rgba(248,113,113,.25)}
+.hr-inject{background:rgba(74,222,128,.08);color:#4ade80;border:1px solid rgba(74,222,128,.2)}
+.hr-silent{background:rgba(129,140,248,.08);color:#818cf8;border:1px solid rgba(129,140,248,.2)}
+.hr-pass{background:rgba(251,191,36,.08);color:#fbbf24;border:1px solid rgba(251,191,36,.2)}
+
+/* INSTALL */
+.install-steps{display:flex;flex-direction:column;gap:20px;margin-top:24px}
+.install-step{display:flex;gap:16px;align-items:flex-start}
+.install-step-num{width:28px;height:28px;border-radius:50%;background:var(--bg2);border:1px solid var(--borderhi);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:var(--sky);flex-shrink:0;margin-top:2px}
+.install-step-body{flex:1}
+.install-step-ttl{font-size:.9rem;font-weight:700;margin-bottom:6px}
+.install-step-desc{font-size:12px;color:var(--muted);margin-bottom:8px;line-height:1.6}
+.install-cmd{background:var(--bg);border:1px solid var(--border);border-radius:var(--rsm);padding:10px 14px;font-family:var(--mono);font-size:12px;color:var(--sky);overflow-x:auto;white-space:pre}
+.install-links{display:flex;gap:12px;flex-wrap:wrap;margin-top:28px}
+.install-link{display:inline-flex;align-items:center;gap:7px;padding:9px 18px;border-radius:8px;font-size:12.5px;font-weight:600;text-decoration:none;transition:all .15s;border:1px solid}
+.il-github{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.15);color:var(--text)}
+.il-github:hover{background:rgba(255,255,255,.09)}
+.il-market{background:rgba(56,189,248,.08);border-color:rgba(56,189,248,.3);color:var(--sky)}
+.il-market:hover{background:rgba(56,189,248,.15)}
+
+/* FOOTER */
+footer{padding:36px 0;border-top:1px solid var(--border);text-align:center;color:var(--dim);font-size:12px}
+</style>
+</head>
+<body>
+
+<!-- PROPERTY PANEL -->
+<div id="prop-panel" class="prop-panel">
+  <div class="pp-hdr">
+    <div class="pp-kind" id="pp-kind-badge"></div>
+    <button class="pp-close" onclick="closePropPanel()">✕</button>
+  </div>
+  <div class="pp-uri" id="pp-uri"></div>
+  <div class="pp-body" id="pp-body"></div>
+</div>
+<div id="prop-overlay" class="prop-overlay" onclick="closePropPanel()"></div>
+<div id="edge-tt" class="edge-tt"></div>
+
+<nav>
+  <div class="nav-inner">
+    <a class="nav-logo" href="#top">memtree <span>/ how it works</span></a>
+    <a class="nav-link" href="#arch">🗄 Graph</a>
+    <span class="nav-sep">·</span>
+    <a class="nav-link" href="#read">📄 Read</a>
+    <a class="nav-link" href="#grep">🔍 Grep</a>
+    <a class="nav-link" href="#webfetch">🌐 WebFetch</a>
+    <a class="nav-link" href="#monitor">💻 Monitor</a>
+    <a class="nav-link" href="#websearch">📡 WebSearch</a>
+    <a class="nav-link" href="#agent">🤖 Agent</a>
+    <a class="nav-link" href="#skill">✦ Skill</a>
+    <a class="nav-link" href="#mcp">⚙ MCP</a>
+    <span class="nav-sep">·</span>
+    <a class="nav-link" href="#prompt">💬 Prompt</a>
+    <a class="nav-link" href="#convo">🌳 Convo</a>
+    <a class="nav-link" href="#hooks">⧖ Hooks</a>
+    <a class="nav-link" href="#hookref">⧖ Hook Ref</a>
+    <span class="nav-sep">·</span>
+    <a class="nav-link" href="#pipeline">⚡ Pipeline</a>
+    <a class="nav-link" href="#search">🔎 Search</a>
+    <a class="nav-link" href="#states">◈ States</a>
+    <span class="nav-sep">·</span>
+    <a class="nav-link" href="#install">📦 Install</a>
+  </div>
+</nav>
+
+<!-- HERO -->
+<div id="top" class="hero">
+<div class="container">
+  <div class="hero-badge">🌳 SQLite property graph · FTS5 · Semantic chunks · Hook-intercepted tools</div>
+  <h1>Every tool call builds a graph.<br>Claude gets references, not raw data.</h1>
+  <p class="hero-sub">memtree intercepts all Claude Code native tools <em>and</em> all MCP tool calls — reads, searches, web fetches, commands, agent invocations, skills — and routes them through a persistent SQLite property graph. Context shrinks 95–99%. Knowledge accumulates across sessions.</p>
+  <div class="why-grid">
+    <div class="why-card">
+      <div class="why-ico">🔥</div>
+      <h3 class="why-ttl">The Problem: Context Rot</h3>
+      <p class="why-body">Every tool call dumps raw file contents, grep output, and web pages straight into the context window. A session that reads 8 files, runs a few web fetches, and calls some MCP tools burns 60–80k tokens on raw data — leaving almost nothing for reasoning. The session stalls before the work is done.</p>
+    </div>
+    <div class="why-card">
+      <div class="why-ico">🌳</div>
+      <h3 class="why-ttl">The Solution: Hook Everything</h3>
+      <p class="why-body">memtree intercepts every tool call via Claude Code hooks — native <em>and</em> MCP. Content lands in a persistent SQLite property graph, chunked by symbol and indexed. Claude gets back a compact <code>nodeId</code> reference, not raw bytes. The same file read next week costs zero tokens — it's already in the graph.</p>
+    </div>
+    <div class="why-card">
+      <div class="why-ico">🚀</div>
+      <h3 class="why-ttl">The Payoff: 10× Sessions</h3>
+      <p class="why-body">Sessions that previously stalled at 40k tokens now run to completion. Knowledge accumulates across sessions — prior reads surface instantly via <code>memtree_compose</code>. You can explore an entire codebase, debug a production incident, and ship a feature all in one session. Context rot disappears.</p>
+    </div>
+  </div>
+  <div style="text-align:center;margin-top:28px;margin-bottom:36px">
+    <a href="https://github.com/joeblackwaslike/memtree/blob/main/docs/superpowers/specs/2026-05-17-memtree-design.md" class="spec-link" target="_blank" rel="noopener">📄 Read the spec →</a>
+  </div>
+  <div class="ctx-compare">
+    <div class="ctx-card">
+      <h3>❌ Without memtree</h3>
+      <div class="ctx-row"><span class="ctx-lbl">Read file</span><div class="ctx-bg"><div class="ctx-bar" style="width:100%;background:#f87171;opacity:.7"></div></div><span class="ctx-val">~4,200 tok</span></div>
+      <div class="ctx-row"><span class="ctx-lbl">Grep (8 files)</span><div class="ctx-bg"><div class="ctx-bar" style="width:100%;background:#fb923c;opacity:.7"></div></div><span class="ctx-val">~8,400 tok</span></div>
+      <div class="ctx-row"><span class="ctx-lbl">WebFetch</span><div class="ctx-bg"><div class="ctx-bar" style="width:100%;background:#f97316;opacity:.7"></div></div><span class="ctx-val">~11,000 tok</span></div>
+      <div class="ctx-row"><span class="ctx-lbl">MCP tool</span><div class="ctx-bg"><div class="ctx-bar" style="width:100%;background:#ea580c;opacity:.7"></div></div><span class="ctx-val">~3,600 tok</span></div>
+    </div>
+    <div class="ctx-card">
+      <h3>✅ With memtree</h3>
+      <div class="ctx-row"><span class="ctx-lbl">Read file</span><div class="ctx-bg"><div class="ctx-bar" style="width:1.5%;background:#4ade80"></div></div><span class="ctx-val">~60 tok</span></div>
+      <div class="ctx-row"><span class="ctx-lbl">Grep (8 files)</span><div class="ctx-bg"><div class="ctx-bar" style="width:2%;background:#4ade80"></div></div><span class="ctx-val">~160 tok</span></div>
+      <div class="ctx-row"><span class="ctx-lbl">WebFetch</span><div class="ctx-bg"><div class="ctx-bar" style="width:1%;background:#4ade80"></div></div><span class="ctx-val">~110 tok</span></div>
+      <div class="ctx-row"><span class="ctx-lbl">MCP tool</span><div class="ctx-bg"><div class="ctx-bar" style="width:2%;background:#4ade80"></div></div><span class="ctx-val">~70 tok</span></div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ARCHITECTURE -->
+<div id="arch" class="section">
+<div class="container">
+  <div class="sect-hdr">
+    <div class="sect-icon">🗄</div>
+    <div><h2>The Property Graph</h2><p style="color:var(--muted);font-size:13px;margin-top:2px">SQLite · FTS5 · Per-project · Content-hash deduplication · Click any node to explore</p></div>
+  </div>
+  <div class="flow">
+    <div class="flow-step accent" style="cursor:pointer" onclick="openPropPanel({kind:'hook',uri:'flow://hook-fires',props:{event:'PreToolUse',fires_on:'Read · Grep · Bash · WebFetch · PowerShell · Monitor · Agent · Skill · MCP',action:'Intercepts every matching tool call before execution',hook_file:'pretooluse-redirect.mjs'}})"><div class="flow-step-ico">🔗</div><div class="flow-step-t">Hook fires</div><div class="flow-step-s">PreToolUse</div></div>
+    <div class="flow-arr">→</div>
+    <div class="flow-step" style="cursor:pointer" onclick="openPropPanel({kind:'tool_call',uri:'flow://deny-native',props:{action:'Native tool call denied',result:'Raw output never enters context window',mechanism:'Hook returns {action:&quot;deny&quot;} to Claude Code runtime',benefit:'Prevents thousands of tokens of raw data'}})"><div class="flow-step-ico">🚫</div><div class="flow-step-t">Deny native</div><div class="flow-step-s">tool blocked</div></div>
+    <div class="flow-arr">→</div>
+    <div class="flow-step accent" style="cursor:pointer" onclick="openPropPanel({kind:'mcp_tool',uri:'flow://memtree-mcp',props:{tools:'memtree_read · memtree_grep · memtree_browse · memtree_search · memtree_compose · memtree_neighbors · memtree_monitor · memtree_note · memtree_recent · memtree_path_to_root',server:'memtree MCP server (Bun)',transport:'stdio'}})"><div class="flow-step-ico">🌳</div><div class="flow-step-t">memtree_*</div><div class="flow-step-s">MCP tool runs</div></div>
+    <div class="flow-arr">→</div>
+    <div class="flow-step" style="cursor:pointer" onclick="openPropPanel({kind:'file_chunk',uri:'flow://node-stored',props:{storage:'SQLite property graph (~/.memtree/<project-hash>/store.db)',indexed:'FTS5 full-text search',chunking:'tree-sitter semantic chunking for code',dedup:'content_hash deduplication — same file costs 0 tokens on re-read',edges:'parent → child, references, derived_from, follows, summarizes'}})"><div class="flow-step-ico">💾</div><div class="flow-step-t">Node stored</div><div class="flow-step-s">SQLite graph</div></div>
+    <div class="flow-arr">→</div>
+    <div class="flow-step accent" style="cursor:pointer" onclick="openPropPanel({kind:'file_chunk',uri:'flow://node-ref',props:{format:'nodeId (ULID — 26 chars)',example:'01HZQX9F4C2B7T8N3M5K6J0P1A',token_cost:'~60 tokens vs ~4200 for raw file',usage:'pass to memtree_compose() for budget-bounded recall',recall:'free on repeat — already in graph'}})"><div class="flow-step-ico">📎</div><div class="flow-step-t">Reference</div><div class="flow-step-s">returned to Claude</div></div>
+    <div class="flow-arr">→</div>
+    <div class="flow-step" style="cursor:pointer" onclick="openPropPanel({kind:'summary',uri:'flow://compose',props:{tool:'memtree_compose(nodeIds, budget)',budget:'token limit — compose stops when budget exhausted',traversal:'BFS from seed nodes, prioritises high-relevance neighbors',returns:'full content of each node up to budget',cross_session:'works across sessions — graph is persistent'}})"><div class="flow-step-ico">🎯</div><div class="flow-step-t">compose()</div><div class="flow-step-s">budget-bounded recall</div></div>
+  </div>
+  <h3 style="margin:20px 0 4px;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.07em">Node types — click any to inspect</h3>
+  <div class="node-legend" id="legend-nodes"></div>
+  <h3 style="margin:18px 0 4px;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.07em">Edge types</h3>
+  <div class="edge-legend" id="legend-edges"></div>
+</div>
+</div>
+
+<!-- READ -->
+<div id="read" class="tool-section">
+<div class="container">
+  <div class="tool-hdr">
+    <div class="tool-title"><span class="tool-name">Read</span><span class="tool-arrow">→</span><span class="tool-target">memtree_read</span></div>
+    <div class="badges"><span class="badge b-pre">PreToolUse</span><span class="badge b-deny">deny</span></div>
+  </div>
+  <p class="tool-tag">File content is semantically chunked (functions, classes, modules) into <tt>file_chunk</tt> nodes linked by <tt>next</tt> edges. Each chunk carries <tt>source_uri</tt>, <tt>content</tt>, <tt>size</tt>, and <tt>embedding</tt>. Claude gets compact references instead of raw source. <strong>Click any node to explore its properties.</strong></p>
+  <div class="ba">
+    <div class="ba-panel">
+      <div class="ba-hdr before">Without memtree<span class="tok hi">~4,200 tokens</span></div>
+      <div class="ba-body">
+        <div class="lbl">Claude calls</div>
+        <div class="cb"><span class="k">Read</span>({ <span class="p">file_path</span>: <span class="s">"/src/auth/login.ts"</span> })</div>
+        <div class="lbl">Raw output dumped to context</div>
+        <div class="ob raw"><span class="c">// 587 lines of TypeScript — auth/login.ts</span>
+<span class="k">import</span> { db } <span class="k">from</span> <span class="s">'../db'</span>
+<span class="k">import</span> jwt <span class="k">from</span> <span class="s">'jsonwebtoken'</span>
+<span class="k">export async function</span> <span class="f">login</span>(email, pw) {
+  <span class="k">const</span> user = <span class="k">await</span> db.users.findOne({ email })
+  <span class="c">// ... 580 more lines follow ...</span><div class="ob-fade"></div></div>
+      </div>
+    </div>
+    <div class="ba-panel">
+      <div class="ba-hdr after">With memtree<span class="tok lo">~62 tokens</span></div>
+      <div class="ba-body">
+        <div class="lbl">Hook denies Read → calls</div>
+        <div class="cb"><span class="k">memtree_read</span>({ <span class="p">path</span>: <span class="s">"/src/auth/login.ts"</span> })</div>
+        <div class="lbl">Returned to Claude</div>
+        <div class="ob compact"><span class="p">memtree_read</span> stored <span class="n">4</span> chunks:
+  <span class="k">fc-a1b2</span>  <span class="s">login.ts#imports</span>  <span class="c">152B</span>
+  <span class="k">fc-c3d4</span>  <span class="s">login.ts#login</span>    <span class="c">487B</span>
+  <span class="k">fc-e5f6</span>  <span class="s">login.ts#validateToken</span> <span class="c">312B</span>
+  <span class="k">fc-g7h8</span>  <span class="s">login.ts#logout</span>   <span class="c">198B</span></div>
+        <div class="savings">Saved <b>4,138 tokens</b> — 98.5% reduction</div>
+      </div>
+    </div>
+  </div>
+  <div class="graph-wrap" id="g-read">
+    <div class="graph-top">
+      <span class="graph-lbl">📄 Read · session → turn → tool_call → file → semantic chunks</span>
+      <div class="graph-ctrls"><button class="btn btn-play">▶ Play</button><button class="btn btn-rst">↺ Reset</button></div>
+    </div>
+    <div class="graph-svg" style="height:330px"></div>
+    <div class="g-leg">
+      <span class="gl-item"><span class="gl-dot" style="background:#334155"></span>session</span>
+      <span class="gl-item"><span class="gl-dot" style="background:#6d28d9"></span>turn</span>
+      <span class="gl-item"><span class="gl-dot" style="background:#c2410c"></span>tool_call</span>
+      <span class="gl-item"><span class="gl-dot" style="background:#0369a1"></span>file</span>
+      <span class="gl-item"><span class="gl-dot" style="background:#0ea5e9"></span>file_chunk</span>
+      <span class="gl-item"><span class="gl-line" style="background:#475569"></span>contains</span>
+      <span class="gl-item"><span class="gl-line" style="background:#38bdf8"></span>reads</span>
+      <span class="gl-item"><span class="gl-line" style="background:#4ade80"></span>next</span>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- GREP -->
+<div id="grep" class="tool-section">
+<div class="container">
+  <div class="tool-hdr">
+    <div class="tool-title"><span class="tool-name">Grep</span><span class="tool-arrow">→</span><span class="tool-target">memtree_grep</span></div>
+    <div class="badges"><span class="badge b-pre">PreToolUse</span><span class="badge b-deny">deny</span></div>
+  </div>
+  <p class="tool-tag">FTS5 full-text search stores matched files as <tt>file_chunk</tt> nodes linked via <tt>result</tt> edges. <strong>Click any file node to expand its semantic chunk stream inline.</strong> Re-runs return cached node IDs instantly.</p>
+  <div class="ba">
+    <div class="ba-panel">
+      <div class="ba-hdr before">Without memtree<span class="tok hi">~8,400 tokens</span></div>
+      <div class="ba-body">
+        <div class="lbl">Claude calls</div>
+        <div class="cb"><span class="k">Grep</span>({ <span class="p">pattern</span>: <span class="s">"useAuthContext"</span>, <span class="p">glob</span>: <span class="s">"**/*.tsx"</span> })</div>
+        <div class="ob raw"><span class="c">// Header.tsx (lines 12-28):</span>
+<span class="k">const</span> { user } = <span class="f">useAuthContext</span>()
+<span class="c">// Sidebar.tsx · Profile.tsx · Dashboard.tsx ...</span><div class="ob-fade"></div></div>
+      </div>
+    </div>
+    <div class="ba-panel">
+      <div class="ba-hdr after">With memtree<span class="tok lo">~160 tokens</span></div>
+      <div class="ba-body">
+        <div class="lbl">Hook denies Grep → calls</div>
+        <div class="cb"><span class="k">memtree_grep</span>({ <span class="p">pattern</span>: <span class="s">"useAuthContext"</span> })</div>
+        <div class="ob compact">Found <span class="n">4</span> matches — stored as nodes:
+  <span class="k">fc-h1i2</span>  Header.tsx#useAuthContext
+  <span class="k">fc-j3k4</span>  Sidebar.tsx#useAuthContext
+  <span class="k">fc-l5m6</span>  Profile.tsx#useAuthContext
+  <span class="k">fc-n7o8</span>  Dashboard.tsx#useAuthContext</div>
+        <div class="savings">Saved <b>8,240 tokens</b> — 98.1% reduction</div>
+      </div>
+    </div>
+  </div>
+  <div class="graph-wrap" id="g-grep">
+    <div class="graph-top">
+      <span class="graph-lbl">🔍 Grep · click file nodes to expand chunks</span>
+      <div class="graph-ctrls"><button class="btn btn-play">▶ Play</button><button class="btn btn-rst">↺ Reset</button></div>
+    </div>
+    <div class="graph-svg" style="height:380px"></div>
+    <div class="g-leg">
+      <span class="gl-item"><span class="gl-dot" style="background:#334155"></span>session</span>
+      <span class="gl-item"><span class="gl-dot" style="background:#6d28d9"></span>turn</span>
+      <span class="gl-item"><span class="gl-dot" style="background:#c2410c"></span>tool_call</span>
+      <span class="gl-item"><span class="gl-dot" style="background:#0ea5e9"></span>file_chunk</span>
+      <span class="gl-item"><span class="gl-line" style="background:#fb923c"></span>result</span>
+      <span class="gl-item"><span class="gl-line" style="background:#4ade80"></span>next (chunks)</span>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- WEBFETCH -->
+<div id="webfetch" class="tool-section">
+<div class="container">
+  <div class="tool-hdr">
+    <div class="tool-title"><span class="tool-name">WebFetch</span><span class="tool-arrow">→</span><span class="tool-target">memtree_browse</span></div>
+    <div class="badges"><span class="badge b-pre">PreToolUse</span><span class="badge b-deny">deny</span></div>
+  </div>
+  <p class="tool-tag">Fetched pages are stored as <tt>web_content</tt> nodes with an accessibility tree, ref numbers, and content chunks. <strong>Click the web_content node</strong> to see the full accessibility tree — each element has a ref you can use with Bash tools.</p>
+  <div class="graph-wrap" id="g-webfetch">
+    <div class="graph-top">
+      <span class="graph-lbl">🌐 WebFetch · click web_content to inspect accessibility tree</span>
+      <div class="graph-ctrls"><button class="btn btn-play">▶ Play</button><button class="btn btn-rst">↺ Reset</button></div>
+    </div>
+    <div class="graph-svg" style="height:300px"></div>
+    <div class="g-leg">
+      <span class="gl-item"><span class="gl-dot" style="background:#334155"></span>session</span>
+      <span class="gl-item"><span class="gl-dot" style="background:#6d28d9"></span>turn</span>
+      <span class="gl-item"><span class="gl-dot" style="background:#c2410c"></span>tool_call</span>
+      <span class="gl-item"><span class="gl-dot" style="background:#16a34a"></span>web_content</span>
+      <span class="gl-item"><span class="gl-line" style="background:#0ea5e9"></span>references</span>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- MONITOR -->
+<div id="monitor" class="tool-section">
+<div class="container">
+  <div class="tool-hdr">
+    <div class="tool-title"><span class="tool-name">Bash / Monitor</span><span class="tool-arrow">→</span><span class="tool-target">memtree_monitor</span></div>
+    <div class="badges"><span class="badge b-pre">PreToolUse</span><span class="badge b-post">PostToolUse</span><span class="badge b-capture">capture</span></div>
+  </div>
+  <p class="tool-tag">Long-running commands stream output as <tt>output_chunk</tt> nodes via <tt>next</tt> edges — like a Python generator. Read-only mode captures stdout. Read-write mode also allows sending stdin to the process.</p>
+  <div class="tab-bar">
+    <button class="tab-btn active" onclick="switchTab('monitor','ro')">Read-only (stdout capture)</button>
+    <button class="tab-btn" onclick="switchTab('monitor','rw')">Read-write (interactive)</button>
+  </div>
+  <div id="monitor-ro" class="tab-pane active">
+    <div class="graph-wrap" id="g-monitor-ro">
+      <div class="graph-top">
+        <span class="graph-lbl">💻 Monitor read-only · npm test --watch streaming</span>
+        <div class="graph-ctrls"><button class="btn btn-play">▶ Stream</button><button class="btn btn-rst">↺ Reset</button></div>
+      </div>
+      <div class="graph-svg" style="height:300px"></div>
+      <div class="g-leg">
+        <span class="gl-item"><span class="gl-dot" style="background:#c2410c"></span>tool_call</span>
+        <span class="gl-item"><span class="gl-dot" style="background:#ea580c"></span>output_chunk</span>
+        <span class="gl-item"><span class="gl-line" style="background:#818cf8"></span>derived_from</span>
+        <span class="gl-item"><span class="gl-line" style="background:#4ade80"></span>next</span>
+      </div>
+    </div>
+  </div>
+  <div id="monitor-rw" class="tab-pane">
+    <div class="graph-wrap" id="g-monitor-rw">
+      <div class="graph-top">
+        <span class="graph-lbl">💻 Monitor read-write · python repl · send + receive</span>
+        <div class="graph-ctrls"><button class="btn btn-play">▶ Stream</button><button class="btn btn-rst">↺ Reset</button></div>
+      </div>
+      <div class="graph-svg" style="height:340px"></div>
+      <div class="g-leg">
+        <span class="gl-item"><span class="gl-dot" style="background:#c2410c"></span>tool_call</span>
+        <span class="gl-item"><span class="gl-dot" style="background:#ea580c"></span>output_chunk</span>
+        <span class="gl-item"><span class="gl-dot" style="background:#059669"></span>input_chunk</span>
+        <span class="gl-item"><span class="gl-line" style="background:#4ade80"></span>next</span>
+        <span class="gl-item"><span class="gl-dash" style="color:#34d399"></span>sends</span>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- WEBSEARCH -->
+<div id="websearch" class="tool-section">
+<div class="container">
+  <div class="tool-hdr">
+    <div class="tool-title"><span class="tool-name">WebSearch</span><span class="tool-arrow">→</span><span class="tool-target">memtree_search</span></div>
+    <div class="badges"><span class="badge b-pre">PreToolUse</span><span class="badge b-deny">deny</span></div>
+  </div>
+  <p class="tool-tag">Search results are stored as <tt>web_result</tt> stub nodes with URL, status, title, etag, and last-updated. Failed fetches are marked red. Any result can be expanded via <tt>memtree_browse</tt>.</p>
+  <div class="graph-wrap" id="g-websearch">
+    <div class="graph-top">
+      <span class="graph-lbl">📡 WebSearch · result nodes with status — red = failed</span>
+      <div class="graph-ctrls"><button class="btn btn-play">▶ Play</button><button class="btn btn-rst">↺ Reset</button></div>
+    </div>
+    <div class="graph-svg" style="height:310px"></div>
+    <div class="g-leg">
+      <span class="gl-item"><span class="gl-dot" style="background:#0f766e"></span>web_result (200)</span>
+      <span class="gl-item"><span class="gl-dot" style="background:#b91c1c"></span>web_result (error)</span>
+      <span class="gl-item"><span class="gl-line" style="background:#fb923c"></span>result</span>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- AGENT -->
+<div id="agent" class="tool-section">
+<div class="container">
+  <div class="tool-hdr">
+    <div class="tool-title"><span class="tool-name">Agent</span><span class="tool-arrow">→</span><span class="tool-target">sub-session graph</span></div>
+    <div class="badges"><span class="badge b-enrich">enriched</span><span class="badge b-capture">capture</span></div>
+  </div>
+  <p class="tool-tag">Agent tool calls create a nested subgraph — its own session, turns, tool calls, and results. When complete, the subgraph collapses to a <tt>summary</tt> node returned to the calling agent. The full subgraph remains inspectable.</p>
+  <div class="graph-wrap" id="g-agent">
+    <div class="graph-top">
+      <span class="graph-lbl">🤖 Agent · subgraph collapses to summary — click to expand/collapse</span>
+      <div class="graph-ctrls"><button class="btn btn-play">▶ Play</button><button class="btn btn-rst">↺ Reset</button></div>
+    </div>
+    <div class="graph-svg" style="height:440px"></div>
+    <div class="g-leg">
+      <span class="gl-item"><span class="gl-dot" style="background:#334155"></span>session</span>
+      <span class="gl-item"><span class="gl-dot" style="background:#6d28d9"></span>turn</span>
+      <span class="gl-item"><span class="gl-dot" style="background:#c2410c"></span>tool_call</span>
+      <span class="gl-item"><span class="gl-dot" style="background:#831843"></span>summary</span>
+      <span class="gl-item"><span class="gl-line" style="background:#f59e0b"></span>summarizes</span>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- SKILL -->
+<div id="skill" class="tool-section">
+<div class="container">
+  <div class="tool-hdr">
+    <div class="tool-title"><span class="tool-name">Skill</span><span class="tool-arrow">→</span><span class="tool-target">skill graph</span></div>
+    <div class="badges"><span class="badge b-pre">PreToolUse</span><span class="badge b-post">PostToolUse</span></div>
+  </div>
+  <p class="tool-tag">Invoking a Skill creates a <tt>skill</tt> node backed by a SKILL.md file. The file is chunked into step/diagram chunks, linked to referenced assets, and connected to its plugin. Cached on second load via content hash.</p>
+  <div class="graph-wrap" id="g-skill">
+    <div class="graph-top">
+      <span class="graph-lbl">✦ Skill · SKILL.md → chunks → assets → plugin</span>
+      <div class="graph-ctrls"><button class="btn btn-play">▶ Play</button><button class="btn btn-rst">↺ Reset</button></div>
+    </div>
+    <div class="graph-svg" style="height:400px"></div>
+    <div class="g-leg">
+      <span class="gl-item"><span class="gl-dot" style="background:#92400e"></span>skill</span>
+      <span class="gl-item"><span class="gl-dot" style="background:#d97706"></span>skill_chunk</span>
+      <span class="gl-item"><span class="gl-dot" style="background:#6b21a8"></span>plugin</span>
+      <span class="gl-item"><span class="gl-dot" style="background:#0369a1"></span>file (asset)</span>
+      <span class="gl-item"><span class="gl-line" style="background:#475569"></span>contains</span>
+      <span class="gl-item"><span class="gl-line" style="background:#0ea5e9"></span>references</span>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- MCP TOOLS -->
+<div id="mcp" class="tool-section">
+<div class="container">
+  <div class="tool-hdr">
+    <div class="tool-title"><span class="tool-name">MCP Tools</span><span class="tool-arrow">→</span><span class="tool-target">mcp_tool nodes</span></div>
+    <div class="badges"><span class="badge b-mcp">MCP</span><span class="badge b-pre">PreToolUse</span><span class="badge b-post">PostToolUse</span></div>
+  </div>
+  <p class="tool-tag">memtree intercepts <em>all</em> MCP tool calls, not just native Claude Code tools. Every MCP server invocation creates a <tt>mcp_tool</tt> node linked to the <tt>mcp_server</tt> and tool call result, storing arguments, output, and timing metadata.</p>
+  <div class="graph-wrap" id="g-mcp">
+    <div class="graph-top">
+      <span class="graph-lbl">⚙ MCP · session → turn → tool_call → mcp_server → result</span>
+      <div class="graph-ctrls"><button class="btn btn-play">▶ Play</button><button class="btn btn-rst">↺ Reset</button></div>
+    </div>
+    <div class="graph-svg" style="height:300px"></div>
+    <div class="g-leg">
+      <span class="gl-item"><span class="gl-dot" style="background:#5b21b6"></span>mcp_server</span>
+      <span class="gl-item"><span class="gl-dot" style="background:#7c3aed"></span>mcp_tool</span>
+      <span class="gl-item"><span class="gl-dot" style="background:#ea580c"></span>output_chunk</span>
+      <span class="gl-item"><span class="gl-line" style="background:#818cf8"></span>derived_from</span>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- PROMPT ANATOMY -->
+<div id="prompt" class="tool-section">
+<div class="container">
+  <div class="sect-hdr">
+    <div class="sect-icon">💬</div>
+    <div><h2>Prompt Anatomy</h2><p style="color:var(--muted);font-size:13px;margin-top:2px">Every turn is a linear graph: prompt → thinking → response → tool_calls → questions → choices</p></div>
+  </div>
+  <p class="tool-tag">Turns descend from sessions. Each turn contains a sequential chain: user prompt, LLM thinking blocks, response text, tool calls, and AskUserQuestion nodes with choice nodes. Selected choices continue the conversation (green).</p>
+  <div class="graph-wrap" id="g-prompt">
+    <div class="graph-top">
+      <span class="graph-lbl">💬 Prompt anatomy · session → turn → prompt → thinking → response → question → choices</span>
+      <div class="graph-ctrls"><button class="btn btn-play">▶ Play</button><button class="btn btn-rst">↺ Reset</button></div>
+    </div>
+    <div class="graph-svg" style="height:400px"></div>
+    <div class="g-leg">
+      <span class="gl-item"><span class="gl-dot" style="background:#7e22ce"></span>prompt</span>
+      <span class="gl-item"><span class="gl-dot" style="background:#4338ca"></span>thinking</span>
+      <span class="gl-item"><span class="gl-dot" style="background:#075985"></span>response</span>
+      <span class="gl-item"><span class="gl-dot" style="background:#b45309"></span>question</span>
+      <span class="gl-item"><span class="gl-dot" style="background:#166534"></span>choice (selected)</span>
+      <span class="gl-item"><span class="gl-dot" style="background:#475569"></span>choice</span>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- FULL CONVERSATION -->
+<div id="convo" class="section">
+<div class="container">
+  <div class="sect-hdr">
+    <div class="sect-icon">🌳</div>
+    <div><h2>Full Conversation Tree</h2><p style="color:var(--muted);font-size:13px;margin-top:2px">A non-trivial session — drag nodes, scroll to zoom, click to inspect</p></div>
+  </div>
+  <div class="graph-wrap" id="g-convo">
+    <div class="graph-top">
+      <span class="graph-lbl">🌳 Full convo · force-directed · drag · zoom · click nodes</span>
+      <div class="graph-ctrls">
+        <button class="btn" onclick="resetConvoZoom()">↺ Fit</button>
+      </div>
+    </div>
+    <div class="graph-svg" style="height:580px"></div>
+    <div class="g-leg" id="convo-leg"></div>
+  </div>
+</div>
+</div>
+
+<!-- HOOKS -->
+<div id="hooks" class="section">
+<div class="container">
+  <div class="sect-hdr">
+    <div class="sect-icon">⧖</div>
+    <div><h2>Hook Pipeline</h2><p style="color:var(--muted);font-size:13px;margin-top:2px">PreToolUse · PostToolUse · SessionStart · UserPromptSubmit · Stop</p></div>
+  </div>
+  <div class="graph-wrap" id="g-hooks">
+    <div class="graph-top">
+      <span class="graph-lbl">⧖ Hooks · tool invocation → pre-hook → allow/deny → execute → post-hook → capture</span>
+      <div class="graph-ctrls"><button class="btn btn-play">▶ Play</button><button class="btn btn-rst">↺ Reset</button></div>
+    </div>
+    <div class="graph-svg" style="height:340px"></div>
+    <div class="g-leg">
+      <span class="gl-item"><span class="gl-dot" style="background:#be123c"></span>hook</span>
+      <span class="gl-item"><span class="gl-dot" style="background:#c2410c"></span>tool_call</span>
+      <span class="gl-item"><span class="gl-dash" style="color:#f472b6"></span>triggers</span>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- HOOK REFERENCE -->
+<div id="hookref" class="section">
+<div class="container">
+  <div class="sect-hdr">
+    <div class="sect-icon">⧖</div>
+    <div><h2>Hook Reference</h2><p style="color:var(--muted);font-size:13px;margin-top:2px">Every hook, when it fires, and exactly what it does</p></div>
+  </div>
+  <div class="hook-ref-grid">
+
+    <!-- session-start -->
+    <div class="hook-card">
+      <div class="hook-card-hdr">
+        <span class="hook-event he-start">SessionStart</span>
+        <span class="hook-file">session-start.mjs</span>
+        <span class="hook-tool-tag">startup · resume</span>
+      </div>
+      <div class="hook-card-body">
+        <div class="hook-col">
+          <div class="hook-col-lbl">When it fires</div>
+          <div class="hook-col-body">On session <code>startup</code> or <code>resume</code> events. Skips compaction and clear noise so the injection doesn't repeat mid-session.</div>
+        </div>
+        <div class="hook-col">
+          <div class="hook-col-lbl">What it does</div>
+          <div class="hook-col-body">Injects the full memtree tool usage guide into context — always-on redirects, graph navigation commands (<code>memtree_neighbors</code>, <code>memtree_search</code>, <code>memtree_compose</code>, <code>memtree_recent</code>), and the read→nodeId→compose workflow pattern.<br><span class="hook-result-badge hr-inject">✦ additionalContext injected</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- userpromptsubmit-capture -->
+    <div class="hook-card">
+      <div class="hook-card-hdr">
+        <span class="hook-event he-prompt">UserPromptSubmit</span>
+        <span class="hook-file">userpromptsubmit-capture.mjs</span>
+        <span class="hook-tool-tag">all prompts</span>
+      </div>
+      <div class="hook-card-body">
+        <div class="hook-col">
+          <div class="hook-col-lbl">When it fires</div>
+          <div class="hook-col-body">Every time the user submits a non-empty prompt. Requires memtree store to be initialized for the project.</div>
+        </div>
+        <div class="hook-col">
+          <div class="hook-col-lbl">What it does</div>
+          <div class="hook-col-body">Stores the prompt as a <code>prompt</code> node in the graph with a content-hash URI. Injects the resulting <code>nodeId</code> into context so subagents can reference the prompt without re-reading it. Prior prompts surface in future sessions via <code>memtree_search</code>.<br><span class="hook-result-badge hr-inject">✦ nodeId injected</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- pretooluse-redirect -->
+    <div class="hook-card">
+      <div class="hook-card-hdr">
+        <span class="hook-event he-pre">PreToolUse</span>
+        <span class="hook-file">pretooluse-redirect.mjs</span>
+        <span class="hook-tool-tag">Read · Grep · Bash · WebFetch · Monitor</span>
+      </div>
+      <div class="hook-card-body">
+        <div class="hook-col">
+          <div class="hook-col-lbl">When it fires</div>
+          <div class="hook-col-body">On <strong>Read</strong> of any code or config file extension (.ts, .py, .json, .md, .yaml…). On <strong>Grep</strong>. On <strong>Bash</strong> commands containing grep, rg, ag, cat, bat. On <strong>WebFetch</strong>. On <strong>Monitor</strong>. On PowerShell equivalents (Select-String, Get-Content, Invoke-WebRequest).</div>
+        </div>
+        <div class="hook-col">
+          <div class="hook-col-lbl">What it does</div>
+          <div class="hook-col-body">Hard-denies the native tool call and emits the exact memtree replacement (<code>memtree_read</code>, <code>memtree_grep</code>, <code>memtree_browse</code>, <code>memtree_monitor</code>) as <code>additionalContext</code>. Claude sees the denial as a tool error and immediately retries with the correct memtree tool — no round-trip wasted.<br><span class="hook-result-badge hr-deny">✕ permissionDecision: deny</span><span class="hook-result-badge hr-inject" style="margin-left:4px">✦ replacement injected</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- pretooluse-agent-enrich -->
+    <div class="hook-card">
+      <div class="hook-card-hdr">
+        <span class="hook-event he-pre">PreToolUse</span>
+        <span class="hook-file">pretooluse-agent-enrich.mjs</span>
+        <span class="hook-tool-tag">Agent tool</span>
+      </div>
+      <div class="hook-card-body">
+        <div class="hook-col">
+          <div class="hook-col-lbl">When it fires</div>
+          <div class="hook-col-body">Every time Claude invokes the <strong>Agent</strong> tool to spawn a subagent. Fires before the subagent starts, giving it access to prior session context.</div>
+        </div>
+        <div class="hook-col">
+          <div class="hook-col-lbl">What it does</div>
+          <div class="hook-col-body">Lazily creates a <code>session</code> node. Injects the memtree tool map into the subagent prompt. If the store is populated, runs an FTS keyword search on the task text and prepends the top hits so the subagent starts with relevant context. Writes a state file timestamped for the PostToolUse capture hook to collect after the subagent finishes.<br><span class="hook-result-badge hr-inject">✦ additionalContext in subagent prompt</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- pretooluse-skill-recall -->
+    <div class="hook-card">
+      <div class="hook-card-hdr">
+        <span class="hook-event he-pre">PreToolUse</span>
+        <span class="hook-file">pretooluse-skill-recall.mjs</span>
+        <span class="hook-tool-tag">Skill tool</span>
+      </div>
+      <div class="hook-card-body">
+        <div class="hook-col">
+          <div class="hook-col-lbl">When it fires</div>
+          <div class="hook-col-body">Every time Claude invokes the <strong>Skill</strong> tool. First-time loads pass through normally. On repeat invocations (same or different session), the hook short-circuits disk I/O.</div>
+        </div>
+        <div class="hook-col">
+          <div class="hook-col-lbl">What it does</div>
+          <div class="hook-col-body">Looks up <code>skill://&lt;name&gt;</code> in the graph store. If found, denies the Skill tool and injects a compact reference pointing to the cached node — Claude calls <code>memtree_compose([nodeId], budget)</code> instead of reloading from disk. Cache miss: passthrough, skill loads normally.<br><span class="hook-result-badge hr-deny">✕ deny (cache hit)</span><span class="hook-result-badge hr-pass" style="margin-left:4px">→ passthrough (miss)</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- pretooluse-proxy -->
+    <div class="hook-card">
+      <div class="hook-card-hdr">
+        <span class="hook-event he-pre">PreToolUse</span>
+        <span class="hook-file">pretooluse-proxy.mjs</span>
+        <span class="hook-tool-tag">Read · Grep · WebFetch (proxy mode)</span>
+      </div>
+      <div class="hook-card-body">
+        <div class="hook-col">
+          <div class="hook-col-lbl">When it fires</div>
+          <div class="hook-col-body">Only active when <code>~/.memtree/proxy-mode</code> flag file exists. Provides a lighter alternative to the hard-redirect hook — advises rather than denies.</div>
+        </div>
+        <div class="hook-col">
+          <div class="hook-col-lbl">What it does</div>
+          <div class="hook-col-body">Rewrites the native tool call into the memtree equivalent and injects it as a soft advisory: "do not call <code>Read</code> directly — call this instead: <code>memtree_read({file_path: …})</code>". Does not deny; Claude is nudged but not blocked. Useful for gradual adoption or debugging.<br><span class="hook-result-badge hr-inject">✦ soft advisory injected</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- posttooluse-agent-capture -->
+    <div class="hook-card">
+      <div class="hook-card-hdr">
+        <span class="hook-event he-post">PostToolUse</span>
+        <span class="hook-file">posttooluse-agent-capture.mjs</span>
+        <span class="hook-tool-tag">Agent tool completes</span>
+      </div>
+      <div class="hook-card-body">
+        <div class="hook-col">
+          <div class="hook-col-lbl">When it fires</div>
+          <div class="hook-col-body">After the <strong>Agent</strong> tool returns. Reads the state file written by the PreToolUse enrich hook to find which session spawned the subagent and when it started.</div>
+        </div>
+        <div class="hook-col">
+          <div class="hook-col-lbl">What it does</div>
+          <div class="hook-col-body">Queries all nodes created during the subagent's time window. Creates a <code>note</code> summary node as a child of the parent session. Emits <code>summarizes</code> edges from the summary to each captured subagent node. Deletes the state file. Result: <code>memtree_neighbors(sessionNodeId)</code> surfaces the full subagent work without the parent agent managing any links.<br><span class="hook-result-badge hr-silent">◉ silent graph update</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- posttooluse-skill-capture -->
+    <div class="hook-card">
+      <div class="hook-card-hdr">
+        <span class="hook-event he-post">PostToolUse</span>
+        <span class="hook-file">posttooluse-skill-capture.mjs</span>
+        <span class="hook-tool-tag">Skill tool completes</span>
+      </div>
+      <div class="hook-card-body">
+        <div class="hook-col">
+          <div class="hook-col-lbl">When it fires</div>
+          <div class="hook-col-body">After the <strong>Skill</strong> tool returns successfully with content ≥50 chars. Skips empty or trivially short results that aren't worth caching.</div>
+        </div>
+        <div class="hook-col">
+          <div class="hook-col-lbl">What it does</div>
+          <div class="hook-col-body">Stores the full skill markdown as a <code>note</code> node keyed by <code>skill://&lt;name&gt;</code>. Content-hash deduplication means re-saving the same skill is a no-op. The PreToolUse recall hook will find this node on the next invocation and short-circuit disk access.<br><span class="hook-result-badge hr-silent">◉ silent graph update</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- posttooluse-websearch-capture -->
+    <div class="hook-card">
+      <div class="hook-card-hdr">
+        <span class="hook-event he-post">PostToolUse</span>
+        <span class="hook-file">posttooluse-websearch-capture.mjs</span>
+        <span class="hook-tool-tag">WebSearch tool completes</span>
+      </div>
+      <div class="hook-card-body">
+        <div class="hook-col">
+          <div class="hook-col-lbl">When it fires</div>
+          <div class="hook-col-body">After any <strong>WebSearch</strong> (or MCP search tool) returns. Extracts up to 5 URLs from the result. Only processes results containing recognizable URL fields (<code>url</code>, <code>link</code>, <code>href</code>).</div>
+        </div>
+        <div class="hook-col">
+          <div class="hook-col-lbl">What it does</div>
+          <div class="hook-col-body">Fire-and-forget: fetches each URL via <code>memtree_browse</code> and stores it as a compact <code>web_chunk</code> node. Does not inject any context or block the response. The stored pages surface in future sessions via <code>memtree_search</code> and the Agent enrichment hook's FTS pass.<br><span class="hook-result-badge hr-silent">◉ fire-and-forget, no output</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- stop-response-capture -->
+    <div class="hook-card">
+      <div class="hook-card-hdr">
+        <span class="hook-event he-stop">Stop</span>
+        <span class="hook-file">stop-response-capture.mjs</span>
+        <span class="hook-tool-tag">end of every response turn</span>
+      </div>
+      <div class="hook-card-body">
+        <div class="hook-col">
+          <div class="hook-col-lbl">When it fires</div>
+          <div class="hook-col-body">After Claude finishes generating each response turn. Skips re-entrant calls (<code>stop_hook_active</code>). Requires the memtree store to be initialized and a valid <code>transcript_path</code> in the hook payload.</div>
+        </div>
+        <div class="hook-col">
+          <div class="hook-col-lbl">What it does</div>
+          <div class="hook-col-body">Reads the session transcript JSONL, extracts the last assistant message, and stores up to two nodes: a <code>thinking</code> node (if thinking blocks are present, including redacted) and a <code>response</code> node (text blocks concatenated). Wires the full conversation chain via <code>follows</code> edges (<code>prompt → thinking → response</code>) and causal <code>derived_from</code> edges. Position-based dedup via <code>source_uri</code> prevents double-storing on replay.<br><span class="hook-result-badge hr-silent">◉ silent — no context injected</span></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+</div>
+
+<!-- PROCESSING PIPELINE -->
+<div id="pipeline" class="section">
+<div class="container">
+  <div class="sect-hdr">
+    <div class="sect-icon">⚡</div>
+    <div><h2>Processing Pipeline</h2><p style="color:var(--muted);font-size:13px;margin-top:2px">Walker · Chunker · Embedder · Indexer · Summarizer · Dedupe</p></div>
+  </div>
+  <div class="pipeline">
+    <div class="pipe-step"><div class="pipe-step-ico">📥</div><div class="pipe-step-t">Raw Node</div><div class="pipe-step-s">ingested, status=raw</div></div>
+    <div class="pipe-arr">→</div>
+    <div class="pipe-step pulse"><div class="pipe-step-ico">🚶</div><div class="pipe-step-t">Walker</div><div class="pipe-step-s">picks up raw nodes<br>in background</div></div>
+    <div class="pipe-arr">→</div>
+    <div class="pipe-step hi"><div class="pipe-step-ico">✂️</div><div class="pipe-step-t">Chunker</div><div class="pipe-step-s">semantic splits<br>by symbol / heading</div></div>
+    <div class="pipe-arr">→</div>
+    <div class="pipe-step hi"><div class="pipe-step-ico">🧮</div><div class="pipe-step-t">Embedder</div><div class="pipe-step-s">text-embedding-3<br>vector per chunk</div></div>
+    <div class="pipe-arr">→</div>
+    <div class="pipe-step hi"><div class="pipe-step-ico">🗃️</div><div class="pipe-step-t">Indexer</div><div class="pipe-step-s">SQLite vec_index<br>FTS5 full-text</div></div>
+    <div class="pipe-arr">→</div>
+    <div class="pipe-step"><div class="pipe-step-ico">📝</div><div class="pipe-step-t">Summarizer</div><div class="pipe-step-s">LLM digest<br>per node</div></div>
+    <div class="pipe-arr">→</div>
+    <div class="pipe-step"><div class="pipe-step-ico">♻️</div><div class="pipe-step-t">Dedupe</div><div class="pipe-step-s">content-hash<br>near-duplicate merge</div></div>
+    <div class="pipe-arr">→</div>
+    <div class="pipe-step hi"><div class="pipe-step-ico">✅</div><div class="pipe-step-t">Indexed</div><div class="pipe-step-s">status=indexed<br>searchable</div></div>
+  </div>
+  <div class="graph-wrap" id="g-pipeline">
+    <div class="graph-top">
+      <span class="graph-lbl">⚡ Pipeline · walker processes a raw node through to indexed</span>
+      <div class="graph-ctrls"><button class="btn btn-play">▶ Animate</button><button class="btn btn-rst">↺ Reset</button></div>
+    </div>
+    <div class="graph-svg" style="height:260px"></div>
+  </div>
+</div>
+</div>
+
+<!-- SEARCH -->
+<div id="search" class="section">
+<div class="container">
+  <div class="sect-hdr">
+    <div class="sect-icon">🔎</div>
+    <div><h2>Search Visualizations</h2><p style="color:var(--muted);font-size:13px;margin-top:2px">Semantic · Hybrid · Compose · JSONPath · Metadata · Neighbors · PathToRoot · Recent</p></div>
+  </div>
+  <div style="background:var(--bg1);border:1px solid var(--border);border-radius:var(--r);overflow:hidden">
+    <div class="tab-bar" style="border-bottom:1px solid var(--border)">
+      <button class="tab-btn active" onclick="switchSearchTab('semantic')">Semantic</button>
+      <button class="tab-btn" onclick="switchSearchTab('hybrid')">Hybrid</button>
+      <button class="tab-btn" onclick="switchSearchTab('compose')">Compose</button>
+      <button class="tab-btn" onclick="switchSearchTab('jsonpath')">JSONPath</button>
+      <button class="tab-btn" onclick="switchSearchTab('metadata')">Metadata</button>
+      <button class="tab-btn" onclick="switchSearchTab('neighbors')">Neighbors</button>
+      <button class="tab-btn" onclick="switchSearchTab('pathroot')">PathToRoot</button>
+      <button class="tab-btn" onclick="switchSearchTab('recent')">Recent</button>
+    </div>
+    <div id="search-semantic" class="tab-pane active" style="padding:20px"></div>
+    <div id="search-hybrid" class="tab-pane" style="padding:20px"></div>
+    <div id="search-compose" class="tab-pane" style="padding:20px"></div>
+    <div id="search-jsonpath" class="tab-pane" style="padding:20px"></div>
+    <div id="search-metadata" class="tab-pane" style="padding:20px"></div>
+    <div id="search-neighbors" class="tab-pane" style="padding:20px"></div>
+    <div id="search-pathroot" class="tab-pane" style="padding:20px"></div>
+    <div id="search-recent" class="tab-pane" style="padding:20px"></div>
+  </div>
+</div>
+</div>
+
+<!-- NODE STATE MACHINE -->
+<div id="states" class="section">
+<div class="container">
+  <div class="sect-hdr">
+    <div class="sect-icon">◈</div>
+    <div><h2>Node State Machine</h2><p style="color:var(--muted);font-size:13px;margin-top:2px">How nodes move through raw → processing → indexed → stale → pruned</p></div>
+  </div>
+  <div class="state-grid" id="state-grid"></div>
+  <h3 style="margin:16px 0 8px;font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">State transitions</h3>
+  <div class="state-transitions" id="state-transitions"></div>
+  <div class="graph-wrap" style="margin-top:20px" id="g-states">
+    <div class="graph-top">
+      <span class="graph-lbl">◈ State machine · walker processes nodes through lifecycle</span>
+      <div class="graph-ctrls"><button class="btn btn-play" id="states-play">▶ Animate</button><button class="btn btn-rst" id="states-rst">↺ Reset</button></div>
+    </div>
+    <div class="graph-svg" style="height:310px"></div>
+  </div>
+</div>
+</div>
+
+<!-- INSTALL -->
+<div id="install" class="section">
+<div class="container">
+  <div class="sect-hdr">
+    <div class="sect-icon">📦</div>
+    <div><h2>Install</h2><p style="color:var(--muted);font-size:13px;margin-top:2px">Plugin marketplace · hooks auto-configured · works with any Claude Code project</p></div>
+  </div>
+
+  <div class="install-steps">
+    <div class="install-step">
+      <div class="install-step-num">1</div>
+      <div class="install-step-body">
+        <div class="install-step-ttl">Add the agent marketplace</div>
+        <div class="install-step-desc">Joe's self-hosted marketplace hosts memtree and other agent plugins. Register it once globally — available across all your Claude Code sessions.</div>
+        <div class="install-cmd">/plugin marketplace add joeblackwaslike/agent-marketplace</div>
+      </div>
+    </div>
+    <div class="install-step">
+      <div class="install-step-num">2</div>
+      <div class="install-step-body">
+        <div class="install-step-ttl">Install the memtree plugin</div>
+        <div class="install-step-desc">Installs the MCP server, all hooks, and skills in one command. Hooks are written to <code style="font-family:var(--mono);font-size:11px;color:var(--sky)">~/.claude/settings.json</code> automatically.</div>
+        <div class="install-cmd">/plugin install memtree@agent-marketplace</div>
+      </div>
+    </div>
+    <div class="install-step">
+      <div class="install-step-num">3</div>
+      <div class="install-step-body">
+        <div class="install-step-ttl">Verify hooks are active</div>
+        <div class="install-step-desc">Start a new Claude Code session. You should see the memtree context injection message on session start. Read any file — it will be redirected to <code style="font-family:var(--mono);font-size:11px;color:var(--sky)">memtree_read</code> automatically.</div>
+        <div class="install-cmd">memtree_recent()   # should return an empty list on first run</div>
+      </div>
+    </div>
+    <div class="install-step">
+      <div class="install-step-num">4</div>
+      <div class="install-step-body">
+        <div class="install-step-ttl">Requirements</div>
+        <div class="install-step-desc">memtree requires Bun for the MCP server and ripgrep for the grep tool.</div>
+        <div class="install-cmd"># macOS
+brew install bun ripgrep
+
+# Linux
+curl -fsSL https://bun.sh/install | bash
+apt install ripgrep   # or: cargo install ripgrep</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="install-links">
+    <a href="https://github.com/joeblackwaslike/memtree" class="install-link il-github" target="_blank" rel="noopener">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/></svg>
+      GitHub · joeblackwaslike/memtree
+    </a>
+    <a href="https://github.com/joeblackwaslike/agent-marketplace" class="install-link il-market" target="_blank" rel="noopener">
+      🛒 Agent Marketplace
+    </a>
+    <a href="https://github.com/joeblackwaslike/memtree/blob/main/docs/superpowers/specs/2026-05-17-memtree-design.md" class="install-link il-github" target="_blank" rel="noopener">
+      📄 Design Spec
+    </a>
+  </div>
+</div>
+</div>
+
+<footer>
+  <div class="container">memtree · SQLite property graph for Claude Code · <a href="https://github.com/joeblackwaslike/memtree" style="color:var(--sky);text-decoration:none">github.com/joeblackwaslike/memtree</a> · <a href="https://github.com/joeblackwaslike/agent-marketplace" style="color:var(--muted);text-decoration:none">agent-marketplace</a></div>
+</footer>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// TYPE SYSTEM
+// ═══════════════════════════════════════════════════════════════
+const NK = {
+  session:     '#334155', turn:        '#6d28d9', tool_call:   '#c2410c',
+  file:        '#0369a1', file_chunk:  '#0ea5e9', web_content: '#16a34a',
+  web_result:  '#0f766e', web_result_err:'#b91c1c', output_chunk:'#ea580c',
+  input_chunk: '#059669', skill:       '#92400e', skill_chunk: '#d97706',
+  sub_graph:   '#7f1d1d', observation: '#7e22ce', prompt:      '#7e22ce',
+  thinking:    '#4338ca', response:    '#075985', question:    '#b45309', choice:      '#475569',
+  choice_sel:  '#166534', hook:        '#be123c', memory:      '#065f46',
+  mcp_server:  '#5b21b6', mcp_tool:    '#7c3aed', plugin:      '#6b21a8',
+  slash_cmd:   '#9d174d', summary:     '#831843', file_asset:  '#0c4a6e',
+};
+const NI = {
+  session:'⬡', turn:'◎', tool_call:'⚡', file:'▤', file_chunk:'{}',
+  web_content:'⊕', web_result:'⊞', web_result_err:'⊠', output_chunk:'▶',
+  input_chunk:'◀', skill:'✦', skill_chunk:'◈', sub_graph:'⬡',
+  observation:'◉', prompt:'◉', thinking:'⊗', response:'◍', question:'?', choice:'○',
+  choice_sel:'●', hook:'⧖', memory:'◆', mcp_server:'⚙', mcp_tool:'⊡',
+  plugin:'◩', slash_cmd:'/', summary:'◈', file_asset:'▤',
+};
+const EK = {
+  contains:    { color:'#475569', dash:'' },
+  references:  { color:'#0ea5e9', dash:'' },
+  derived_from:{ color:'#818cf8', dash:'' },
+  summarizes:  { color:'#f59e0b', dash:'' },
+  supersedes:  { color:'#f87171', dash:'' },
+  follows:     { color:'#4ade80', dash:'4,2' },
+  next:        { color:'#4ade80', dash:'' },
+  result:      { color:'#fb923c', dash:'' },
+  triggers:    { color:'#f472b6', dash:'5,3' },
+  reads:       { color:'#38bdf8', dash:'' },
+  captures:    { color:'#c084fc', dash:'3,3' },
+  sends:       { color:'#34d399', dash:'4,3' },
+  belongs_to:  { color:'#6d28d9', dash:'2,4' },
+};
+
+// ═══════════════════════════════════════════════════════════════
+// BUILD LEGENDS
+// ═══════════════════════════════════════════════════════════════
+const nodeLegendItems = [
+  ['session','⬡','One Claude Code session'],
+  ['turn','◎','Conversation turn'],
+  ['tool_call','⚡','Tool invocation'],
+  ['file','▤','Root file node'],
+  ['file_chunk','{}','Semantic code chunk'],
+  ['web_content','⊕','Fetched web page'],
+  ['web_result','⊞','Search result stub'],
+  ['output_chunk','▶','Command output chunk'],
+  ['input_chunk','◀','Stdin sent to process'],
+  ['skill','✦','Skill definition'],
+  ['skill_chunk','◈','Skill step / diagram'],
+  ['prompt','◉','User prompt node'],
+  ['thinking','⊗','LLM thinking block'],
+  ['response','◍','LLM response node'],
+  ['observation','◉','Stored observation'],
+  ['question','?','AskUserQuestion'],
+  ['choice_sel','●','Selected choice'],
+  ['hook','⧖','Hook event'],
+  ['memory','◆','Memory node'],
+  ['mcp_server','⚙','MCP server'],
+  ['mcp_tool','⊡','MCP tool call'],
+  ['plugin','◩','Plugin node'],
+  ['summary','◈','Agent summary digest'],
+];
+const edgeLegendItems = [
+  ['contains','solid','Parent → child'],
+  ['references','solid','Direct reference'],
+  ['derived_from','solid','Output from input'],
+  ['summarizes','solid','Summary edge'],
+  ['next','solid','Sequential stream'],
+  ['result','solid','Tool result'],
+  ['reads','solid','File read'],
+  ['triggers','dashed','Hook trigger'],
+  ['captures','dashed','Memory capture'],
+  ['sends','dashed','Stdin send'],
+  ['supersedes','solid','Replacement'],
+  ['belongs_to','dashed','Server membership'],
+];
+
+const nlEl = document.getElementById('legend-nodes');
+nodeLegendItems.forEach(([k, icon, desc]) => {
+  const c = NK[k] || '#475569';
+  nlEl.innerHTML += `<div class="leg-item" onclick="openPropPanel({kind:'${k}',uri:'legend://${k}',props:{description:'${desc}',color:'${c}',icon:'${icon}'}})" style="cursor:pointer" title="Click to inspect">
+    <div class="leg-icon" style="background:${c}22;color:${c};border:1px solid ${c}44">${icon}</div>
+    <div><div class="leg-txt">${k}</div><div class="leg-desc">${desc}</div></div>
+  </div>`;
+});
+const elEl = document.getElementById('legend-edges');
+edgeLegendItems.forEach(([k, style, desc]) => {
+  const c = EK[k]?.color || '#475569';
+  const isDash = EK[k]?.dash;
+  const lineEl = isDash
+    ? `<span class="gl-dash" style="color:${c};width:24px;display:inline-block"></span>`
+    : `<span class="gl-line" style="background:${c};width:24px;height:2px;display:inline-block;border-radius:1px"></span>`;
+  elEl.innerHTML += `<div class="leg-item">
+    <div class="leg-line-wrap">${lineEl}<span class="leg-arrow">→</span></div>
+    <div><div class="leg-txt">${k}</div><div class="leg-desc">${desc}</div></div>
+  </div>`;
+});
+
+// ═══════════════════════════════════════════════════════════════
+// PROPERTY PANEL
+// ═══════════════════════════════════════════════════════════════
+function openPropPanel(datum) {
+  const panel = document.getElementById('prop-panel');
+  const overlay = document.getElementById('prop-overlay');
+  const badge = document.getElementById('pp-kind-badge');
+  const uriEl = document.getElementById('pp-uri');
+  const body = document.getElementById('pp-body');
+
+  const kind = datum.kind || 'node';
+  const color = NK[kind] || '#475569';
+  const icon = NI[kind] || '●';
+  badge.style.background = color + '22';
+  badge.style.color = color;
+  badge.style.borderColor = color + '55';
+  badge.innerHTML = `<span class="pp-icon-txt">${icon}</span> ${kind}`;
+  uriEl.textContent = datum.uri || '';
+  body.innerHTML = '';
+
+  if (datum.props) {
+    const sec = document.createElement('div');
+    sec.className = 'pp-section';
+    const title = document.createElement('div');
+    title.className = 'pp-section-title';
+    title.textContent = 'Properties';
+    sec.appendChild(title);
+    Object.entries(datum.props).forEach(([k, v]) => {
+      const row = document.createElement('div');
+      row.className = 'pp-row';
+      let valClass = '';
+      let valStr = '';
+      if (typeof v === 'number') { valClass = 'num'; valStr = v.toLocaleString(); }
+      else if (typeof v === 'boolean') { valClass = v ? 'bool-t' : 'bool-f'; valStr = String(v); }
+      else if (typeof v === 'string' && (v.startsWith('file://') || v.startsWith('https://') || v.startsWith('session://'))) {
+        valClass = 'uri'; valStr = v;
+      }
+      else { valClass = 'str'; valStr = String(v); }
+      row.innerHTML = `<span class="pp-key">${k}</span><span class="pp-val ${valClass}">${valStr}</span>`;
+      sec.appendChild(row);
+    });
+    body.appendChild(sec);
+  }
+
+  if (datum.a11y_tree) {
+    const div = document.createElement('div');
+    div.className = 'pp-section';
+    div.innerHTML = '<div class="pp-section-title">Accessibility Tree</div>';
+    const wrap = document.createElement('div');
+    wrap.className = 'a11y-wrap';
+    datum.a11y_tree.forEach(item => {
+      const el = document.createElement('div');
+      el.className = 'a11y-item';
+      el.innerHTML = `<span class="a11y-role">${item.role}</span><span class="a11y-name">${item.name}</span><span class="a11y-ref">[${item.ref}]</span>${item.meta ? `<span class="a11y-meta">${item.meta}</span>` : ''}`;
+      wrap.appendChild(el);
+    });
+    div.appendChild(wrap);
+    body.appendChild(div);
+  }
+
+  if (datum.chunks) {
+    const div = document.createElement('div');
+    div.className = 'pp-section';
+    div.innerHTML = '<div class="pp-section-title">Semantic Chunks</div>';
+    const wrap = document.createElement('div');
+    wrap.className = 'chunk-list';
+    datum.chunks.forEach(c => {
+      const el = document.createElement('div');
+      el.className = 'chunk-item';
+      el.innerHTML = `<div class="chunk-item-hdr"><span class="chunk-sym">${c.symbol}</span><span class="chunk-idx">#${c.index}</span><span class="chunk-sz">${c.size}B</span></div><div class="chunk-prev">${c.content}</div>`;
+      wrap.appendChild(el);
+    });
+    div.appendChild(wrap);
+    body.appendChild(div);
+  }
+
+  panel.classList.add('open');
+  overlay.classList.add('open');
+}
+
+function closePropPanel() {
+  document.getElementById('prop-panel').classList.remove('open');
+  document.getElementById('prop-overlay').classList.remove('open');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// GRAPH RENDERER — core
+// ═══════════════════════════════════════════════════════════════
+function mkGraph(containerId, W, H) {
+  const container = document.getElementById(containerId);
+  if (!container) return null;
+  const svgWrap = container.querySelector('.graph-svg');
+  svgWrap.innerHTML = '';
+  const svg = d3.select(svgWrap).append('svg')
+    .attr('viewBox', `0 0 ${W} ${H}`)
+    .attr('width', '100%').attr('height', '100%');
+  const defs = svg.append('defs');
+
+  // Arrow markers per edge type + coloring
+  Object.entries(EK).forEach(([kind, cfg]) => {
+    ['norm','hi'].forEach(state => {
+      const op = state === 'hi' ? 1 : 0.7;
+      defs.append('marker')
+        .attr('id', `${containerId}-arr-${kind}-${state}`)
+        .attr('viewBox','0 -5 10 10').attr('refX',30).attr('refY',0)
+        .attr('markerWidth',5).attr('markerHeight',5).attr('orient','auto')
+        .append('path').attr('d','M0,-5L10,0L0,5')
+        .attr('fill', cfg.color).attr('opacity', op);
+    });
+  });
+
+  return { svg, defs, svgWrap, W, H };
+}
+
+function drawEdge(g, id, link, nodeMap, opts = {}) {
+  const { isNew = false, delay = 0, label = '', bidirectional = false } = opts;
+  const a = nodeMap[link.src], b = nodeMap[link.dst];
+  if (!a || !b) return null;
+
+  const cfg = EK[link.kind] || { color:'#475569', dash:'' };
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const dist = Math.hypot(dx, dy) || 1;
+  const nx = dx/dist, ny = dy/dist, r = 23;
+  const curve = opts.curve || 16;
+  const mx = (a.x+b.x)/2 - ny*curve, my = (a.y+b.y)/2 + nx*curve;
+  const d = `M${a.x+nx*r},${a.y+ny*r} Q${mx},${my} ${b.x-nx*r},${b.y-ny*r}`;
+
+  const path = g.append('path')
+    .attr('d', d).attr('fill','none')
+    .attr('stroke', cfg.color).attr('stroke-width', 1.5)
+    .attr('stroke-dasharray', cfg.dash || '')
+    .attr('opacity', isNew ? 0 : 0.45)
+    .attr('marker-end', `url(#${id}-arr-${link.kind}-norm)`)
+    .style('cursor','pointer');
+
+  if (bidirectional) {
+    path.attr('marker-start', `url(#${id}-arr-${link.kind}-norm)`);
+  }
+
+  if (isNew) {
+    const len = path.node().getTotalLength();
+    path.attr('stroke-dasharray', len + (cfg.dash ? ' '+cfg.dash : ''))
+      .attr('stroke-dashoffset', len)
+      .transition().delay(delay).duration(500)
+      .attr('opacity', 0.45).attr('stroke-dashoffset', 0)
+      .on('end', () => { if (!cfg.dash) path.attr('stroke-dasharray',''); });
+  }
+
+  // Edge label + hover
+  const edgeTT = document.getElementById('edge-tt');
+  const midLabel = label || link.kind;
+  path.on('mouseover', function(event) {
+    d3.select(this).attr('stroke-width',2.5).attr('opacity',0.85);
+    const rect = document.getElementById(id).getBoundingClientRect();
+    edgeTT.style.left = (event.clientX - rect.left + 8) + 'px';
+    edgeTT.style.top  = (event.clientY - rect.top - 28) + 'px';
+    edgeTT.textContent = midLabel + (link.props ? ' · ' + JSON.stringify(link.props).slice(0,60) : '');
+    edgeTT.classList.add('vis');
+  }).on('mouseout', function() {
+    d3.select(this).attr('stroke-width',1.5).attr('opacity', isNew ? 0.45 : 0.45);
+    edgeTT.classList.remove('vis');
+  });
+
+  return path;
+}
+
+function drawNode(g, id, node, opts = {}) {
+  const { animate = false } = opts;
+  const color = NK[node.kind] || '#475569';
+  const icon  = NI[node.kind] || '●';
+
+  const ng = g.append('g')
+    .attr('id', `node-${id}-${node.id}`)
+    .attr('transform', `translate(${node.x},${node.y})`)
+    .attr('opacity', node.isNew && animate ? 0 : 1)
+    .style('cursor','pointer');
+
+  if (node.isNew && animate) {
+    ng.attr('transform', `translate(${node.x},${node.y}) scale(0.05)`);
+  }
+
+  // Glow
+  ng.append('circle').attr('r', node.r || 30).attr('fill', color).attr('opacity', 0.1);
+  // Main circle
+  ng.append('circle').attr('r', node.r || 22).attr('class','nc')
+    .attr('fill', color).attr('opacity', 0.85)
+    .attr('stroke', color).attr('stroke-width', 2).attr('stroke-opacity', 0.5);
+  // Icon
+  ng.append('text').text(icon)
+    .attr('text-anchor','middle').attr('dominant-baseline','central')
+    .attr('font-size', icon.length > 1 ? 9 : 13)
+    .attr('fill','rgba(255,255,255,0.9)').attr('pointer-events','none')
+    .attr('font-family','var(--mono)');
+  // Label
+  ng.append('text').text(truncate(node.label, 14))
+    .attr('text-anchor','middle').attr('y', (node.r || 22) + 13)
+    .attr('font-size', 9.5).attr('fill','rgba(255,255,255,0.5)')
+    .attr('font-family','var(--mono)').attr('pointer-events','none');
+
+  // Click → property panel
+  ng.on('click', () => openPropPanel(node));
+  // Hover highlight
+  ng.on('mouseover', function() {
+    d3.select(this).select('.nc').attr('r', (node.r || 22) + 4).attr('opacity', 1);
+  }).on('mouseout', function() {
+    d3.select(this).select('.nc').attr('r', node.r || 22).attr('opacity', 0.85);
+  });
+
+  return ng;
+}
+
+function animateNewNodes(gs, nodes) {
+  gs.filter(d => d.isNew).each(function(d) {
+    d3.select(this).transition().delay(d.delay || 0).duration(520)
+      .ease(d3.easeBackOut.overshoot(1.5))
+      .attr('transform', `translate(${d.x},${d.y})`)
+      .attr('opacity', 1);
+  });
+}
+
+function truncate(s, n) { return s && s.length > n ? s.slice(0,n-1)+'…' : s; }
+
+// ═══════════════════════════════════════════════════════════════
+// SCENARIO DATA
+// ═══════════════════════════════════════════════════════════════
+
+// ── READ ───────────────────────────────────────────────────────
+const READ_SCENARIO = {
+  W: 870, H: 330,
+  nodes: [
+    { id:'s1', kind:'session', label:'Session abc123', x:70, y:70, isNew:false,
+      uri:'session://abc123',
+      props:{ id:'abc123', model:'claude-sonnet-4-6', started_at:'2026-05-26T14:32:00Z', turns:3, tokens_in:4820, tools_called:5 }},
+    { id:'t1', kind:'turn', label:'Turn #3', x:200, y:70, isNew:false,
+      uri:'turn://abc123/3',
+      props:{ index:3, timestamp:'2026-05-26T14:33:42Z', prompt:'Read login.ts and explain the auth flow', tokens:78 }},
+    { id:'tc1', kind:'tool_call', label:'Read', x:340, y:70, isNew:false,
+      uri:'tool://abc123/3/Read/1',
+      props:{ tool:'Read', call_id:'tc-read-001', input_path:'/src/auth/login.ts', status:'completed', duration_ms:8, output_chars:1892 }},
+    { id:'f1', kind:'file', label:'login.ts', x:490, y:70, isNew:true, delay:100,
+      uri:'file:///src/auth/login.ts',
+      props:{ path:'/src/auth/login.ts', size_bytes:1892, lang:'typescript', mtime:'2026-05-25T09:15:33Z', chunks:4, hash:'sha256:a3f9b2c1' }},
+    { id:'c0', kind:'file_chunk', label:'imports', x:330, y:230, isNew:true, delay:260,
+      uri:'file:///src/auth/login.ts#chunk:0',
+      props:{ source_uri:'file:///src/auth/login.ts', chunk_index:0, symbol:'module:imports', size:152, lang:'typescript', status:'indexed', next:'c1' },
+      content:"import bcrypt from 'bcryptjs';\nimport jwt from 'jsonwebtoken';\nimport { db } from '../db';"},
+    { id:'c1', kind:'file_chunk', label:'login()', x:460, y:230, isNew:true, delay:420,
+      uri:'file:///src/auth/login.ts#chunk:1',
+      props:{ source_uri:'file:///src/auth/login.ts', chunk_index:1, symbol:'function:login', size:487, lang:'typescript', status:'indexed', next:'c2' },
+      content:"export async function login(email, password) {\n  const user = await db.users.findOne({email});\n  if (!user) throw new AuthError('not found');\n  return user;\n}"},
+    { id:'c2', kind:'file_chunk', label:'validateToken()', x:620, y:230, isNew:true, delay:580,
+      uri:'file:///src/auth/login.ts#chunk:2',
+      props:{ source_uri:'file:///src/auth/login.ts', chunk_index:2, symbol:'function:validateToken', size:312, lang:'typescript', status:'indexed', next:'c3' },
+      content:"export function validateToken(token) {\n  return jwt.verify(token, process.env.JWT_SECRET);\n}"},
+    { id:'c3', kind:'file_chunk', label:'logout()', x:780, y:230, isNew:true, delay:740,
+      uri:'file:///src/auth/login.ts#chunk:3',
+      props:{ source_uri:'file:///src/auth/login.ts', chunk_index:3, symbol:'function:logout', size:198, lang:'typescript', status:'indexed', next:null },
+      content:"export async function logout(sessionId) {\n  await sessions.delete(sessionId);\n  await cache.invalidate(`session:${sessionId}`);\n}"},
+  ],
+  links: [
+    { src:'s1', dst:'t1', kind:'contains' },
+    { src:'t1', dst:'tc1', kind:'contains' },
+    { src:'tc1', dst:'f1', kind:'reads', isNew:true, delay:80 },
+    { src:'f1', dst:'c0', kind:'contains', isNew:true, delay:240 },
+    { src:'c0', dst:'c1', kind:'next', isNew:true, delay:400 },
+    { src:'c1', dst:'c2', kind:'next', isNew:true, delay:560 },
+    { src:'c2', dst:'c3', kind:'next', isNew:true, delay:720 },
+  ],
+};
+
+// ── GREP ───────────────────────────────────────────────────────
+const GREP_SCENARIO = {
+  W: 820, H: 380,
+  expandable: true,
+  nodes: [
+    { id:'s1', kind:'session', label:'Session abc123', x:70, y:65, isNew:false,
+      uri:'session://abc123', props:{ id:'abc123', turns:5 }},
+    { id:'t1', kind:'turn', label:'Turn #5', x:200, y:65, isNew:false,
+      uri:'turn://abc123/5', props:{ index:5, prompt:'Find all useAuthContext usages in .tsx files' }},
+    { id:'tc1', kind:'tool_call', label:'Grep', x:340, y:65, isNew:false,
+      uri:'tool://abc123/5/Grep/1',
+      props:{ tool:'Grep', pattern:'useAuthContext', glob:'**/*.tsx', match_count:4, duration_ms:12, fts5_ranked:true }},
+    { id:'f1', kind:'file_chunk', label:'Header.tsx', x:160, y:210, isNew:true, delay:150,
+      uri:'file:///src/components/Header.tsx#useAuthContext',
+      props:{ source_uri:'file:///src/components/Header.tsx', symbol:'useAuthContext', match_line:14, size:320, status:'indexed' },
+      chunks:[
+        { index:0, symbol:'imports', size:88, content:"import { useAuthContext } from '../ctx/auth';" },
+        { index:1, symbol:'Header', size:320, content:"const { user } = useAuthContext();\nif (!user) return <Redirect to='/login' />;" },
+        { index:2, symbol:'NavBar', size:241, content:"const { permissions } = useAuthContext();\nconst isAdmin = permissions.includes('admin');" },
+      ]},
+    { id:'f2', kind:'file_chunk', label:'Sidebar.tsx', x:330, y:210, isNew:true, delay:280,
+      uri:'file:///src/components/Sidebar.tsx#useAuthContext',
+      props:{ source_uri:'file:///src/components/Sidebar.tsx', symbol:'useAuthContext', match_line:45, size:241, status:'indexed' },
+      chunks:[
+        { index:0, symbol:'imports', size:72, content:"import { useAuthContext } from '../ctx/auth';" },
+        { index:1, symbol:'SidebarLinks', size:241, content:"const { permissions } = useAuthContext();\nconst links = ALL_LINKS.filter(l => permissions.includes(l.perm));" },
+      ]},
+    { id:'f3', kind:'file_chunk', label:'Profile.tsx', x:500, y:210, isNew:true, delay:410,
+      uri:'file:///src/components/Profile.tsx#useAuthContext',
+      props:{ source_uri:'file:///src/components/Profile.tsx', symbol:'useAuthContext', match_line:8, size:198, status:'indexed' },
+      chunks:[
+        { index:0, symbol:'Profile', size:198, content:"const { user, logout } = useAuthContext();\nreturn <div>{user.displayName}</div>;" },
+      ]},
+    { id:'f4', kind:'file_chunk', label:'Dashboard.tsx', x:670, y:210, isNew:true, delay:540,
+      uri:'file:///src/components/Dashboard.tsx#useAuthContext',
+      props:{ source_uri:'file:///src/components/Dashboard.tsx', symbol:'useAuthContext', match_line:3, size:156, status:'indexed' },
+      chunks:[
+        { index:0, symbol:'Dashboard', size:156, content:"const auth = useAuthContext();\nif (auth.loading) return <Spinner />;" },
+      ]},
+  ],
+  links: [
+    { src:'s1', dst:'t1', kind:'contains' },
+    { src:'t1', dst:'tc1', kind:'contains' },
+    { src:'tc1', dst:'f1', kind:'result', isNew:true, delay:100 },
+    { src:'tc1', dst:'f2', kind:'result', isNew:true, delay:230 },
+    { src:'tc1', dst:'f3', kind:'result', isNew:true, delay:360 },
+    { src:'tc1', dst:'f4', kind:'result', isNew:true, delay:490 },
+  ],
+};
+
+// ── WEBFETCH ───────────────────────────────────────────────────
+const WEBFETCH_SCENARIO = {
+  W: 820, H: 300,
+  nodes: [
+    { id:'s1', kind:'session', label:'Session abc123', x:70, y:80, isNew:false,
+      uri:'session://abc123', props:{ id:'abc123' }},
+    { id:'t1', kind:'turn', label:'Turn #2', x:200, y:80, isNew:false,
+      uri:'turn://abc123/2', props:{ index:2, prompt:'Read the Claude tool use docs' }},
+    { id:'tc1', kind:'tool_call', label:'WebFetch', x:340, y:80, isNew:false,
+      uri:'tool://abc123/2/WebFetch/1',
+      props:{ tool:'WebFetch', url:'https://docs.anthropic.com/claude/docs/tool-use', status:200, duration_ms:840, content_length:28420, cached:false }},
+    { id:'w1', kind:'web_content', label:'docs.anthropic.com', x:530, y:80, isNew:true, delay:100,
+      uri:'https://docs.anthropic.com/claude/docs/tool-use',
+      props:{ url:'https://docs.anthropic.com/claude/docs/tool-use', status:200, content_length:28420, etag:'"a3f9b2c1"', last_modified:'2026-05-20', cached_at:'2026-05-26T14:33:50Z', ttl_seconds:3600, chunk_count:12 },
+      a11y_tree:[
+        { role:'heading', name:'Tool Use', ref:'e1', meta:'level=1' },
+        { role:'paragraph', name:'Claude can use tools by returning structured JSON...', ref:'e2' },
+        { role:'heading', name:'Basic Format', ref:'e3', meta:'level=2' },
+        { role:'code', name:'tools: [{ name: "get_weather", ... }]', ref:'e4' },
+        { role:'heading', name:'Tool Results', ref:'e5', meta:'level=2' },
+        { role:'paragraph', name:'Pass tool results back in the next user turn...', ref:'e6' },
+        { role:'link', name:'See full API reference', ref:'e7' },
+        { role:'button', name:'Copy code', ref:'e8' },
+        { role:'heading', name:'Streaming with tool use', ref:'e9', meta:'level=2' },
+        { role:'paragraph', name:'When streaming is enabled, tool use events arrive...', ref:'e10' },
+      ]},
+  ],
+  links: [
+    { src:'s1', dst:'t1', kind:'contains' },
+    { src:'t1', dst:'tc1', kind:'contains' },
+    { src:'tc1', dst:'w1', kind:'references', isNew:true, delay:80 },
+  ],
+};
+
+// ── MONITOR READ-ONLY ──────────────────────────────────────────
+const MONITOR_RO_SCENARIO = {
+  W: 820, H: 300,
+  nodes: [
+    { id:'s1', kind:'session', label:'Session abc123', x:70, y:70, isNew:false,
+      uri:'session://abc123', props:{ id:'abc123' }},
+    { id:'t1', kind:'turn', label:'Turn #4', x:200, y:70, isNew:false,
+      uri:'turn://abc123/4', props:{ index:4, prompt:'Run the tests and show me output' }},
+    { id:'tc1', kind:'tool_call', label:'Bash monitor', x:340, y:70, isNew:false,
+      uri:'tool://abc123/4/Bash/1',
+      props:{ tool:'Bash', command:'npm test --watch', mode:'monitor', pid:48291, started_at:'2026-05-26T14:35:00Z', chunks_captured:4 }},
+    { id:'o0', kind:'output_chunk', label:'chunk 0', x:180, y:210, isNew:true, delay:300,
+      uri:'output://abc123/4/Bash/1/chunk:0',
+      props:{ chunk_index:0, content:'> my-app@1.0.0 test\n> jest --watch', size:34, timestamp:'2026-05-26T14:35:01Z', stream:'stdout' }},
+    { id:'o1', kind:'output_chunk', label:'chunk 1', x:330, y:210, isNew:true, delay:600,
+      uri:'output://abc123/4/Bash/1/chunk:1',
+      props:{ chunk_index:1, content:'PASS src/auth/login.test.ts (4 tests, 0.8s)', size:45, timestamp:'2026-05-26T14:35:02Z', stream:'stdout' }},
+    { id:'o2', kind:'output_chunk', label:'chunk 2', x:480, y:210, isNew:true, delay:900,
+      uri:'output://abc123/4/Bash/1/chunk:2',
+      props:{ chunk_index:2, content:'FAIL src/api/users.test.ts\n  ✗ should return 401 on expired token', size:67, timestamp:'2026-05-26T14:35:03Z', stream:'stderr' }},
+    { id:'o3', kind:'output_chunk', label:'chunk 3', x:630, y:210, isNew:true, delay:1200,
+      uri:'output://abc123/4/Bash/1/chunk:3',
+      props:{ chunk_index:3, content:'Tests: 1 failed, 3 passed, 4 total\nWatching for file changes...', size:57, timestamp:'2026-05-26T14:35:04Z', stream:'stdout' }},
+  ],
+  links: [
+    { src:'s1', dst:'t1', kind:'contains' },
+    { src:'t1', dst:'tc1', kind:'contains' },
+    { src:'tc1', dst:'o0', kind:'derived_from', isNew:true, delay:280 },
+    { src:'o0', dst:'o1', kind:'next', isNew:true, delay:580 },
+    { src:'o1', dst:'o2', kind:'next', isNew:true, delay:880 },
+    { src:'o2', dst:'o3', kind:'next', isNew:true, delay:1180 },
+  ],
+};
+
+// ── MONITOR READ-WRITE ─────────────────────────────────────────
+const MONITOR_RW_SCENARIO = {
+  W: 820, H: 340,
+  nodes: [
+    { id:'s1', kind:'session', label:'Session abc123', x:70, y:70, isNew:false,
+      uri:'session://abc123', props:{ id:'abc123' }},
+    { id:'t1', kind:'turn', label:'Turn #6', x:200, y:70, isNew:false, uri:'turn://abc123/6',
+      props:{ index:6, prompt:'Start a Python REPL and multiply 42*1337' }},
+    { id:'tc1', kind:'tool_call', label:'Bash interactive', x:360, y:70, isNew:false,
+      uri:'tool://abc123/6/Bash/2',
+      props:{ tool:'Bash', command:'python3 -i', mode:'read_write', pid:48300, interactive:true }},
+    { id:'o0', kind:'output_chunk', label:'stdout 0', x:200, y:210, isNew:true, delay:200,
+      uri:'output://abc123/6/Bash/2/chunk:0',
+      props:{ chunk_index:0, content:'Python 3.12.2 (main)\nType "help" for info.\n>>> ', stream:'stdout', size:42 }},
+    { id:'i1', kind:'input_chunk', label:'stdin 0', x:360, y:210, isNew:true, delay:500,
+      uri:'input://abc123/6/Bash/2/stdin:0',
+      props:{ stdin_index:0, content:'42 * 1337', size:9, sent_at:'2026-05-26T14:36:05Z' }},
+    { id:'o1', kind:'output_chunk', label:'stdout 1', x:520, y:210, isNew:true, delay:700,
+      uri:'output://abc123/6/Bash/2/chunk:1',
+      props:{ chunk_index:1, content:'56154\n>>> ', stream:'stdout', size:10 }},
+    { id:'i2', kind:'input_chunk', label:'stdin 1', x:520, y:300, isNew:true, delay:950,
+      uri:'input://abc123/6/Bash/2/stdin:1',
+      props:{ stdin_index:1, content:'exit()', size:6, sent_at:'2026-05-26T14:36:08Z' }},
+  ],
+  links: [
+    { src:'s1', dst:'t1', kind:'contains' },
+    { src:'t1', dst:'tc1', kind:'contains' },
+    { src:'tc1', dst:'o0', kind:'derived_from', isNew:true, delay:180 },
+    { src:'o0', dst:'o1', kind:'next', isNew:true, delay:680 },
+    { src:'tc1', dst:'i1', kind:'sends', isNew:true, delay:480 },
+    { src:'tc1', dst:'i2', kind:'sends', isNew:true, delay:930 },
+  ],
+};
+
+// ── WEBSEARCH ──────────────────────────────────────────────────
+const WEBSEARCH_SCENARIO = {
+  W: 820, H: 310,
+  nodes: [
+    { id:'s1', kind:'session', label:'Session abc123', x:70, y:65, isNew:false, uri:'session://abc123', props:{ id:'abc123' }},
+    { id:'t1', kind:'turn', label:'Turn #7', x:200, y:65, isNew:false, uri:'turn://abc123/7',
+      props:{ index:7, prompt:'Search for Claude tool use examples' }},
+    { id:'tc1', kind:'tool_call', label:'WebSearch', x:340, y:65, isNew:false,
+      uri:'tool://abc123/7/WebSearch/1',
+      props:{ tool:'WebSearch', query:'Claude tool use examples', result_count:5, duration_ms:430 }},
+    { id:'r1', kind:'web_result', label:'anthropic.com/news', x:110, y:205, isNew:true, delay:150,
+      uri:'https://anthropic.com/news/tool-use',
+      props:{ url:'https://anthropic.com/news/tool-use', status:200, title:'Introducing Tool Use', etag:'"abc123"', last_modified:'2026-03-10', rank:1 }},
+    { id:'r2', kind:'web_result', label:'docs.anthropic.com', x:260, y:215, isNew:true, delay:270,
+      uri:'https://docs.anthropic.com/claude/docs/tool-use',
+      props:{ url:'https://docs.anthropic.com/claude/docs/tool-use', status:200, title:'Tool Use Guide', etag:'"def456"', last_modified:'2026-05-20', rank:2 }},
+    { id:'r3', kind:'web_result_err', label:'medium.com (404)', x:410, y:220, isNew:true, delay:390,
+      uri:'https://medium.com/claude-tool-examples',
+      props:{ url:'https://medium.com/claude-tool-examples', status:404, title:'Not Found', error:'HTTP 404', rank:3 }},
+    { id:'r4', kind:'web_result', label:'github.com/anthropics', x:560, y:215, isNew:true, delay:510,
+      uri:'https://github.com/anthropics/anthropic-cookbook',
+      props:{ url:'https://github.com/anthropics/anthropic-cookbook', status:200, title:'anthropic-cookbook', last_modified:'2026-05-24', rank:4 }},
+    { id:'r5', kind:'web_result', label:'npmjs.com/sdk', x:710, y:205, isNew:true, delay:630,
+      uri:'https://npmjs.com/package/@anthropic-ai/sdk',
+      props:{ url:'https://npmjs.com/package/@anthropic-ai/sdk', status:200, title:'@anthropic-ai/sdk', etag:'"ghi789"', rank:5 }},
+  ],
+  links: [
+    { src:'s1', dst:'t1', kind:'contains' },
+    { src:'t1', dst:'tc1', kind:'contains' },
+    { src:'tc1', dst:'r1', kind:'result', isNew:true, delay:130 },
+    { src:'tc1', dst:'r2', kind:'result', isNew:true, delay:250 },
+    { src:'tc1', dst:'r3', kind:'result', isNew:true, delay:370 },
+    { src:'tc1', dst:'r4', kind:'result', isNew:true, delay:490 },
+    { src:'tc1', dst:'r5', kind:'result', isNew:true, delay:610 },
+  ],
+};
+
+// ── AGENT ──────────────────────────────────────────────────────
+const AGENT_SCENARIO = {
+  W: 860, H: 440,
+  nodes: [
+    { id:'s1', kind:'session', label:'Session abc123', x:70, y:60, isNew:false, uri:'session://abc123', props:{ id:'abc123' }},
+    { id:'t1', kind:'turn', label:'Turn #8', x:200, y:60, isNew:false, uri:'turn://abc123/8',
+      props:{ index:8, prompt:'Analyze the JWT auth flow and suggest improvements' }},
+    { id:'tc1', kind:'tool_call', label:'Agent', x:340, y:60, isNew:false,
+      uri:'tool://abc123/8/Agent/1',
+      props:{ tool:'Agent', description:'Analyze auth JWT flow', subagent_type:'general-purpose', spawned_session:'sub-xyz' }},
+    // Sub-session (inside subgraph box)
+    { id:'ss1', kind:'session', label:'Sub-session', x:490, y:145, isNew:true, delay:200, r:18,
+      uri:'session://sub-xyz',
+      props:{ id:'sub-xyz', parent_session:'abc123', parent_tool_call:'tc-agent-001', type:'subagent' }},
+    { id:'st1', kind:'turn', label:'Sub turn 1', x:620, y:145, isNew:true, delay:350, r:18,
+      uri:'turn://sub-xyz/1',
+      props:{ index:1, prompt:'Read auth.ts file and identify JWT logic' }},
+    { id:'stc1', kind:'tool_call', label:'Read auth.ts', x:750, y:145, isNew:true, delay:500, r:18,
+      uri:'tool://sub-xyz/1/Read/1',
+      props:{ tool:'Read', input_path:'/src/auth/jwt.ts', status:'completed' }},
+    { id:'st2', kind:'turn', label:'Sub turn 2', x:620, y:265, isNew:true, delay:650, r:18,
+      uri:'turn://sub-xyz/2',
+      props:{ index:2, prompt:'Formulate recommendations' }},
+    { id:'sr1', kind:'response', label:'Analysis', x:750, y:265, isNew:true, delay:800, r:18,
+      uri:'response://sub-xyz/2/1',
+      props:{ tokens:342, content_preview:'JWT TTL is hardcoded to 1h. No refresh token support...' }},
+    // Summary (collapsed result)
+    { id:'sum1', kind:'summary', label:'Agent summary', x:340, y:370, isNew:true, delay:1100,
+      uri:'summary://abc123/8/Agent/1',
+      props:{ source_session:'sub-xyz', tokens:87, content:'JWT TTL hardcoded 1h, no refresh tokens. Recommend: sliding-window 7d max TTL with refresh token rotation.', summarizes:['ss1','st1','stc1','st2','sr1'] }},
+  ],
+  links: [
+    { src:'s1', dst:'t1', kind:'contains' },
+    { src:'t1', dst:'tc1', kind:'contains' },
+    { src:'tc1', dst:'ss1', kind:'derived_from', isNew:true, delay:180 },
+    { src:'ss1', dst:'st1', kind:'contains', isNew:true, delay:330 },
+    { src:'st1', dst:'stc1', kind:'contains', isNew:true, delay:480 },
+    { src:'ss1', dst:'st2', kind:'contains', isNew:true, delay:630 },
+    { src:'st2', dst:'sr1', kind:'contains', isNew:true, delay:780 },
+    { src:'sum1', dst:'ss1', kind:'summarizes', isNew:true, delay:1080 },
+    { src:'tc1', dst:'sum1', kind:'derived_from', isNew:true, delay:1200 },
+  ],
+  subgraphBox: { x:450, y:110, w:390, h:215, label:'Agent subgraph  session://sub-xyz' },
+};
+
+// ── SKILL ──────────────────────────────────────────────────────
+const SKILL_SCENARIO = {
+  W: 840, H: 400,
+  nodes: [
+    { id:'s1', kind:'session', label:'Session abc123', x:70, y:55, isNew:false, uri:'session://abc123', props:{ id:'abc123' }},
+    { id:'t1', kind:'turn', label:'Turn #9', x:200, y:55, isNew:false, uri:'turn://abc123/9',
+      props:{ index:9, prompt:'Use the hook-development skill' }},
+    { id:'tc1', kind:'tool_call', label:'Skill', x:340, y:55, isNew:false,
+      uri:'tool://abc123/9/Skill/1',
+      props:{ tool:'Skill', skill_name:'hook-development', plugin:'plugin-dev', cache_hit:false }},
+    { id:'sk1', kind:'skill', label:'hook-development', x:500, y:55, isNew:true, delay:100,
+      uri:'skill://plugin-dev:hook-development',
+      props:{ name:'hook-development', plugin:'plugin-dev', path:'.claude/plugins/plugin-dev/skills/hook-development.md', hash:'sha256:b4c8d2e1', size_bytes:18420, mtime:'2026-05-22T10:00:00Z', chunk_count:5 }},
+    // Skill internals
+    { id:'pl1', kind:'plugin', label:'plugin-dev', x:180, y:185, isNew:true, delay:220,
+      uri:'plugin://plugin-dev',
+      props:{ name:'plugin-dev', version:'1.2.0', author:'joeblackwaslike', skills:8, hooks:3, commands:2 }},
+    { id:'sc0', kind:'skill_chunk', label:'Overview', x:380, y:185, isNew:true, delay:320,
+      uri:'skill://plugin-dev:hook-development#chunk:0',
+      props:{ chunk_index:0, type:'markdown', heading:'Overview', size:1240, content_preview:'Hooks are event-driven automation scripts that fire before/after tool calls...' }},
+    { id:'sc1', kind:'skill_chunk', label:'Step: PreToolUse', x:540, y:185, isNew:true, delay:420,
+      uri:'skill://plugin-dev:hook-development#chunk:1',
+      props:{ chunk_index:1, type:'step', heading:'PreToolUse Hook', size:2180, content_preview:'```json\n{"hookType":"PreToolUse","toolName":"Read",...}' }},
+    { id:'sc2', kind:'skill_chunk', label:'Step: PostToolUse', x:700, y:185, isNew:true, delay:520,
+      uri:'skill://plugin-dev:hook-development#chunk:2',
+      props:{ chunk_index:2, type:'step', heading:'PostToolUse Hook', size:1840, content_preview:'PostToolUse fires after tool completes...' }},
+    { id:'fa1', kind:'file_asset', label:'example-hook.sh', x:380, y:315, isNew:true, delay:620,
+      uri:'file:///.claude/plugins/plugin-dev/examples/example-hook.sh',
+      props:{ path:'examples/example-hook.sh', lang:'bash', size_bytes:1240, referenced_in:'chunk:1' }},
+    { id:'sc3', kind:'skill_chunk', label:'Mermaid diagram', x:560, y:315, isNew:true, delay:720,
+      uri:'skill://plugin-dev:hook-development#chunk:3',
+      props:{ chunk_index:3, type:'mermaid', heading:'Hook Flow Diagram', size:640 }},
+  ],
+  links: [
+    { src:'s1', dst:'t1', kind:'contains' },
+    { src:'t1', dst:'tc1', kind:'contains' },
+    { src:'tc1', dst:'sk1', kind:'references', isNew:true, delay:80 },
+    { src:'sk1', dst:'pl1', kind:'belongs_to', isNew:true, delay:200 },
+    { src:'sk1', dst:'sc0', kind:'contains', isNew:true, delay:300 },
+    { src:'sc0', dst:'sc1', kind:'next', isNew:true, delay:400 },
+    { src:'sc1', dst:'sc2', kind:'next', isNew:true, delay:500 },
+    { src:'sc1', dst:'fa1', kind:'references', isNew:true, delay:600 },
+    { src:'sc2', dst:'sc3', kind:'next', isNew:true, delay:700 },
+  ],
+};
+
+// ── MCP ────────────────────────────────────────────────────────
+const MCP_SCENARIO = {
+  W: 820, H: 300,
+  nodes: [
+    { id:'s1', kind:'session', label:'Session abc123', x:70, y:70, isNew:false, uri:'session://abc123', props:{ id:'abc123' }},
+    { id:'t1', kind:'turn', label:'Turn #10', x:200, y:70, isNew:false, uri:'turn://abc123/10',
+      props:{ index:10, prompt:'Search Cloudflare docs for Workers KV API' }},
+    { id:'tc1', kind:'tool_call', label:'context7 tool', x:350, y:70, isNew:false,
+      uri:'tool://abc123/10/mcp:context7/query-docs/1',
+      props:{ tool:'mcp:context7:query-docs', mcp_server:'context7', call_id:'tc-mcp-001', input:'{ library_id: "/cloudflare/workers-sdk", topic: "KV" }', status:'completed', duration_ms:1240 }},
+    { id:'ms1', kind:'mcp_server', label:'context7', x:510, y:70, isNew:true, delay:100,
+      uri:'mcp://plugin:context7:context7',
+      props:{ name:'context7', plugin:'context7', transport:'stdio', tools:2, uri:'mcp://plugin:context7:context7' }},
+    { id:'mt1', kind:'mcp_tool', label:'query-docs', x:670, y:70, isNew:true, delay:200,
+      uri:'mcp://context7/query-docs',
+      props:{ tool_name:'query-docs', server:'context7', description:'Fetch current library documentation', tokens_returned:8420 }},
+    { id:'o1', kind:'output_chunk', label:'KV docs chunk 0', x:410, y:210, isNew:true, delay:400,
+      uri:'output://abc123/10/mcp:context7/query-docs/chunk:0',
+      props:{ chunk_index:0, source:'context7', library:'cloudflare/workers-sdk', topic:'KV', size:3240, content_preview:'## KV Namespaces\nWorkers KV is a global, low-latency key-value store...' }},
+    { id:'o2', kind:'output_chunk', label:'KV docs chunk 1', x:590, y:210, isNew:true, delay:560,
+      uri:'output://abc123/10/mcp:context7/query-docs/chunk:1',
+      props:{ chunk_index:1, source:'context7', library:'cloudflare/workers-sdk', topic:'KV', size:2180, content_preview:'## get / put / delete\nawait env.KV.get("key"); // returns string | null' }},
+  ],
+  links: [
+    { src:'s1', dst:'t1', kind:'contains' },
+    { src:'t1', dst:'tc1', kind:'contains' },
+    { src:'tc1', dst:'ms1', kind:'references', isNew:true, delay:80 },
+    { src:'ms1', dst:'mt1', kind:'contains', isNew:true, delay:180 },
+    { src:'mt1', dst:'o1', kind:'derived_from', isNew:true, delay:380 },
+    { src:'o1', dst:'o2', kind:'next', isNew:true, delay:540 },
+  ],
+};
+
+// ── PROMPT ─────────────────────────────────────────────────────
+const PROMPT_SCENARIO = {
+  W: 880, H: 400,
+  nodes: [
+    { id:'s1', kind:'session', label:'Session abc123', x:65, y:75, isNew:false, uri:'session://abc123', props:{ id:'abc123' }},
+    { id:'t1', kind:'turn', label:'Turn #11', x:65, y:185, isNew:false,
+      uri:'turn://abc123/11', props:{ index:11, timestamp:'2026-05-26T15:00:00Z' }},
+    { id:'ob1', kind:'prompt', label:'User prompt', x:220, y:185, isNew:false,
+      uri:'prompt://abc123/11/1',
+      props:{ role:'user', content:'What deployment strategy should we use for this Workers app?', tokens:13, timestamp:'2026-05-26T15:00:00Z' }},
+    { id:'th1', kind:'thinking', label:'Thinking block', x:390, y:185, isNew:true, delay:100,
+      uri:'thinking://abc123/11/1',
+      props:{ tokens:284, duration_ms:1840, content_preview:'The user is asking about deployment strategies for Cloudflare Workers. I should consider: blue/green, canary, progressive rollout...' }},
+    { id:'re1', kind:'response', label:'Response', x:565, y:185, isNew:true, delay:300,
+      uri:'response://abc123/11/1',
+      props:{ tokens:142, content_preview:'For a Cloudflare Workers app, I recommend a canary deployment strategy using wrangler publish --env staging first, then progressively routing traffic...' }},
+    { id:'tc2', kind:'tool_call', label:'AskUserQuestion', x:730, y:185, isNew:true, delay:500,
+      uri:'tool://abc123/11/AskUserQuestion/1',
+      props:{ tool:'AskUserQuestion', question:'Which deployment approach fits your team?', options:3 }},
+    { id:'ch1', kind:'choice_sel', label:'Canary (recommended)', x:690, y:310, isNew:true, delay:650,
+      uri:'choice://abc123/11/AskUserQuestion/1/0',
+      props:{ index:0, label:'Canary (Recommended)', description:'Progressive traffic shift via wrangler', selected:true, continues_conversation:true }},
+    { id:'ch2', kind:'choice', label:'Blue/Green', x:790, y:275, isNew:true, delay:700,
+      uri:'choice://abc123/11/AskUserQuestion/1/1',
+      props:{ index:1, label:'Blue/Green', description:'Full swap via env aliases', selected:false }},
+    { id:'ch3', kind:'choice', label:'Direct deploy', x:790, y:345, isNew:true, delay:750,
+      uri:'choice://abc123/11/AskUserQuestion/1/2',
+      props:{ index:2, label:'Direct deploy', description:'No staging, push to production', selected:false }},
+  ],
+  links: [
+    { src:'s1', dst:'t1', kind:'contains' },
+    { src:'t1', dst:'ob1', kind:'contains', isNew:false },
+    { src:'ob1', dst:'th1', kind:'next', isNew:true, delay:80 },
+    { src:'th1', dst:'re1', kind:'next', isNew:true, delay:280 },
+    { src:'re1', dst:'tc2', kind:'next', isNew:true, delay:480 },
+    { src:'tc2', dst:'ch1', kind:'contains', isNew:true, delay:630 },
+    { src:'tc2', dst:'ch2', kind:'contains', isNew:true, delay:680 },
+    { src:'tc2', dst:'ch3', kind:'contains', isNew:true, delay:730 },
+  ],
+};
+
+// ═══════════════════════════════════════════════════════════════
+// RENDER STANDARD SCENARIOS
+// ═══════════════════════════════════════════════════════════════
+function renderScenario(containerId, sc) {
+  const g = mkGraph(containerId, sc.W, sc.H);
+  if (!g) return;
+  const { svg, W, H, svgWrap } = g;
+
+  const container = document.getElementById(containerId);
+  const nodeMap = {};
+  sc.nodes.forEach(n => nodeMap[n.id] = n);
+
+  // Subgraph box
+  if (sc.subgraphBox) {
+    const b = sc.subgraphBox;
+    svg.append('rect')
+      .attr('x', b.x).attr('y', b.y).attr('width', b.w).attr('height', b.h)
+      .attr('rx', 10).attr('ry', 10).attr('fill', 'none')
+      .attr('stroke', '#7f1d1d').attr('stroke-width', 1.5)
+      .attr('stroke-dasharray', '6,4').attr('opacity', 0.6);
+    svg.append('text').text(b.label)
+      .attr('x', b.x + 10).attr('y', b.y + 16)
+      .attr('font-family', 'var(--mono)').attr('font-size', 9)
+      .attr('fill', '#f87171').attr('opacity', 0.7);
+  }
+
+  // Existing links
+  const edgeG = svg.append('g');
+  sc.links.filter(l => !l.isNew).forEach(l => drawEdge(edgeG, containerId, l, nodeMap, {}));
+
+  // New links group
+  const newEdgeG = svg.append('g');
+
+  // All nodes
+  const nodeG = svg.append('g');
+  const allGs = [];
+  sc.nodes.forEach(node => {
+    const ng = drawNode(nodeG, containerId, node, { animate: true });
+    // Special: web_result_err gets red override
+    if (node.kind === 'web_result_err') {
+      ng.select('.nc').attr('fill', '#b91c1c').attr('stroke', '#b91c1c');
+      ng.select('circle:first-child').attr('fill', '#b91c1c');
+    }
+    // Special: choice_sel gets green
+    if (node.kind === 'choice_sel') {
+      ng.select('.nc').attr('fill', '#166534').attr('stroke', '#4ade80').attr('stroke-width', 2.5);
+    }
+    allGs.push({ ng, node });
+  });
+
+  // Grep expandable
+  const expandedState = {};
+  if (sc.expandable) {
+    sc.nodes.filter(n => n.chunks).forEach(node => {
+      const ng = nodeG.select(`#node-${containerId}-${node.id}`);
+      ng.on('click', null); // override default
+      ng.on('click', (event) => {
+        event.stopPropagation();
+        if (expandedState[node.id]) {
+          // Collapse
+          svg.selectAll(`.expand-${node.id}`).transition().duration(200).attr('opacity', 0).remove();
+          expandedState[node.id] = false;
+          ng.select('.nc').attr('stroke', NK[node.kind]).attr('stroke-width', 2);
+        } else {
+          // Expand chunks below
+          expandedState[node.id] = true;
+          ng.select('.nc').attr('stroke', '#4ade80').attr('stroke-width', 3);
+          const chunks = node.chunks;
+          const startX = node.x - ((chunks.length - 1) * 110) / 2;
+          let prevId = null;
+          chunks.forEach((c, i) => {
+            const cx = startX + i * 110, cy = node.y + 130;
+            const cNode = { id: `exp-${node.id}-${i}`, kind: 'file_chunk', label: c.symbol, x: cx, y: cy, r: 18,
+              uri: `${node.uri}#chunk:${i}`, props: { symbol: c.symbol, chunk_index: i, size: c.size, content: c.content }, isNew: false };
+            const cg = drawNode(svg.append('g').attr('class', `expand-${node.id}`), containerId, cNode, {});
+            cg.attr('opacity', 0).transition().delay(i * 120).duration(400)
+              .ease(d3.easeBackOut).attr('opacity', 1);
+            if (prevId) {
+              const link = { src: prevId, dst: cNode.id, kind: 'next' };
+              const tmpMap = { ...nodeMap };
+              tmpMap[cNode.id] = cNode;
+              tmpMap[prevId] = { ...cNode, id: prevId, x: startX + (i-1)*110, y: node.y+130 };
+              // Draw inline
+              const p = svg.insert('path', `.expand-${node.id}`)
+                .attr('class', `expand-${node.id}`)
+                .attr('d', `M${startX+(i-1)*110+20},${node.y+130} L${cx-20},${cy}`)
+                .attr('stroke', EK.next.color).attr('stroke-width', 1.5).attr('fill', 'none').attr('opacity', 0)
+                .attr('marker-end', `url(#${containerId}-arr-next-norm)`);
+              p.transition().delay(i * 120 + 60).duration(300).attr('opacity', 0.55);
+            }
+            prevId = cNode.id;
+            // Click on expanded chunk → prop panel
+            cg.on('click', () => openPropPanel(cNode));
+          });
+          // Edge from file to first chunk
+          const firstCx = startX, firstCy = node.y + 130;
+          svg.insert('path', `.expand-${node.id}`)
+            .attr('class', `expand-${node.id}`)
+            .attr('d', `M${node.x},${node.y+22} L${firstCx},${firstCy-18}`)
+            .attr('stroke', EK.contains.color).attr('stroke-width', 1.5)
+            .attr('fill', 'none').attr('marker-end', `url(#${containerId}-arr-contains-norm)`)
+            .attr('opacity', 0).transition().duration(300).attr('opacity', 0.5);
+        }
+      });
+    });
+  }
+
+  // Play / Reset
+  const playBtn = container.querySelector('.btn-play');
+  const rstBtn  = container.querySelector('.btn-rst');
+  let played = false;
+
+  function play() {
+    if (played) return;
+    played = true;
+    if (playBtn) playBtn.disabled = true;
+
+    // Animate new edges
+    sc.links.filter(l => l.isNew).forEach(l => {
+      drawEdge(newEdgeG, containerId, l, nodeMap, { isNew: true, delay: l.delay || 0, label: l.label });
+    });
+    // Animate new nodes
+    allGs.forEach(({ ng, node }) => {
+      if (!node.isNew) return;
+      ng.transition().delay(node.delay || 0).duration(520)
+        .ease(d3.easeBackOut.overshoot(1.5))
+        .attr('transform', `translate(${node.x},${node.y})`)
+        .attr('opacity', 1);
+    });
+  }
+
+  function reset() {
+    played = false;
+    if (playBtn) playBtn.disabled = false;
+    newEdgeG.selectAll('*').remove();
+    // Collapse any grep expanded
+    Object.keys(expandedState).forEach(k => {
+      svg.selectAll(`.expand-${k}`).remove();
+      expandedState[k] = false;
+    });
+    allGs.forEach(({ ng, node }) => {
+      if (!node.isNew) return;
+      ng.interrupt()
+        .attr('transform', `translate(${node.x},${node.y}) scale(0.05)`)
+        .attr('opacity', 0);
+    });
+  }
+
+  if (playBtn) playBtn.addEventListener('click', play);
+  if (rstBtn)  rstBtn.addEventListener('click', reset);
+}
+
+// Render all standard scenarios
+renderScenario('g-read', READ_SCENARIO);
+renderScenario('g-grep', GREP_SCENARIO);
+renderScenario('g-webfetch', WEBFETCH_SCENARIO);
+renderScenario('g-monitor-ro', MONITOR_RO_SCENARIO);
+renderScenario('g-monitor-rw', MONITOR_RW_SCENARIO);
+renderScenario('g-websearch', WEBSEARCH_SCENARIO);
+renderScenario('g-agent', AGENT_SCENARIO);
+renderScenario('g-skill', SKILL_SCENARIO);
+renderScenario('g-mcp', MCP_SCENARIO);
+renderScenario('g-prompt', PROMPT_SCENARIO);
+
+// ═══════════════════════════════════════════════════════════════
+// FULL CONVERSATION TREE — force-directed
+// ═══════════════════════════════════════════════════════════════
+let convoSimulation = null;
+let convoZoomBehavior = null;
+
+function renderConvoGraph() {
+  const container = document.getElementById('g-convo');
+  if (!container) return;
+  const svgWrap = container.querySelector('.graph-svg');
+  svgWrap.innerHTML = '';
+  const W = svgWrap.offsetWidth || 900, H = 580;
+
+  const svg = d3.select(svgWrap).append('svg')
+    .attr('width','100%').attr('height','100%')
+    .attr('viewBox', `0 0 ${W} ${H}`);
+
+  const defs = svg.append('defs');
+  Object.entries(EK).forEach(([kind, cfg]) => {
+    defs.append('marker').attr('id',`convo-arr-${kind}`)
+      .attr('viewBox','0 -5 10 10').attr('refX',28).attr('refY',0)
+      .attr('markerWidth',4).attr('markerHeight',4).attr('orient','auto')
+      .append('path').attr('d','M0,-5L10,0L0,5').attr('fill',cfg.color).attr('opacity',0.75);
+  });
+
+  const g = svg.append('g');
+
+  // Zoom
+  convoZoomBehavior = d3.zoom().scaleExtent([0.3, 3]).on('zoom', e => g.attr('transform', e.transform));
+  svg.call(convoZoomBehavior);
+
+  // Full convo nodes
+  const nodes = [
+    { id:'sess', kind:'session', label:'Session abc123', props:{ id:'abc123', model:'claude-sonnet-4-6', turns:11, started_at:'2026-05-26T14:32:00Z' }, uri:'session://abc123' },
+    // Turns
+    { id:'t1', kind:'turn', label:'Turn 1', props:{ index:1, prompt:'Read login.ts' }, uri:'turn://abc123/1' },
+    { id:'t2', kind:'turn', label:'Turn 2', props:{ index:2, prompt:'Fetch tool use docs' }, uri:'turn://abc123/2' },
+    { id:'t3', kind:'turn', label:'Turn 3', props:{ index:3, prompt:'Search for examples' }, uri:'turn://abc123/3' },
+    { id:'t4', kind:'turn', label:'Turn 4', props:{ index:4, prompt:'Run tests' }, uri:'turn://abc123/4' },
+    { id:'t5', kind:'turn', label:'Turn 5', props:{ index:5, prompt:'Spawn analyst agent' }, uri:'turn://abc123/5' },
+    // Turn 1 contents
+    { id:'fc1', kind:'file_chunk', label:'login()', props:{ symbol:'login', size:487 }, uri:'file:///src/auth/login.ts#chunk:1' },
+    { id:'fc2', kind:'file_chunk', label:'validateToken()', props:{ symbol:'validateToken', size:312 }, uri:'file:///src/auth/login.ts#chunk:2' },
+    { id:'fc3', kind:'file_chunk', label:'logout()', props:{ symbol:'logout', size:198 }, uri:'file:///src/auth/login.ts#chunk:3' },
+    // Turn 1 prompt/response
+    { id:'ob1', kind:'prompt', label:'Read login.ts', props:{ role:'user', tokens:7 }, uri:'prompt://abc123/1/1' },
+    { id:'th1', kind:'thinking', label:'Thinking', props:{ tokens:84 }, uri:'thinking://abc123/1/1' },
+    { id:'re1', kind:'response', label:'Response', props:{ tokens:142 }, uri:'response://abc123/1/1' },
+    // Turn 2 - webfetch
+    { id:'ob2', kind:'prompt', label:'Fetch docs', props:{ role:'user', tokens:9 }, uri:'prompt://abc123/2/1' },
+    { id:'wc1', kind:'web_content', label:'docs.anthropic.com', props:{ status:200, cached:true }, uri:'https://docs.anthropic.com/claude/docs/tool-use' },
+    // Turn 3 - websearch
+    { id:'ob3', kind:'prompt', label:'Search examples', props:{ role:'user', tokens:5 }, uri:'prompt://abc123/3/1' },
+    { id:'wr1', kind:'web_result', label:'anthropic.com', props:{ status:200, rank:1 }, uri:'https://anthropic.com/news/tool-use' },
+    { id:'wr2', kind:'web_result', label:'cookbook', props:{ status:200, rank:2 }, uri:'https://github.com/anthropics/anthropic-cookbook' },
+    { id:'wr3', kind:'web_result_err', label:'medium.com (404)', props:{ status:404 }, uri:'https://medium.com/404' },
+    // Turn 4 - monitor
+    { id:'ob4', kind:'prompt', label:'Run tests', props:{ role:'user', tokens:4 }, uri:'prompt://abc123/4/1' },
+    { id:'oc1', kind:'output_chunk', label:'PASS auth.test', props:{ stream:'stdout', chunk_index:0 }, uri:'output://abc123/4/1/chunk:0' },
+    { id:'oc2', kind:'output_chunk', label:'FAIL users.test', props:{ stream:'stderr', chunk_index:1 }, uri:'output://abc123/4/1/chunk:1' },
+    // Turn 5 - agent
+    { id:'ob5', kind:'prompt', label:'Spawn agent', props:{ role:'user', tokens:12 }, uri:'prompt://abc123/5/1' },
+    { id:'sum1', kind:'summary', label:'Agent summary', props:{ tokens:87, content_preview:'JWT TTL hardcoded...' }, uri:'summary://abc123/5/Agent/1' },
+    // Memories
+    { id:'mem1', kind:'memory', label:'jwt-findings', props:{ content:'JWT TTL hardcoded to 1h' }, uri:'memory://abc123/jwt-findings' },
+    // Hook
+    { id:'hk1', kind:'hook', label:'PreToolUse:Read', props:{ hook_type:'PreToolUse', tool:'Read', action:'deny' }, uri:'hook://PreToolUse/Read' },
+    // Skill
+    { id:'sk1', kind:'skill', label:'hook-development', props:{ plugin:'plugin-dev', size:18420 }, uri:'skill://plugin-dev:hook-development' },
+  ];
+
+  const links = [
+    { source:'sess', target:'t1', kind:'contains' },
+    { source:'sess', target:'t2', kind:'contains' },
+    { source:'sess', target:'t3', kind:'contains' },
+    { source:'sess', target:'t4', kind:'contains' },
+    { source:'sess', target:'t5', kind:'contains' },
+    { source:'t1', target:'ob1', kind:'contains' },
+    { source:'t1', target:'th1', kind:'contains' },
+    { source:'t1', target:'re1', kind:'contains' },
+    { source:'t1', target:'fc1', kind:'references' },
+    { source:'t1', target:'fc2', kind:'references' },
+    { source:'t1', target:'fc3', kind:'references' },
+    { source:'fc1', target:'fc2', kind:'next' },
+    { source:'fc2', target:'fc3', kind:'next' },
+    { source:'t2', target:'ob2', kind:'contains' },
+    { source:'t2', target:'wc1', kind:'references' },
+    { source:'t3', target:'ob3', kind:'contains' },
+    { source:'t3', target:'wr1', kind:'result' },
+    { source:'t3', target:'wr2', kind:'result' },
+    { source:'t3', target:'wr3', kind:'result' },
+    { source:'t4', target:'ob4', kind:'contains' },
+    { source:'t4', target:'oc1', kind:'derived_from' },
+    { source:'oc1', target:'oc2', kind:'next' },
+    { source:'t5', target:'ob5', kind:'contains' },
+    { source:'t5', target:'sum1', kind:'derived_from' },
+    { source:'sum1', target:'mem1', kind:'captures' },
+    { source:'hk1', target:'t1', kind:'triggers' },
+    { source:'sk1', target:'t5', kind:'references' },
+  ];
+
+  // Force simulation
+  const sim = d3.forceSimulation(nodes)
+    .force('link', d3.forceLink(links).id(d => d.id).distance(90).strength(0.6))
+    .force('charge', d3.forceManyBody().strength(-320))
+    .force('center', d3.forceCenter(W/2, H/2))
+    .force('collision', d3.forceCollide(35));
+  convoSimulation = sim;
+
+  // Links
+  const linkEl = g.append('g').selectAll('path')
+    .data(links).join('path')
+    .attr('fill','none')
+    .attr('stroke', d => EK[d.kind]?.color || '#475569')
+    .attr('stroke-width', 1.3).attr('opacity', 0.5)
+    .attr('stroke-dasharray', d => EK[d.kind]?.dash || '')
+    .attr('marker-end', d => `url(#convo-arr-${d.kind})`);
+
+  // Nodes
+  const nodeEl = g.append('g').selectAll('g')
+    .data(nodes).join('g')
+    .style('cursor','pointer')
+    .call(d3.drag()
+      .on('start', (e,d) => { if(!e.active) sim.alphaTarget(0.3).restart(); d.fx=d.x; d.fy=d.y; })
+      .on('drag',  (e,d) => { d.fx=e.x; d.fy=e.y; })
+      .on('end',   (e,d) => { if(!e.active) sim.alphaTarget(0); d.fx=null; d.fy=null; }));
+
+  nodeEl.append('circle').attr('r', 18).attr('fill', d => NK[d.kind]||'#475569').attr('opacity',0.12);
+  nodeEl.append('circle').attr('r', 14).attr('class','nc')
+    .attr('fill', d => NK[d.kind]||'#475569').attr('opacity',0.85)
+    .attr('stroke', d => NK[d.kind]||'#475569').attr('stroke-width',1.5).attr('stroke-opacity',0.5);
+  nodeEl.append('text').text(d => NI[d.kind]||'●')
+    .attr('text-anchor','middle').attr('dominant-baseline','central')
+    .attr('font-size', d => (NI[d.kind]||'').length>1 ? 7 : 10)
+    .attr('fill','rgba(255,255,255,0.9)').attr('pointer-events','none').attr('font-family','var(--mono)');
+  nodeEl.append('text').text(d => truncate(d.label,12))
+    .attr('text-anchor','middle').attr('y', 22).attr('font-size',8)
+    .attr('fill','rgba(255,255,255,0.45)').attr('pointer-events','none').attr('font-family','var(--mono)');
+  nodeEl.on('click', (e, d) => openPropPanel(d));
+  nodeEl.on('mouseover', function() { d3.select(this).select('.nc').attr('r',18).attr('opacity',1); });
+  nodeEl.on('mouseout',  function() { d3.select(this).select('.nc').attr('r',14).attr('opacity',0.85); });
+
+  function curvePath(d) {
+    const dx = d.target.x - d.source.x, dy = d.target.y - d.source.y;
+    const dist = Math.hypot(dx,dy)||1;
+    const nx=dx/dist, ny=dy/dist, r=15;
+    const mx=(d.source.x+d.target.x)/2-ny*12, my=(d.source.y+d.target.y)/2+nx*12;
+    return `M${d.source.x+nx*r},${d.source.y+ny*r} Q${mx},${my} ${d.target.x-nx*r},${d.target.y-ny*r}`;
+  }
+
+  sim.on('tick', () => {
+    linkEl.attr('d', curvePath);
+    nodeEl.attr('transform', d => `translate(${d.x},${d.y})`);
+  });
+
+  // Legend
+  const legEl = document.getElementById('convo-leg');
+  if (legEl) {
+    const kinds = [...new Set(nodes.map(n => n.kind))];
+    legEl.innerHTML = kinds.map(k => `<span class="gl-item"><span class="gl-dot" style="background:${NK[k]||'#475569'}"></span>${k}</span>`).join('');
+  }
+}
+
+function resetConvoZoom() {
+  const svgEl = document.querySelector('#g-convo .graph-svg svg');
+  if (svgEl && convoZoomBehavior) {
+    d3.select(svgEl).transition().duration(600).call(convoZoomBehavior.transform, d3.zoomIdentity);
+  }
+  if (convoSimulation) convoSimulation.alpha(0.3).restart();
+}
+
+renderConvoGraph();
+
+// ═══════════════════════════════════════════════════════════════
+// HOOKS VISUALIZATION
+// ═══════════════════════════════════════════════════════════════
+function renderHooksGraph() {
+  const container = document.getElementById('g-hooks');
+  if (!container) return;
+  const svgWrap = container.querySelector('.graph-svg');
+  svgWrap.innerHTML = '';
+  const W = 860, H = 340;
+  const svg = d3.select(svgWrap).append('svg').attr('viewBox',`0 0 ${W} ${H}`).attr('width','100%').attr('height','100%');
+  const defs = svg.append('defs');
+  Object.entries(EK).forEach(([k,cfg]) => {
+    defs.append('marker').attr('id',`hooks-arr-${k}`)
+      .attr('viewBox','0 -5 10 10').attr('refX',28).attr('refY',0)
+      .attr('markerWidth',5).attr('markerHeight',5).attr('orient','auto')
+      .append('path').attr('d','M0,-5L10,0L0,5').attr('fill',cfg.color).attr('opacity',0.8);
+  });
+
+  // Swimlane labels
+  const lanes = ['Claude', 'Hook System', 'memtree', 'Native Tool'];
+  const laneH = (H - 40) / 4;
+  lanes.forEach((l, i) => {
+    const y = 40 + i * laneH;
+    svg.append('rect').attr('x',0).attr('y',y).attr('width',W).attr('height',laneH)
+      .attr('fill', i%2===0 ? 'rgba(255,255,255,0.015)' : 'rgba(255,255,255,0.005)');
+    svg.append('text').text(l).attr('x',8).attr('y', y + laneH/2)
+      .attr('dominant-baseline','middle').attr('font-size',9).attr('font-family','var(--mono)')
+      .attr('fill','rgba(255,255,255,0.25)').attr('font-weight','700');
+  });
+  svg.append('line').attr('x1',0).attr('y1',40).attr('x2',W).attr('y2',40).attr('stroke','var(--border)').attr('stroke-width',1);
+
+  // Hook flow nodes — fixed positions
+  const hookNodes = [
+    { id:'claude-calls', kind:'tool_call', label:'Calls Read', x:120, y:40+laneH*0.5, uri:'tool://call/Read',
+      props:{ tool:'Read', input:'/src/auth/login.ts' }},
+    { id:'pre-hook', kind:'hook', label:'PreToolUse:Read', x:280, y:40+laneH*1.5, uri:'hook://PreToolUse/Read',
+      props:{ hook_type:'PreToolUse', tool:'Read', script:'redirect-read.sh', action:'deny' }},
+    { id:'deny', kind:'hook', label:'Deny native', x:430, y:40+laneH*1.5, uri:'hook://PreToolUse/Read/deny',
+      props:{ action:'deny', reason:'memtree intercepts', redirects_to:'memtree_read' }},
+    { id:'memtree-call', kind:'tool_call', label:'memtree_read', x:580, y:40+laneH*2.5, uri:'tool://memtree_read',
+      props:{ mcp_tool:'memtree_read', path:'/src/auth/login.ts', chunks_stored:4 }},
+    { id:'post-hook', kind:'hook', label:'PostToolUse', x:720, y:40+laneH*1.5, uri:'hook://PostToolUse/memtree_read',
+      props:{ hook_type:'PostToolUse', action:'capture', node_ids:['fc-a1b2','fc-c3d4','fc-e5f6','fc-g7h8'] }},
+    { id:'ref-returned', kind:'observation', label:'Refs returned', x:820, y:40+laneH*0.5, uri:'observation://result',
+      props:{ type:'tool_result', content:'memtree_read stored 4 chunks: fc-a1b2, fc-c3d4, ...' }},
+  ];
+
+  const hkMap = {};
+  hookNodes.forEach(n => hkMap[n.id] = n);
+  const hkLinks = [
+    { src:'claude-calls', dst:'pre-hook', kind:'triggers', label:'fires hook' },
+    { src:'pre-hook', dst:'deny', kind:'derived_from', label:'deny native' },
+    { src:'deny', dst:'memtree-call', kind:'triggers', label:'redirect to MCP' },
+    { src:'memtree-call', dst:'post-hook', kind:'triggers', label:'fires hook' },
+    { src:'post-hook', dst:'ref-returned', kind:'captures', label:'return refs' },
+  ];
+
+  const edgeG = svg.append('g');
+  const nodeG = svg.append('g');
+  const playBtn = container.querySelector('.btn-play');
+  const rstBtn  = container.querySelector('.btn-rst');
+  let played = false;
+
+  function play() {
+    if (played) return;
+    played = true;
+    if (playBtn) playBtn.disabled = true;
+    hkLinks.forEach((l, i) => {
+      const a = hkMap[l.src], b = hkMap[l.dst];
+      if (!a||!b) return;
+      const cfg = EK[l.kind]||{color:'#475569',dash:''};
+      const dx=b.x-a.x, dy=b.y-a.y, dist=Math.hypot(dx,dy)||1;
+      const nx=dx/dist, ny=dy/dist, r=20;
+      const mx=(a.x+b.x)/2-ny*20, my=(a.y+b.y)/2+nx*20;
+      const d=`M${a.x+nx*r},${a.y+ny*r} Q${mx},${my} ${b.x-nx*r},${b.y-ny*r}`;
+      const path = edgeG.append('path').attr('d',d).attr('fill','none')
+        .attr('stroke',cfg.color).attr('stroke-width',1.5)
+        .attr('stroke-dasharray',cfg.dash||'').attr('opacity',0)
+        .attr('marker-end',`url(#hooks-arr-${l.kind})`);
+      const len = path.node().getTotalLength();
+      path.attr('stroke-dasharray',len).attr('stroke-dashoffset',len)
+        .transition().delay(i*400).duration(500)
+        .attr('opacity',0.6).attr('stroke-dashoffset',0)
+        .on('end',()=>{ if(!cfg.dash) path.attr('stroke-dasharray',''); });
+    });
+    hookNodes.forEach((node,i) => {
+      const c = NK[node.kind]||'#475569';
+      const ng = nodeG.append('g')
+        .attr('transform',`translate(${node.x},${node.y}) scale(0.05)`)
+        .attr('opacity',0).style('cursor','pointer');
+      ng.append('circle').attr('r',20).attr('fill',c).attr('opacity',0.1);
+      ng.append('circle').attr('r',17).attr('fill',c).attr('opacity',0.85)
+        .attr('stroke',c).attr('stroke-width',1.5).attr('stroke-opacity',0.5);
+      ng.append('text').text(NI[node.kind]||'●')
+        .attr('text-anchor','middle').attr('dominant-baseline','central')
+        .attr('font-size',10).attr('fill','rgba(255,255,255,0.9)')
+        .attr('pointer-events','none').attr('font-family','var(--mono)');
+      ng.append('text').text(truncate(node.label,14))
+        .attr('text-anchor','middle').attr('y',28).attr('font-size',8.5)
+        .attr('fill','rgba(255,255,255,0.5)').attr('pointer-events','none').attr('font-family','var(--mono)');
+      ng.on('click',()=>openPropPanel(node));
+      ng.transition().delay(i*400+200).duration(450).ease(d3.easeBackOut.overshoot(1.4))
+        .attr('transform',`translate(${node.x},${node.y})`).attr('opacity',1);
+    });
+  }
+
+  function reset() {
+    played = false;
+    if (playBtn) playBtn.disabled = false;
+    edgeG.selectAll('*').remove();
+    nodeG.selectAll('*').remove();
+  }
+  if (playBtn) playBtn.addEventListener('click', play);
+  if (rstBtn)  rstBtn.addEventListener('click', reset);
+}
+renderHooksGraph();
+
+// ═══════════════════════════════════════════════════════════════
+// PIPELINE GRAPH
+// ═══════════════════════════════════════════════════════════════
+function renderPipelineGraph() {
+  const container = document.getElementById('g-pipeline');
+  if (!container) return;
+  const svgWrap = container.querySelector('.graph-svg');
+  svgWrap.innerHTML = '';
+  const W = 860, H = 260;
+  const svg = d3.select(svgWrap).append('svg').attr('viewBox',`0 0 ${W} ${H}`).attr('width','100%').attr('height','100%');
+
+  // Arrow
+  const defs = svg.append('defs');
+  defs.append('marker').attr('id','pipe-arr').attr('viewBox','0 -5 10 10').attr('refX',8)
+    .attr('markerWidth',6).attr('markerHeight',6).attr('orient','auto')
+    .append('path').attr('d','M0,-5L10,0L0,5').attr('fill','#4ade80').attr('opacity',0.8);
+
+  const stages = [
+    { id:'raw', label:'Raw Node', icon:'📥', color:'#475569', desc:'status=raw\nwaiting', x:60 },
+    { id:'walker', label:'Walker', icon:'🚶', color:'#f59e0b', desc:'background\nprocessor', x:175 },
+    { id:'chunker', label:'Chunker', icon:'✂️', color:'#0ea5e9', desc:'semantic\nsplits', x:290 },
+    { id:'embedder', label:'Embedder', icon:'🧮', color:'#818cf8', desc:'text-embedding\nvector', x:405 },
+    { id:'indexer', label:'Indexer', icon:'🗃️', color:'#4ade80', desc:'SQLite vec\nFTS5', x:520 },
+    { id:'summarizer', label:'Summarizer', icon:'📝', color:'#c084fc', desc:'LLM digest', x:635 },
+    { id:'dedupe', label:'Dedupe', icon:'♻️', color:'#fb923c', desc:'hash merge', x:740 },
+    { id:'done', label:'Indexed', icon:'✅', color:'#22c55e', desc:'status=indexed\nsearchable', x:855 },
+  ];
+
+  const playBtn = container.querySelector('.btn-play');
+  const rstBtn  = container.querySelector('.btn-rst');
+  let played = false;
+
+  stages.forEach((s, i) => {
+    const g = svg.append('g').attr('transform',`translate(${s.x},130)`)
+      .attr('opacity', i===0 ? 1 : 0).attr('id',`pipe-${s.id}`);
+    g.append('rect').attr('x',-42).attr('y',-38).attr('width',84).attr('height',76)
+      .attr('rx',8).attr('fill',s.color+'18').attr('stroke',s.color+'55').attr('stroke-width',1.5);
+    g.append('text').text(s.icon).attr('text-anchor','middle').attr('y',-12).attr('font-size',18);
+    g.append('text').text(s.label).attr('text-anchor','middle').attr('y',10)
+      .attr('font-size',10).attr('font-weight','700').attr('fill','rgba(255,255,255,0.9)').attr('font-family','var(--mono)');
+    const lines = s.desc.split('\n');
+    lines.forEach((l,li) => {
+      g.append('text').text(l).attr('text-anchor','middle').attr('y',24+li*13)
+        .attr('font-size',8.5).attr('fill','rgba(255,255,255,0.45)').attr('font-family','var(--mono)');
+    });
+    if (i < stages.length-1) {
+      const nx = stages[i+1].x;
+      svg.append('line').attr('id',`pipe-link-${i}`)
+        .attr('x1',s.x+44).attr('y1',130).attr('x2',nx-44).attr('y2',130)
+        .attr('stroke','#4ade80').attr('stroke-width',1.5).attr('opacity',0)
+        .attr('marker-end','url(#pipe-arr)');
+    }
+  });
+
+  function play() {
+    if (played) return;
+    played = true;
+    if (playBtn) playBtn.disabled = true;
+    stages.forEach((s, i) => {
+      if (i === 0) return;
+      svg.select(`#pipe-${s.id}`).transition().delay(i*400).duration(400)
+        .ease(d3.easeBackOut).attr('opacity',1);
+      if (i > 0) {
+        svg.select(`#pipe-link-${i-1}`).transition().delay(i*400-200).duration(300).attr('opacity',0.7);
+      }
+    });
+  }
+  function reset() {
+    played = false;
+    if (playBtn) playBtn.disabled = false;
+    stages.forEach((s,i) => {
+      if (i===0) return;
+      svg.select(`#pipe-${s.id}`).attr('opacity',0);
+      svg.select(`#pipe-link-${i-1}`).attr('opacity',0);
+    });
+  }
+  if (playBtn) playBtn.addEventListener('click', play);
+  if (rstBtn)  rstBtn.addEventListener('click', reset);
+}
+renderPipelineGraph();
+
+// ═══════════════════════════════════════════════════════════════
+// SEARCH VISUALIZATIONS
+// ═══════════════════════════════════════════════════════════════
+const searchDefs = {
+  semantic: {
+    title: 'Semantic Search',
+    query: 'memtree_search({ q: "JWT token expiry handling", type: "semantic", limit: 4 })',
+    desc: 'Query → embedding vector → ANN nearest-neighbor → ranked by cosine similarity',
+    results: [
+      { score:'0.94', badge:'file_chunk', color:'#0ea5e9', uri:'file:///src/auth/login.ts#chunk:2', preview:'validateToken() — jwt.verify(token, SECRET) with exp check' },
+      { score:'0.89', badge:'file_chunk', color:'#0ea5e9', uri:'file:///src/auth/refresh.ts#chunk:1', preview:'refreshAccessToken() — checks exp, issues new token' },
+      { score:'0.81', badge:'web_chunk',  color:'#16a34a', uri:'https://jwt.io/introduction#expiry', preview:'JWT expiry (exp claim) — Unix timestamp...' },
+      { score:'0.73', badge:'prompt',color:'#7e22ce', uri:'prompt://abc123/8/1', preview:'User prompt: "analyze the JWT expiry logic"' },
+    ],
+  },
+  hybrid: {
+    title: 'Hybrid Search (BM25 + Semantic → RRF)',
+    query: 'memtree_search({ q: "useAuthContext", type: "hybrid", limit: 4 })',
+    desc: 'BM25 lexical rank + semantic vector rank → Reciprocal Rank Fusion (RRF) combined score',
+    results: [
+      { score:'0.98', badge:'file_chunk', color:'#0ea5e9', uri:'file:///src/components/Header.tsx#useAuthContext', preview:'const { user } = useAuthContext() — exact FTS5 match + semantic hit' },
+      { score:'0.91', badge:'file_chunk', color:'#0ea5e9', uri:'file:///src/components/Sidebar.tsx#useAuthContext', preview:'const { permissions } = useAuthContext()' },
+      { score:'0.84', badge:'file_chunk', color:'#0ea5e9', uri:'file:///src/ctx/auth.ts#chunk:0', preview:'export const AuthContext = createContext<AuthState>(...)' },
+      { score:'0.77', badge:'prompt',color:'#7e22ce', uri:'prompt://abc123/5/1', preview:'"Find all useAuthContext usages" — semantic match on query intent' },
+    ],
+  },
+  compose: {
+    title: 'Compose (Budget-Bounded Recall)',
+    query: 'memtree_compose(["fc-a1b2","fc-c3d4","fc-e5f6"], token_budget=3000)',
+    desc: 'Assembles referenced nodes within a token budget — fills context efficiently from graph references',
+    results: [
+      { score:'152B', badge:'file_chunk', color:'#0ea5e9', uri:'file:///src/auth/login.ts#chunk:0', preview:'imports block — included (152 tokens)' },
+      { score:'487B', badge:'file_chunk', color:'#0ea5e9', uri:'file:///src/auth/login.ts#chunk:1', preview:'login() — included (487 tokens)' },
+      { score:'312B', badge:'file_chunk', color:'#0ea5e9', uri:'file:///src/auth/login.ts#chunk:2', preview:'validateToken() — included (312 tokens, budget=951/3000)' },
+      { score:'skip', badge:'file_chunk', color:'#475569', uri:'file:///src/auth/login.ts#chunk:3', preview:'logout() — skipped (budget full: 3012 > 3000)' },
+    ],
+  },
+  jsonpath: {
+    title: 'JSONPath Filter',
+    query: 'memtree_search({ jsonpath: "$.nodes[?(@.kind==\'file_chunk\' && @.props.lang==\'typescript\')]" })',
+    desc: 'JSONPath expression over the graph — filter nodes by arbitrary property structure',
+    results: [
+      { score:'match', badge:'file_chunk', color:'#0ea5e9', uri:'file:///src/auth/login.ts#chunk:1', preview:'login() · lang=typescript · size=487' },
+      { score:'match', badge:'file_chunk', color:'#0ea5e9', uri:'file:///src/auth/login.ts#chunk:2', preview:'validateToken() · lang=typescript · size=312' },
+      { score:'match', badge:'file_chunk', color:'#0ea5e9', uri:'file:///src/components/Header.tsx#chunk:1', preview:'Header · lang=typescript · size=320' },
+      { score:'match', badge:'file_chunk', color:'#0ea5e9', uri:'file:///src/ctx/auth.ts#chunk:0', preview:'AuthContext · lang=typescript · size=220' },
+    ],
+  },
+  metadata: {
+    title: 'Metadata Filters',
+    query: 'memtree_search({ filters: { kind: "file_chunk", status: "indexed", created_after: "2026-05-25" } })',
+    desc: 'Filter by node type, status, date range, and other indexed metadata fields',
+    results: [
+      { score:'indexed', badge:'file_chunk', color:'#0ea5e9', uri:'file:///src/auth/login.ts#chunk:0', preview:'created: 2026-05-26T14:33:50Z · status: indexed' },
+      { score:'indexed', badge:'file_chunk', color:'#0ea5e9', uri:'file:///src/auth/login.ts#chunk:1', preview:'created: 2026-05-26T14:33:50Z · status: indexed' },
+      { score:'indexed', badge:'file_chunk', color:'#0ea5e9', uri:'file:///src/components/Header.tsx#chunk:1', preview:'created: 2026-05-26T14:35:10Z · status: indexed' },
+      { score:'stale', badge:'file_chunk',   color:'#b45309', uri:'file:///src/utils/old.ts#chunk:0', preview:'created: 2026-05-10 · status: stale · not returned (filter)' },
+    ],
+  },
+  neighbors: {
+    title: 'memtree.neighbors',
+    query: 'memtree_neighbors({ node_id: "fc-c3d4", hops: 2, kinds: ["file_chunk","prompt"] })',
+    desc: 'BFS from a seed node — returns all nodes within N hops, filtered by kind',
+    results: [
+      { score:'hop 0', badge:'file_chunk', color:'#0ea5e9', uri:'file:///src/auth/login.ts#chunk:2', preview:'validateToken() — seed node (hop 0)' },
+      { score:'hop 1', badge:'file_chunk', color:'#0ea5e9', uri:'file:///src/auth/login.ts#chunk:1', preview:'login() — connected via ←next (hop 1)' },
+      { score:'hop 1', badge:'file_chunk', color:'#0ea5e9', uri:'file:///src/auth/login.ts#chunk:3', preview:'logout() — connected via next→ (hop 1)' },
+      { score:'hop 2', badge:'prompt',color:'#7e22ce', uri:'prompt://abc123/3/1', preview:'"Read login.ts" — turn that referenced login.ts (hop 2)' },
+    ],
+  },
+  pathroot: {
+    title: 'memtree.path_to_root',
+    query: 'memtree_path_to_root({ node_id: "fc-c3d4" })',
+    desc: 'Traces the ancestor chain from any leaf node up to the session root via contains/references edges',
+    results: [
+      { score:'depth 0', badge:'file_chunk', color:'#0ea5e9', uri:'file:///src/auth/login.ts#chunk:2', preview:'validateToken() — start node' },
+      { score:'depth 1', badge:'file',       color:'#0369a1', uri:'file:///src/auth/login.ts', preview:'login.ts — file parent' },
+      { score:'depth 2', badge:'tool_call',  color:'#c2410c', uri:'tool://abc123/3/Read/1', preview:'Read tool_call — Read tool_call that produced this file' },
+      { score:'depth 3', badge:'turn',       color:'#6d28d9', uri:'turn://abc123/3', preview:'Turn #3 → Session abc123 (root)' },
+    ],
+  },
+  recent: {
+    title: 'memtree.recent',
+    query: 'memtree_recent({ window: "1h", kinds: ["file_chunk","web_content","prompt"], limit: 4 })',
+    desc: 'Returns the most recently created or accessed nodes within a sliding time window, sorted by recency',
+    results: [
+      { score:'14:36:08', badge:'output_chunk', color:'#ea580c', uri:'output://abc123/6/Bash/2/chunk:1', preview:'Python REPL stdout: 56154 — 2 min ago' },
+      { score:'14:35:10', badge:'file_chunk',   color:'#0ea5e9', uri:'file:///src/components/Header.tsx#chunk:1', preview:'Header.tsx — 3 min ago' },
+      { score:'14:33:50', badge:'web_content',  color:'#16a34a', uri:'https://docs.anthropic.com/claude/docs/tool-use', preview:'docs.anthropic.com — 5 min ago (cached)' },
+      { score:'14:33:50', badge:'file_chunk',   color:'#0ea5e9', uri:'file:///src/auth/login.ts#chunk:2', preview:'validateToken() — 5 min ago' },
+    ],
+  },
+};
+
+function renderSearchPanes() {
+  Object.entries(searchDefs).forEach(([key, def]) => {
+    const pane = document.getElementById(`search-${key}`);
+    if (!pane) return;
+    const qEl = document.createElement('div');
+    qEl.className = 'cb'; qEl.style.marginBottom = '14px';
+    qEl.innerHTML = `<span class="k">${def.query.split('(')[0]}</span>${def.query.includes('(') ? '<span class="p">(</span>' + def.query.slice(def.query.indexOf('(')+1,-1) + '<span class="p">)</span>' : ''}`;
+    pane.appendChild(qEl);
+    const desc = document.createElement('p');
+    desc.style.cssText = 'font-size:12px;color:var(--muted);margin-bottom:12px';
+    desc.textContent = def.desc;
+    pane.appendChild(desc);
+    const list = document.createElement('div');
+    def.results.forEach(r => {
+      const row = document.createElement('div');
+      row.className = 'search-result-row';
+      const scoreColor = r.score === 'skip' ? '#f87171' : r.score === 'stale' ? '#b45309' : '#4ade80';
+      row.innerHTML = `<span class="sr-score" style="color:${scoreColor}">${r.score}</span>
+        <span class="sr-badge" style="background:${r.color}22;color:${r.color};border:1px solid ${r.color}44">${r.badge}</span>
+        <span class="sr-uri">${r.uri}</span>
+        <span class="sr-preview" style="color:var(--muted);font-size:9.5px;flex-shrink:0;max-width:35%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.preview}</span>`;
+      list.appendChild(row);
+    });
+    pane.appendChild(list);
+  });
+}
+renderSearchPanes();
+
+// ═══════════════════════════════════════════════════════════════
+// STATE MACHINE
+// ═══════════════════════════════════════════════════════════════
+const states = [
+  { id:'raw',        label:'raw',        color:'#475569', desc:'Just ingested' },
+  { id:'processing', label:'processing', color:'#f59e0b', desc:'Walker active' },
+  { id:'indexed',    label:'indexed',    color:'#22c55e', desc:'Searchable' },
+  { id:'stale',      label:'stale',      color:'#ea580c', desc:'TTL exceeded' },
+  { id:'superseded', label:'superseded', color:'#f87171', desc:'Replaced' },
+  { id:'redacted',   label:'redacted',   color:'#7f1d1d', desc:'Sensitive content removed' },
+  { id:'pruned',     label:'pruned',     color:'#334155', desc:'Deleted/archived' },
+];
+const transitions = [
+  { from:'raw',        to:'processing', trigger:'walker picks up' },
+  { from:'processing', to:'indexed',    trigger:'embed + index complete' },
+  { from:'processing', to:'raw',        trigger:'retry on error' },
+  { from:'indexed',    to:'stale',      trigger:'TTL days without access' },
+  { from:'indexed',    to:'superseded', trigger:'newer version ingested' },
+  { from:'indexed',    to:'redacted',   trigger:'sensitive content detected' },
+  { from:'stale',      to:'indexed',    trigger:'node accessed again' },
+  { from:'stale',      to:'pruned',     trigger:'retention policy expires' },
+  { from:'superseded', to:'pruned',     trigger:'cleanup run' },
+  { from:'redacted',   to:'pruned',     trigger:'hold period expires' },
+];
+
+const stateGrid = document.getElementById('state-grid');
+states.forEach(s => {
+  const el = document.createElement('div');
+  el.className = 'state-card';
+  el.style.cssText = `border-color:${s.color}55;background:${s.color}14`;
+  el.innerHTML = `<div class="state-name" style="color:${s.color}">${s.label}</div><div class="state-desc">${s.desc}</div>`;
+  el.onclick = () => openPropPanel({ kind:'state', label:s.label, uri:`state://${s.id}`, props:{ status:s.label, description:s.desc, color:s.color } });
+  stateGrid.appendChild(el);
+});
+const transList = document.getElementById('state-transitions');
+transitions.forEach(t => {
+  const from = states.find(s => s.id === t.from);
+  const to   = states.find(s => s.id === t.to);
+  if (!from||!to) return;
+  const el = document.createElement('div');
+  el.className = 'state-trans';
+  el.innerHTML = `<span class="trans-from" style="background:${from.color}22;color:${from.color}">${from.label}</span>
+    <span class="trans-arrow">→</span>
+    <span class="trans-to" style="background:${to.color}22;color:${to.color}">${to.label}</span>
+    <span class="trans-trigger">${t.trigger}</span>`;
+  transList.appendChild(el);
+});
+
+// State machine SVG
+function renderStateMachine() {
+  const container = document.getElementById('g-states');
+  if (!container) return;
+  const svgWrap = container.querySelector('.graph-svg');
+  svgWrap.innerHTML = '';
+  const W = 860, H = 310;
+  const svg = d3.select(svgWrap).append('svg').attr('viewBox',`0 0 ${W} ${H}`).attr('width','100%').attr('height','100%');
+
+  const defs = svg.append('defs');
+  states.forEach(s => {
+    ['in','out'].forEach(dir => {
+      defs.append('marker').attr('id',`sm-arr-${s.id}-${dir}`)
+        .attr('viewBox','0 -4 8 8').attr('refX', dir==='in' ? 40 : 6).attr('refY',0)
+        .attr('markerWidth',5).attr('markerHeight',5).attr('orient','auto')
+        .append('path').attr('d','M0,-4L8,0L0,4').attr('fill',s.color).attr('opacity',0.8);
+    });
+  });
+  defs.append('marker').attr('id','sm-arr-default')
+    .attr('viewBox','0 -4 8 8').attr('refX',6).attr('refY',0)
+    .attr('markerWidth',5).attr('markerHeight',5).attr('orient','auto')
+    .append('path').attr('d','M0,-4L8,0L0,4').attr('fill','#475569').attr('opacity',0.7);
+
+  // State positions (fixed layout)
+  const sPos = {
+    raw:        { x:90,  y:155 },
+    processing: { x:240, y:155 },
+    indexed:    { x:430, y:155 },
+    stale:      { x:600, y:80  },
+    superseded: { x:600, y:155 },
+    redacted:   { x:600, y:235 },
+    pruned:     { x:760, y:155 },
+  };
+
+  // Draw transition arrows
+  transitions.forEach(t => {
+    const a = sPos[t.from], b = sPos[t.to];
+    if (!a||!b) return;
+    const from = states.find(s=>s.id===t.from);
+    const dx=b.x-a.x, dy=b.y-a.y, dist=Math.hypot(dx,dy)||1;
+    const nx=dx/dist, ny=dy/dist, r=36;
+    const curve = (t.from==='processing'&&t.to==='raw') ? -40 : 0;
+    const mx=(a.x+b.x)/2-ny*curve, my=(a.y+b.y)/2+nx*curve;
+    const d=`M${a.x+nx*r},${a.y+ny*r} Q${mx},${my} ${b.x-nx*r},${b.y-ny*r}`;
+    svg.append('path').attr('d',d).attr('fill','none')
+      .attr('stroke',from?.color||'#475569').attr('stroke-width',1.2).attr('opacity',0.45)
+      .attr('marker-end',`url(#sm-arr-${t.to}-in)`);
+    // Label at midpoint
+    const lx=(a.x+b.x)/2-ny*(curve/2)+5, ly=(a.y+b.y)/2+nx*(curve/2)-5;
+    svg.append('text').text(t.trigger)
+      .attr('x',lx).attr('y',ly).attr('text-anchor','middle')
+      .attr('font-size',7.5).attr('font-family','var(--mono)').attr('fill','rgba(255,255,255,0.3)');
+  });
+
+  // Draw state nodes
+  let currentHighlight = null;
+  states.forEach(s => {
+    const pos = sPos[s.id];
+    if (!pos) return;
+    const sg = svg.append('g').attr('transform',`translate(${pos.x},${pos.y})`).style('cursor','pointer');
+    sg.append('rect').attr('x',-36).attr('y',-18).attr('width',72).attr('height',36)
+      .attr('rx',18).attr('ry',18).attr('class',`sm-state-${s.id}`)
+      .attr('fill',s.color+'22').attr('stroke',s.color).attr('stroke-width',1.5).attr('opacity',0.85);
+    sg.append('text').text(s.label)
+      .attr('text-anchor','middle').attr('dominant-baseline','middle')
+      .attr('font-size',9.5).attr('font-family','var(--mono)').attr('font-weight','700')
+      .attr('fill',s.color);
+    sg.on('click',()=>{
+      openPropPanel({ kind:'state', label:s.label, uri:`state://${s.id}`, props:{ status:s.label, description:s.desc, color:s.color } });
+      if (currentHighlight) svg.select(`.sm-state-${currentHighlight}`).attr('stroke-width',1.5);
+      svg.select(`.sm-state-${s.id}`).attr('stroke-width',3);
+      currentHighlight = s.id;
+    });
+  });
+
+  // Animate lifecycle
+  const playBtn = document.getElementById('states-play');
+  const rstBtn  = document.getElementById('states-rst');
+  let animTimer = null;
+  const lifecycle = ['raw','processing','indexed','stale','pruned'];
+
+  playBtn?.addEventListener('click', () => {
+    playBtn.disabled = true;
+    let step = 0;
+    animTimer = setInterval(() => {
+      if (step > 0) svg.select(`.sm-state-${lifecycle[step-1]}`).attr('stroke-width',1.5).attr('fill',states.find(s=>s.id===lifecycle[step-1])?.color+'22');
+      if (step >= lifecycle.length) { clearInterval(animTimer); playBtn.disabled = false; return; }
+      const s = lifecycle[step];
+      const col = states.find(st=>st.id===s)?.color||'#475569';
+      svg.select(`.sm-state-${s}`).attr('stroke-width',3).attr('fill',col+'44');
+      step++;
+    }, 800);
+  });
+  rstBtn?.addEventListener('click', () => {
+    clearInterval(animTimer);
+    playBtn.disabled = false;
+    states.forEach(s => svg.select(`.sm-state-${s.id}`).attr('stroke-width',1.5).attr('fill',s.color+'22'));
+  });
+}
+renderStateMachine();
+
+// ═══════════════════════════════════════════════════════════════
+// TAB SWITCHING
+// ═══════════════════════════════════════════════════════════════
+function switchTab(section, tab) {
+  const panes = document.querySelectorAll(`#${section}-ro, #${section}-rw`);
+  panes.forEach(p => p.classList.remove('active'));
+  document.getElementById(`${section}-${tab}`)?.classList.add('active');
+  const btns = document.querySelectorAll(`#${section} .tab-btn`);
+  btns.forEach(b => b.classList.toggle('active', b.textContent.toLowerCase().includes(tab==='ro'?'read-only':'read-write')));
+}
+
+function switchSearchTab(key) {
+  document.querySelectorAll('#search .tab-pane').forEach(p => p.classList.remove('active'));
+  document.getElementById(`search-${key}`)?.classList.add('active');
+  document.querySelectorAll('#search .tab-btn').forEach(b => b.classList.toggle('active', b.onclick?.toString().includes(`'${key}'`)));
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SCROLLSPY
+// ═══════════════════════════════════════════════════════════════
+const navLinks = document.querySelectorAll('.nav-link');
+window.addEventListener('scroll', () => {
+  let cur = '';
+  document.querySelectorAll('[id]').forEach(s => { if (window.scrollY >= s.offsetTop - 80) cur = s.id; });
+  navLinks.forEach(l => l.classList.toggle('active', l.getAttribute('href') === '#'+cur));
+}, { passive:true });
+</script>
+</body>
+</html>

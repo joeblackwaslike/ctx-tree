@@ -12,7 +12,7 @@
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey)](#development)
 [![Bun ≥1.1](https://img.shields.io/badge/requires-Bun%20%E2%89%A51.1-f472b6)](https://bun.sh)
 [![Built on mcp-exec](https://img.shields.io/badge/built%20on-mcp--exec-orange)](https://github.com/joeblackwaslike/mcp-exec)
-[![How It Works →](https://img.shields.io/badge/docs-how%20it%20works%20%E2%86%92-38bdf8)](https://github.com/joeblackwaslike/memtree/blob/main/docs/how-it-works.html)
+[![How It Works →](https://img.shields.io/badge/docs-how%20it%20works%20%E2%86%92-38bdf8)](https://joeblackwaslike.github.io/memtree/how-it-works.html)
 
 </div>
 
@@ -136,7 +136,7 @@ flowchart TD
     F -.->|"next session\nzero cost"| F
 ```
 
-→ **[Interactive walkthrough — every node type, hook, pipeline, and search pattern](https://github.com/joeblackwaslike/memtree/blob/main/docs/how-it-works.html)**
+→ **[Interactive walkthrough — every node type, hook, pipeline, and search pattern](https://joeblackwaslike.github.io/memtree/how-it-works.html)**
 
 ---
 
@@ -200,6 +200,6 @@ bun install
 
 <div align="center">
 
-[📊 How It Works](https://github.com/joeblackwaslike/memtree/blob/main/docs/how-it-works.html) · [⚡ Quick Overview](docs/mini.html) · [📄 Design Spec](docs/superpowers/specs/2026-05-17-memtree-design.md) · [Agent Marketplace](https://github.com/joeblackwaslike/agent-marketplace) · [mcp-exec](https://github.com/joeblackwaslike/mcp-exec)
+[📊 How It Works](https://joeblackwaslike.github.io/memtree/how-it-works.html) · [⚡ Quick Overview](https://joeblackwaslike.github.io/memtree/mini.html) · [📄 Design Spec](docs/superpowers/specs/2026-05-17-memtree-design.md) · [Agent Marketplace](https://github.com/joeblackwaslike/agent-marketplace) · [mcp-exec](https://github.com/joeblackwaslike/mcp-exec)
 
 </div>
