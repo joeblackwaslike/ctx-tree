@@ -112,10 +112,6 @@
     "memtree": {
       "command": "/usr/bin/env",
       "args": ["bun", "run", "${CLAUDE_PLUGIN_ROOT}/mcp/dist/server.js"]
-    },
-    "mcp-exec": {
-      "command": "node",
-      "args": ["${CLAUDE_PLUGIN_ROOT}/node_modules/@joeblackwaslike2/mcp-exec/dist/src/server.js"]
     }
   }
 }
