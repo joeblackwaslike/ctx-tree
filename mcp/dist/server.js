@@ -26010,7 +26010,8 @@ var DEFAULT_CONFIG = {
     prunerIntervalMs: 300000
   },
   capture: { maxBytes: 1e5, filterMinSize: 50 },
-  trustedExecution: false
+  trustedExecution: false,
+  backend: { kind: "sqlite" }
 };
 function readJson(path) {
   try {
@@ -26039,7 +26040,20 @@ function loadConfig(projectRoot) {
   const globalOverride = existsSync(globalPath) ? readJson(globalPath) : {};
   const projectPath = projectRoot ? join(projectRoot, ".memtree", "config.json") : null;
   const projectOverride = projectPath && existsSync(projectPath) ? readJson(projectPath) : {};
-  return deepMergeConfig(deepMergeConfig(DEFAULT_CONFIG, globalOverride), projectOverride);
+  let merged = deepMergeConfig(deepMergeConfig(DEFAULT_CONFIG, globalOverride), projectOverride);
+  if (process.env.MEMTREE_BACKEND) {
+    merged = {
+      ...merged,
+      backend: { ...merged.backend, kind: process.env.MEMTREE_BACKEND }
+    };
+  }
+  if (process.env.MEMTREE_SCHEMA_PATH) {
+    merged = {
+      ...merged,
+      backend: { ...merged.backend, schemaPath: process.env.MEMTREE_SCHEMA_PATH }
+    };
+  }
+  return merged;
 }
 
 // src/project-hash.ts
@@ -27834,7 +27848,7 @@ ${content}`;
   }
 }
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/internal/tslib.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/internal/tslib.mjs
 function __classPrivateFieldSet(receiver, state, value, kind, f) {
   if (kind === "m")
     throw new TypeError("Private method is not writable");
@@ -27852,7 +27866,7 @@ function __classPrivateFieldGet(receiver, state, kind, f) {
   return kind === "m" ? f : kind === "a" ? f.call(receiver) : f ? f.value : state.get(receiver);
 }
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/internal/utils/uuid.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/internal/utils/uuid.mjs
 var uuid4 = function() {
   const { crypto: crypto2 } = globalThis;
   if (crypto2?.randomUUID) {
@@ -27864,7 +27878,7 @@ var uuid4 = function() {
   return "10000000-1000-4000-8000-100000000000".replace(/[018]/g, (c) => (+c ^ randomByte() & 15 >> +c / 4).toString(16));
 };
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/internal/errors.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/internal/errors.mjs
 function isAbortError(err) {
   return typeof err === "object" && err !== null && (("name" in err) && err.name === "AbortError" || ("message" in err) && String(err.message).includes("FetchRequestCanceledException"));
 }
@@ -27891,7 +27905,7 @@ var castToError = (err) => {
   return new Error(err);
 };
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/core/error.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/core/error.mjs
 class OpenAIError extends Error {
 }
 
@@ -28042,7 +28056,7 @@ class SubjectTokenProviderError extends OpenAIError {
   }
 }
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/internal/utils/values.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/internal/utils/values.mjs
 var startsWithSchemeRegexp = /^[a-z][a-z0-9+.-]*:/i;
 var isAbsoluteURL = (url) => {
   return startsWithSchemeRegexp.test(url);
@@ -28085,13 +28099,13 @@ var safeJSON = (text) => {
   }
 };
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/internal/utils/sleep.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/internal/utils/sleep.mjs
 var sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/version.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/version.mjs
 var VERSION = "6.39.0";
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/internal/detect-platform.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/internal/detect-platform.mjs
 var isRunningInBrowser = () => {
   return typeof window !== "undefined" && typeof window.document !== "undefined" && typeof navigator !== "undefined";
 };
@@ -28220,7 +28234,7 @@ var getPlatformHeaders = () => {
   return _platformHeaders ?? (_platformHeaders = getPlatformProperties());
 };
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/internal/shims.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/internal/shims.mjs
 function getDefaultFetch() {
   if (typeof fetch !== "undefined") {
     return fetch;
@@ -28291,7 +28305,7 @@ async function CancelReadableStream(stream) {
   await cancelPromise;
 }
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/internal/request-options.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/internal/request-options.mjs
 var FallbackEncoder = ({ headers, body }) => {
   return {
     bodyHeaders: {
@@ -28301,7 +28315,7 @@ var FallbackEncoder = ({ headers, body }) => {
   };
 };
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/internal/qs/formats.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/internal/qs/formats.mjs
 var default_format = "RFC3986";
 var default_formatter = (v) => String(v);
 var formatters = {
@@ -28310,7 +28324,7 @@ var formatters = {
 };
 var RFC1738 = "RFC1738";
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/internal/qs/utils.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/internal/qs/utils.mjs
 var has = (obj, key) => (has = Object.hasOwn ?? Function.prototype.call.bind(Object.prototype.hasOwnProperty), has(obj, key));
 var hex_table = /* @__PURE__ */ (() => {
   const array3 = [];
@@ -28382,7 +28396,7 @@ function maybe_map(val, fn) {
   return fn(val);
 }
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/internal/qs/stringify.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/internal/qs/stringify.mjs
 var array_prefix_generators = {
   brackets(prefix) {
     return String(prefix) + "[]";
@@ -28610,12 +28624,12 @@ function stringify(object4, opts = {}) {
   return joined.length > 0 ? prefix + joined : "";
 }
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/internal/utils/query.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/internal/utils/query.mjs
 function stringifyQuery(query) {
   return stringify(query, { arrayFormat: "brackets" });
 }
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/internal/utils/bytes.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/internal/utils/bytes.mjs
 function concatBytes(buffers) {
   let length = 0;
   for (const buffer of buffers) {
@@ -28640,7 +28654,7 @@ function decodeUTF8(bytes) {
   return (decodeUTF8_ ?? (decoder = new globalThis.TextDecoder, decodeUTF8_ = decoder.decode.bind(decoder)))(bytes);
 }
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/internal/decoders/line.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/internal/decoders/line.mjs
 var _LineDecoder_buffer;
 var _LineDecoder_carriageReturnIndex;
 
@@ -28720,7 +28734,7 @@ function findDoubleNewlineIndex(buffer) {
   return -1;
 }
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/internal/utils/log.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/internal/utils/log.mjs
 var levelNumbers = {
   off: 0,
   error: 200,
@@ -28792,7 +28806,7 @@ var formatRequestDetails = (details) => {
   return details;
 };
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/core/streaming.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/core/streaming.mjs
 var _Stream_client;
 
 class Stream {
@@ -29041,7 +29055,7 @@ function partition(str, delimiter) {
   return [str, "", ""];
 }
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/internal/parse.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/internal/parse.mjs
 async function defaultParseResponse(client, props) {
   const { response, requestLogID, retryOfRequestLogID, startTime } = props;
   const body = await (async () => {
@@ -29091,7 +29105,7 @@ function addRequestID(value, response) {
   });
 }
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/core/api-promise.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/core/api-promise.mjs
 var _APIPromise_client;
 
 class APIPromise extends Promise {
@@ -29132,7 +29146,7 @@ class APIPromise extends Promise {
 }
 _APIPromise_client = new WeakMap;
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/core/pagination.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/core/pagination.mjs
 var _AbstractPage_client;
 
 class AbstractPage {
@@ -29292,7 +29306,7 @@ class NextCursorPage extends AbstractPage {
   }
 }
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/auth/workload-identity-auth.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/auth/workload-identity-auth.mjs
 var SUBJECT_TOKEN_TYPES = {
   jwt: "urn:ietf:params:oauth:token-type:jwt",
   id: "urn:ietf:params:oauth:token-type:id_token"
@@ -29380,7 +29394,7 @@ class WorkloadIdentityAuth {
   }
 }
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/internal/uploads.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/internal/uploads.mjs
 var checkFileSupport = () => {
   if (typeof File === "undefined") {
     const { process: process4 } = globalThis;
@@ -29471,7 +29485,7 @@ var addFormValue = async (form, key, value) => {
   }
 };
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/internal/to-file.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/internal/to-file.mjs
 var isBlobLike = (value) => value != null && typeof value === "object" && typeof value.size === "number" && typeof value.type === "string" && typeof value.text === "function" && typeof value.slice === "function" && typeof value.arrayBuffer === "function";
 var isFileLike = (value) => value != null && typeof value === "object" && typeof value.name === "string" && typeof value.lastModified === "number" && isBlobLike(value);
 var isResponseLike = (value) => value != null && typeof value === "object" && typeof value.url === "string" && typeof value.blob === "function";
@@ -29521,14 +29535,14 @@ function propsForError(value) {
   const props = Object.getOwnPropertyNames(value);
   return `; props: [${props.map((p) => `"${p}"`).join(", ")}]`;
 }
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/core/resource.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/core/resource.mjs
 class APIResource {
   constructor(client) {
     this._client = client;
   }
 }
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/internal/utils/path.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/internal/utils/path.mjs
 function encodeURIPath(str) {
   return str.replace(/[^A-Za-z0-9\-._~!$&'()*+,;=:@]+/g, encodeURIComponent);
 }
@@ -29583,13 +29597,13 @@ ${underline}`);
 };
 var path = /* @__PURE__ */ createPathTagFunction(encodeURIPath);
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/chat/completions/messages.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/chat/completions/messages.mjs
 class Messages extends APIResource {
   list(completionID, query = {}, options) {
     return this._client.getAPIList(path`/chat/completions/${completionID}/messages`, CursorPage, { query, ...options, __security: { bearerAuth: true } });
   }
 }
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/lib/parser.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/lib/parser.mjs
 function isChatCompletionFunctionTool(tool) {
   return tool !== undefined && "function" in tool && tool.function !== undefined;
 }
@@ -29696,7 +29710,7 @@ function validateInputTools(tools) {
   }
 }
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/lib/chatCompletionUtils.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/lib/chatCompletionUtils.mjs
 var isAssistantMessage = (message) => {
   return message?.role === "assistant";
 };
@@ -29704,7 +29718,7 @@ var isToolMessage = (message) => {
   return message?.role === "tool";
 };
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/lib/EventStream.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/lib/EventStream.mjs
 var _EventStream_instances;
 var _EventStream_connectedPromise;
 var _EventStream_resolveConnectedPromise;
@@ -29857,12 +29871,12 @@ _EventStream_connectedPromise = new WeakMap, _EventStream_resolveConnectedPromis
   return this._emit("error", new OpenAIError(String(error3)));
 };
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/lib/RunnableFunction.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/lib/RunnableFunction.mjs
 function isRunnableFunctionWithParse(fn) {
   return typeof fn.parse === "function";
 }
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/lib/AbstractChatCompletionRunner.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/lib/AbstractChatCompletionRunner.mjs
 var _AbstractChatCompletionRunner_instances;
 var _AbstractChatCompletionRunner_getFinalContent;
 var _AbstractChatCompletionRunner_getFinalMessage;
@@ -30117,7 +30131,7 @@ _AbstractChatCompletionRunner_instances = new WeakSet, _AbstractChatCompletionRu
   return typeof rawContent === "string" ? rawContent : rawContent === undefined ? "undefined" : JSON.stringify(rawContent);
 };
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/lib/ChatCompletionRunner.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/lib/ChatCompletionRunner.mjs
 class ChatCompletionRunner extends AbstractChatCompletionRunner {
   static runTools(client, params, options) {
     const runner = new ChatCompletionRunner;
@@ -30136,7 +30150,7 @@ class ChatCompletionRunner extends AbstractChatCompletionRunner {
   }
 }
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/_vendor/partial-json-parser/parser.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/_vendor/partial-json-parser/parser.mjs
 var STR = 1;
 var NUM = 2;
 var ARR = 4;
@@ -30349,7 +30363,7 @@ var _parseJSON = (jsonString, allow) => {
   return parseAny();
 };
 var partialParse = (input) => parseJSON(input, Allow.ALL ^ Allow.NUM);
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/lib/ChatCompletionStream.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/lib/ChatCompletionStream.mjs
 var _ChatCompletionStream_instances;
 var _ChatCompletionStream_params;
 var _ChatCompletionStream_choiceEventStates;
@@ -30822,7 +30836,7 @@ function assertIsEmpty(obj) {
 }
 function assertNever2(_x) {}
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/lib/ChatCompletionStreamingRunner.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/lib/ChatCompletionStreamingRunner.mjs
 class ChatCompletionStreamingRunner extends ChatCompletionStream {
   static fromReadableStream(stream) {
     const runner = new ChatCompletionStreamingRunner(null);
@@ -30840,7 +30854,7 @@ class ChatCompletionStreamingRunner extends ChatCompletionStream {
   }
 }
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/chat/completions/completions.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/chat/completions/completions.mjs
 class Completions extends APIResource {
   constructor() {
     super(...arguments);
@@ -30902,7 +30916,7 @@ class Completions extends APIResource {
 }
 Completions.Messages = Messages;
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/chat/chat.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/chat/chat.mjs
 class Chat extends APIResource {
   constructor() {
     super(...arguments);
@@ -30910,7 +30924,7 @@ class Chat extends APIResource {
   }
 }
 Chat.Completions = Completions;
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/admin/organization/admin-api-keys.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/admin/organization/admin-api-keys.mjs
 class AdminAPIKeys extends APIResource {
   create(body, options) {
     return this._client.post("/organization/admin_api_keys", {
@@ -30940,7 +30954,7 @@ class AdminAPIKeys extends APIResource {
   }
 }
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/admin/organization/audit-logs.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/admin/organization/audit-logs.mjs
 class AuditLogs extends APIResource {
   list(query = {}, options) {
     return this._client.getAPIList("/organization/audit_logs", ConversationCursorPage, {
@@ -30951,7 +30965,7 @@ class AuditLogs extends APIResource {
   }
 }
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/admin/organization/certificates.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/admin/organization/certificates.mjs
 class Certificates extends APIResource {
   create(body, options) {
     return this._client.post("/organization/certificates", {
@@ -30996,7 +31010,7 @@ class Certificates extends APIResource {
   }
 }
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/admin/organization/data-retention.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/admin/organization/data-retention.mjs
 class DataRetention extends APIResource {
   retrieve(options) {
     return this._client.get("/organization/data_retention", {
@@ -31013,7 +31027,7 @@ class DataRetention extends APIResource {
   }
 }
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/admin/organization/invites.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/admin/organization/invites.mjs
 class Invites extends APIResource {
   create(body, options) {
     return this._client.post("/organization/invites", {
@@ -31043,7 +31057,7 @@ class Invites extends APIResource {
   }
 }
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/admin/organization/roles.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/admin/organization/roles.mjs
 class Roles extends APIResource {
   create(body, options) {
     return this._client.post("/organization/roles", {
@@ -31080,7 +31094,7 @@ class Roles extends APIResource {
   }
 }
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/admin/organization/spend-alerts.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/admin/organization/spend-alerts.mjs
 class SpendAlerts extends APIResource {
   create(body, options) {
     return this._client.post("/organization/spend_alerts", {
@@ -31107,7 +31121,7 @@ class SpendAlerts extends APIResource {
   }
 }
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/admin/organization/usage.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/admin/organization/usage.mjs
 class Usage extends APIResource {
   audioSpeeches(query, options) {
     return this._client.get("/organization/usage/audio_speeches", {
@@ -31188,7 +31202,7 @@ class Usage extends APIResource {
   }
 }
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/admin/organization/groups/roles.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/admin/organization/groups/roles.mjs
 class Roles2 extends APIResource {
   create(groupID, body, options) {
     return this._client.post(path`/organization/groups/${groupID}/roles`, {
@@ -31216,7 +31230,7 @@ class Roles2 extends APIResource {
   }
 }
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/admin/organization/groups/users.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/admin/organization/groups/users.mjs
 class Users extends APIResource {
   create(groupID, body, options) {
     return this._client.post(path`/organization/groups/${groupID}/users`, {
@@ -31244,7 +31258,7 @@ class Users extends APIResource {
   }
 }
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/admin/organization/groups/groups.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/admin/organization/groups/groups.mjs
 class Groups extends APIResource {
   constructor() {
     super(...arguments);
@@ -31288,7 +31302,7 @@ class Groups extends APIResource {
 Groups.Users = Users;
 Groups.Roles = Roles2;
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/admin/organization/projects/api-keys.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/admin/organization/projects/api-keys.mjs
 class APIKeys extends APIResource {
   retrieve(apiKeyID, params, options) {
     const { project_id } = params;
@@ -31309,7 +31323,7 @@ class APIKeys extends APIResource {
   }
 }
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/admin/organization/projects/certificates.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/admin/organization/projects/certificates.mjs
 class Certificates2 extends APIResource {
   list(projectID, query = {}, options) {
     return this._client.getAPIList(path`/organization/projects/${projectID}/certificates`, ConversationCursorPage, { query, ...options, __security: { adminAPIKeyAuth: true } });
@@ -31322,7 +31336,7 @@ class Certificates2 extends APIResource {
   }
 }
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/admin/organization/projects/data-retention.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/admin/organization/projects/data-retention.mjs
 class DataRetention2 extends APIResource {
   retrieve(projectID, options) {
     return this._client.get(path`/organization/projects/${projectID}/data_retention`, {
@@ -31339,7 +31353,7 @@ class DataRetention2 extends APIResource {
   }
 }
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/admin/organization/projects/hosted-tool-permissions.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/admin/organization/projects/hosted-tool-permissions.mjs
 class HostedToolPermissions extends APIResource {
   retrieve(projectID, options) {
     return this._client.get(path`/organization/projects/${projectID}/hosted_tool_permissions`, {
@@ -31356,7 +31370,7 @@ class HostedToolPermissions extends APIResource {
   }
 }
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/admin/organization/projects/model-permissions.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/admin/organization/projects/model-permissions.mjs
 class ModelPermissions extends APIResource {
   retrieve(projectID, options) {
     return this._client.get(path`/organization/projects/${projectID}/model_permissions`, {
@@ -31379,7 +31393,7 @@ class ModelPermissions extends APIResource {
   }
 }
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/admin/organization/projects/rate-limits.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/admin/organization/projects/rate-limits.mjs
 class RateLimits extends APIResource {
   listRateLimits(projectID, query = {}, options) {
     return this._client.getAPIList(path`/organization/projects/${projectID}/rate_limits`, ConversationCursorPage, { query, ...options, __security: { adminAPIKeyAuth: true } });
@@ -31394,7 +31408,7 @@ class RateLimits extends APIResource {
   }
 }
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/admin/organization/projects/roles.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/admin/organization/projects/roles.mjs
 class Roles3 extends APIResource {
   create(projectID, body, options) {
     return this._client.post(path`/projects/${projectID}/roles`, {
@@ -31434,7 +31448,7 @@ class Roles3 extends APIResource {
   }
 }
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/admin/organization/projects/service-accounts.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/admin/organization/projects/service-accounts.mjs
 class ServiceAccounts extends APIResource {
   create(projectID, body, options) {
     return this._client.post(path`/organization/projects/${projectID}/service_accounts`, {
@@ -31463,7 +31477,7 @@ class ServiceAccounts extends APIResource {
   }
 }
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/admin/organization/projects/spend-alerts.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/admin/organization/projects/spend-alerts.mjs
 class SpendAlerts2 extends APIResource {
   create(projectID, body, options) {
     return this._client.post(path`/organization/projects/${projectID}/spend_alerts`, {
@@ -31492,7 +31506,7 @@ class SpendAlerts2 extends APIResource {
   }
 }
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/admin/organization/projects/groups/roles.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/admin/organization/projects/groups/roles.mjs
 class Roles4 extends APIResource {
   create(groupID, params, options) {
     const { project_id, ...body } = params;
@@ -31522,7 +31536,7 @@ class Roles4 extends APIResource {
   }
 }
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/admin/organization/projects/groups/groups.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/admin/organization/projects/groups/groups.mjs
 class Groups2 extends APIResource {
   constructor() {
     super(...arguments);
@@ -31556,7 +31570,7 @@ class Groups2 extends APIResource {
 }
 Groups2.Roles = Roles4;
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/admin/organization/projects/users/roles.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/admin/organization/projects/users/roles.mjs
 class Roles5 extends APIResource {
   create(userID, params, options) {
     const { project_id, ...body } = params;
@@ -31586,7 +31600,7 @@ class Roles5 extends APIResource {
   }
 }
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/admin/organization/projects/users/users.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/admin/organization/projects/users/users.mjs
 class Users2 extends APIResource {
   constructor() {
     super(...arguments);
@@ -31627,7 +31641,7 @@ class Users2 extends APIResource {
 }
 Users2.Roles = Roles5;
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/admin/organization/projects/projects.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/admin/organization/projects/projects.mjs
 class Projects extends APIResource {
   constructor() {
     super(...arguments);
@@ -31689,7 +31703,7 @@ Projects.DataRetention = DataRetention2;
 Projects.SpendAlerts = SpendAlerts2;
 Projects.Certificates = Certificates2;
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/admin/organization/users/roles.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/admin/organization/users/roles.mjs
 class Roles6 extends APIResource {
   create(userID, body, options) {
     return this._client.post(path`/organization/users/${userID}/roles`, {
@@ -31717,7 +31731,7 @@ class Roles6 extends APIResource {
   }
 }
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/admin/organization/users/users.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/admin/organization/users/users.mjs
 class Users3 extends APIResource {
   constructor() {
     super(...arguments);
@@ -31752,7 +31766,7 @@ class Users3 extends APIResource {
 }
 Users3.Roles = Roles6;
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/admin/organization/organization.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/admin/organization/organization.mjs
 class Organization extends APIResource {
   constructor() {
     super(...arguments);
@@ -31781,7 +31795,7 @@ Organization.SpendAlerts = SpendAlerts;
 Organization.Certificates = Certificates;
 Organization.Projects = Projects;
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/admin/admin.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/admin/admin.mjs
 class Admin extends APIResource {
   constructor() {
     super(...arguments);
@@ -31789,7 +31803,7 @@ class Admin extends APIResource {
   }
 }
 Admin.Organization = Organization;
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/internal/headers.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/internal/headers.mjs
 var brand_privateNullableHeaders = /* @__PURE__ */ Symbol("brand.privateNullableHeaders");
 function* iterateHeaders(headers) {
   if (!headers)
@@ -31852,7 +31866,7 @@ var buildHeaders = (newHeaders) => {
   return { [brand_privateNullableHeaders]: true, values: targetHeaders, nulls: nullHeaders };
 };
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/audio/speech.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/audio/speech.mjs
 class Speech extends APIResource {
   create(body, options) {
     return this._client.post("/audio/speech", {
@@ -31865,7 +31879,7 @@ class Speech extends APIResource {
   }
 }
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/audio/transcriptions.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/audio/transcriptions.mjs
 class Transcriptions extends APIResource {
   create(body, options) {
     return this._client.post("/audio/transcriptions", multipartFormRequestOptions({
@@ -31878,14 +31892,14 @@ class Transcriptions extends APIResource {
   }
 }
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/audio/translations.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/audio/translations.mjs
 class Translations extends APIResource {
   create(body, options) {
     return this._client.post("/audio/translations", multipartFormRequestOptions({ body, ...options, __metadata: { model: body.model }, __security: { bearerAuth: true } }, this._client));
   }
 }
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/audio/audio.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/audio/audio.mjs
 class Audio extends APIResource {
   constructor() {
     super(...arguments);
@@ -31897,7 +31911,7 @@ class Audio extends APIResource {
 Audio.Transcriptions = Transcriptions;
 Audio.Translations = Translations;
 Audio.Speech = Speech;
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/batches.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/batches.mjs
 class Batches extends APIResource {
   create(body, options) {
     return this._client.post("/batches", { body, ...options, __security: { bearerAuth: true } });
@@ -31919,7 +31933,7 @@ class Batches extends APIResource {
     });
   }
 }
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/beta/assistants.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/beta/assistants.mjs
 class Assistants extends APIResource {
   create(body, options) {
     return this._client.post("/assistants", {
@@ -31961,7 +31975,7 @@ class Assistants extends APIResource {
   }
 }
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/beta/realtime/sessions.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/beta/realtime/sessions.mjs
 class Sessions extends APIResource {
   create(body, options) {
     return this._client.post("/realtime/sessions", {
@@ -31973,7 +31987,7 @@ class Sessions extends APIResource {
   }
 }
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/beta/realtime/transcription-sessions.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/beta/realtime/transcription-sessions.mjs
 class TranscriptionSessions extends APIResource {
   create(body, options) {
     return this._client.post("/realtime/transcription_sessions", {
@@ -31985,7 +31999,7 @@ class TranscriptionSessions extends APIResource {
   }
 }
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/beta/realtime/realtime.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/beta/realtime/realtime.mjs
 class Realtime extends APIResource {
   constructor() {
     super(...arguments);
@@ -31996,7 +32010,7 @@ class Realtime extends APIResource {
 Realtime.Sessions = Sessions;
 Realtime.TranscriptionSessions = TranscriptionSessions;
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/beta/chatkit/sessions.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/beta/chatkit/sessions.mjs
 class Sessions2 extends APIResource {
   create(body, options) {
     return this._client.post("/chatkit/sessions", {
@@ -32015,7 +32029,7 @@ class Sessions2 extends APIResource {
   }
 }
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/beta/chatkit/threads.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/beta/chatkit/threads.mjs
 class Threads extends APIResource {
   retrieve(threadID, options) {
     return this._client.get(path`/chatkit/threads/${threadID}`, {
@@ -32049,7 +32063,7 @@ class Threads extends APIResource {
   }
 }
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/beta/chatkit/chatkit.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/beta/chatkit/chatkit.mjs
 class ChatKit extends APIResource {
   constructor() {
     super(...arguments);
@@ -32060,7 +32074,7 @@ class ChatKit extends APIResource {
 ChatKit.Sessions = Sessions2;
 ChatKit.Threads = Threads;
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/beta/threads/messages.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/beta/threads/messages.mjs
 class Messages2 extends APIResource {
   create(threadID, body, options) {
     return this._client.post(path`/threads/${threadID}/messages`, {
@@ -32105,7 +32119,7 @@ class Messages2 extends APIResource {
   }
 }
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/beta/threads/runs/steps.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/beta/threads/runs/steps.mjs
 class Steps extends APIResource {
   retrieve(stepID, params, options) {
     const { thread_id, run_id, ...query } = params;
@@ -32126,7 +32140,7 @@ class Steps extends APIResource {
     });
   }
 }
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/internal/utils/base64.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/internal/utils/base64.mjs
 var toFloat32Array = (base64Str) => {
   if (typeof Buffer !== "undefined") {
     const buf = Buffer.from(base64Str, "base64");
@@ -32141,7 +32155,7 @@ var toFloat32Array = (base64Str) => {
     return Array.from(new Float32Array(bytes.buffer));
   }
 };
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/internal/utils/env.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/internal/utils/env.mjs
 var readEnv = (env) => {
   if (typeof globalThis.process !== "undefined") {
     return globalThis.process.env?.[env]?.trim() || undefined;
@@ -32151,7 +32165,7 @@ var readEnv = (env) => {
   }
   return;
 };
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/lib/AssistantStream.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/lib/AssistantStream.mjs
 var _AssistantStream_instances;
 var _a3;
 var _AssistantStream_events;
@@ -32690,7 +32704,7 @@ _a3 = AssistantStream, _AssistantStream_addEvent = function _AssistantStream_add
 };
 function assertNever3(_x) {}
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/beta/threads/runs/runs.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/beta/threads/runs/runs.mjs
 class Runs extends APIResource {
   constructor() {
     super(...arguments);
@@ -32813,7 +32827,7 @@ class Runs extends APIResource {
 }
 Runs.Steps = Steps;
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/beta/threads/threads.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/beta/threads/threads.mjs
 class Threads2 extends APIResource {
   constructor() {
     super(...arguments);
@@ -32871,7 +32885,7 @@ class Threads2 extends APIResource {
 Threads2.Runs = Runs;
 Threads2.Messages = Messages2;
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/beta/beta.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/beta/beta.mjs
 class Beta extends APIResource {
   constructor() {
     super(...arguments);
@@ -32885,7 +32899,7 @@ Beta.Realtime = Realtime;
 Beta.ChatKit = ChatKit;
 Beta.Assistants = Assistants;
 Beta.Threads = Threads2;
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/completions.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/completions.mjs
 class Completions2 extends APIResource {
   create(body, options) {
     return this._client.post("/completions", {
@@ -32896,7 +32910,7 @@ class Completions2 extends APIResource {
     });
   }
 }
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/containers/files/content.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/containers/files/content.mjs
 class Content extends APIResource {
   retrieve(fileID, params, options) {
     const { container_id } = params;
@@ -32909,7 +32923,7 @@ class Content extends APIResource {
   }
 }
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/containers/files/files.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/containers/files/files.mjs
 class Files extends APIResource {
   constructor() {
     super(...arguments);
@@ -32943,7 +32957,7 @@ class Files extends APIResource {
 }
 Files.Content = Content;
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/containers/containers.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/containers/containers.mjs
 class Containers extends APIResource {
   constructor() {
     super(...arguments);
@@ -32974,7 +32988,7 @@ class Containers extends APIResource {
   }
 }
 Containers.Files = Files;
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/conversations/items.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/conversations/items.mjs
 class Items extends APIResource {
   create(conversationID, params, options) {
     const { include, ...body } = params;
@@ -33005,7 +33019,7 @@ class Items extends APIResource {
   }
 }
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/conversations/conversations.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/conversations/conversations.mjs
 class Conversations extends APIResource {
   constructor() {
     super(...arguments);
@@ -33035,7 +33049,7 @@ class Conversations extends APIResource {
   }
 }
 Conversations.Items = Items;
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/embeddings.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/embeddings.mjs
 class Embeddings extends APIResource {
   create(body, options) {
     const hasUserProvidedEncodingFormat = !!body.encoding_format;
@@ -33066,7 +33080,7 @@ class Embeddings extends APIResource {
     });
   }
 }
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/evals/runs/output-items.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/evals/runs/output-items.mjs
 class OutputItems extends APIResource {
   retrieve(outputItemID, params, options) {
     const { eval_id, run_id } = params;
@@ -33081,7 +33095,7 @@ class OutputItems extends APIResource {
   }
 }
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/evals/runs/runs.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/evals/runs/runs.mjs
 class Runs2 extends APIResource {
   constructor() {
     super(...arguments);
@@ -33125,7 +33139,7 @@ class Runs2 extends APIResource {
 }
 Runs2.OutputItems = OutputItems;
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/evals/evals.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/evals/evals.mjs
 class Evals extends APIResource {
   constructor() {
     super(...arguments);
@@ -33152,7 +33166,7 @@ class Evals extends APIResource {
   }
 }
 Evals.Runs = Runs2;
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/files.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/files.mjs
 class Files2 extends APIResource {
   create(body, options) {
     return this._client.post("/files", multipartFormRequestOptions({ body, ...options, __security: { bearerAuth: true } }, this._client));
@@ -33194,11 +33208,11 @@ class Files2 extends APIResource {
     return file;
   }
 }
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/fine-tuning/methods.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/fine-tuning/methods.mjs
 class Methods extends APIResource {
 }
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/fine-tuning/alpha/graders.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/fine-tuning/alpha/graders.mjs
 class Graders extends APIResource {
   run(body, options) {
     return this._client.post("/fine_tuning/alpha/graders/run", {
@@ -33216,7 +33230,7 @@ class Graders extends APIResource {
   }
 }
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/fine-tuning/alpha/alpha.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/fine-tuning/alpha/alpha.mjs
 class Alpha extends APIResource {
   constructor() {
     super(...arguments);
@@ -33225,7 +33239,7 @@ class Alpha extends APIResource {
 }
 Alpha.Graders = Graders;
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/fine-tuning/checkpoints/permissions.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/fine-tuning/checkpoints/permissions.mjs
 class Permissions extends APIResource {
   create(fineTunedModelCheckpoint, body, options) {
     return this._client.getAPIList(path`/fine_tuning/checkpoints/${fineTunedModelCheckpoint}/permissions`, Page, { body, method: "post", ...options, __security: { adminAPIKeyAuth: true } });
@@ -33246,7 +33260,7 @@ class Permissions extends APIResource {
   }
 }
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/fine-tuning/checkpoints/checkpoints.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/fine-tuning/checkpoints/checkpoints.mjs
 class Checkpoints extends APIResource {
   constructor() {
     super(...arguments);
@@ -33255,14 +33269,14 @@ class Checkpoints extends APIResource {
 }
 Checkpoints.Permissions = Permissions;
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/fine-tuning/jobs/checkpoints.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/fine-tuning/jobs/checkpoints.mjs
 class Checkpoints2 extends APIResource {
   list(fineTuningJobID, query2 = {}, options) {
     return this._client.getAPIList(path`/fine_tuning/jobs/${fineTuningJobID}/checkpoints`, CursorPage, { query: query2, ...options, __security: { bearerAuth: true } });
   }
 }
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/fine-tuning/jobs/jobs.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/fine-tuning/jobs/jobs.mjs
 class Jobs extends APIResource {
   constructor() {
     super(...arguments);
@@ -33308,7 +33322,7 @@ class Jobs extends APIResource {
 }
 Jobs.Checkpoints = Checkpoints2;
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/fine-tuning/fine-tuning.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/fine-tuning/fine-tuning.mjs
 class FineTuning extends APIResource {
   constructor() {
     super(...arguments);
@@ -33322,11 +33336,11 @@ FineTuning.Methods = Methods;
 FineTuning.Jobs = Jobs;
 FineTuning.Checkpoints = Checkpoints;
 FineTuning.Alpha = Alpha;
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/graders/grader-models.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/graders/grader-models.mjs
 class GraderModels extends APIResource {
 }
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/graders/graders.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/graders/graders.mjs
 class Graders2 extends APIResource {
   constructor() {
     super(...arguments);
@@ -33334,7 +33348,7 @@ class Graders2 extends APIResource {
   }
 }
 Graders2.GraderModels = GraderModels;
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/images.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/images.mjs
 class Images extends APIResource {
   createVariation(body, options) {
     return this._client.post("/images/variations", multipartFormRequestOptions({ body, ...options, __security: { bearerAuth: true } }, this._client));
@@ -33351,7 +33365,7 @@ class Images extends APIResource {
     });
   }
 }
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/models.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/models.mjs
 class Models extends APIResource {
   retrieve(model, options) {
     return this._client.get(path`/models/${model}`, { ...options, __security: { bearerAuth: true } });
@@ -33363,13 +33377,13 @@ class Models extends APIResource {
     return this._client.delete(path`/models/${model}`, { ...options, __security: { bearerAuth: true } });
   }
 }
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/moderations.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/moderations.mjs
 class Moderations extends APIResource {
   create(body, options) {
     return this._client.post("/moderations", { body, ...options, __security: { bearerAuth: true } });
   }
 }
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/realtime/calls.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/realtime/calls.mjs
 class Calls extends APIResource {
   accept(callID, body, options) {
     return this._client.post(path`/realtime/calls/${callID}/accept`, {
@@ -33404,7 +33418,7 @@ class Calls extends APIResource {
   }
 }
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/realtime/client-secrets.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/realtime/client-secrets.mjs
 class ClientSecrets extends APIResource {
   create(body, options) {
     return this._client.post("/realtime/client_secrets", {
@@ -33415,7 +33429,7 @@ class ClientSecrets extends APIResource {
   }
 }
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/realtime/realtime.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/realtime/realtime.mjs
 class Realtime2 extends APIResource {
   constructor() {
     super(...arguments);
@@ -33425,7 +33439,7 @@ class Realtime2 extends APIResource {
 }
 Realtime2.ClientSecrets = ClientSecrets;
 Realtime2.Calls = Calls;
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/lib/ResponsesParser.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/lib/ResponsesParser.mjs
 function maybeParseResponse(response, params) {
   if (!params || !hasAutoParseableInput2(params)) {
     return {
@@ -33546,7 +33560,7 @@ function addOutputText(rsp) {
   rsp.output_text = texts.join("");
 }
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/lib/responses/ResponseStream.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/lib/responses/ResponseStream.mjs
 var _ResponseStream_instances;
 var _ResponseStream_params;
 var _ResponseStream_currentResponseSnapshot;
@@ -33805,14 +33819,14 @@ function finalizeResponse(snapshot, params) {
   return maybeParseResponse(snapshot, params);
 }
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/responses/input-items.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/responses/input-items.mjs
 class InputItems extends APIResource {
   list(responseID, query2 = {}, options) {
     return this._client.getAPIList(path`/responses/${responseID}/input_items`, CursorPage, { query: query2, ...options, __security: { bearerAuth: true } });
   }
 }
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/responses/input-tokens.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/responses/input-tokens.mjs
 class InputTokens extends APIResource {
   count(body = {}, options) {
     return this._client.post("/responses/input_tokens", {
@@ -33823,7 +33837,7 @@ class InputTokens extends APIResource {
   }
 }
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/responses/responses.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/responses/responses.mjs
 class Responses extends APIResource {
   constructor() {
     super(...arguments);
@@ -33881,7 +33895,7 @@ class Responses extends APIResource {
 }
 Responses.InputItems = InputItems;
 Responses.InputTokens = InputTokens;
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/skills/content.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/skills/content.mjs
 class Content2 extends APIResource {
   retrieve(skillID, options) {
     return this._client.get(path`/skills/${skillID}/content`, {
@@ -33893,7 +33907,7 @@ class Content2 extends APIResource {
   }
 }
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/skills/versions/content.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/skills/versions/content.mjs
 class Content3 extends APIResource {
   retrieve(version2, params, options) {
     const { skill_id } = params;
@@ -33906,7 +33920,7 @@ class Content3 extends APIResource {
   }
 }
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/skills/versions/versions.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/skills/versions/versions.mjs
 class Versions extends APIResource {
   constructor() {
     super(...arguments);
@@ -33939,7 +33953,7 @@ class Versions extends APIResource {
 }
 Versions.Content = Content3;
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/skills/skills.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/skills/skills.mjs
 class Skills extends APIResource {
   constructor() {
     super(...arguments);
@@ -33972,14 +33986,14 @@ class Skills extends APIResource {
 }
 Skills.Content = Content2;
 Skills.Versions = Versions;
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/uploads/parts.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/uploads/parts.mjs
 class Parts extends APIResource {
   create(uploadID, body, options) {
     return this._client.post(path`/uploads/${uploadID}/parts`, multipartFormRequestOptions({ body, ...options, __security: { bearerAuth: true } }, this._client));
   }
 }
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/uploads/uploads.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/uploads/uploads.mjs
 class Uploads extends APIResource {
   constructor() {
     super(...arguments);
@@ -34003,7 +34017,7 @@ class Uploads extends APIResource {
   }
 }
 Uploads.Parts = Parts;
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/lib/Util.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/lib/Util.mjs
 var allSettledWithThrow = async (promises) => {
   const results = await Promise.allSettled(promises);
   const rejected = results.filter((result) => result.status === "rejected");
@@ -34022,7 +34036,7 @@ var allSettledWithThrow = async (promises) => {
   return values2;
 };
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/vector-stores/file-batches.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/vector-stores/file-batches.mjs
 class FileBatches extends APIResource {
   create(vectorStoreID, body, options) {
     return this._client.post(path`/vector_stores/${vectorStoreID}/file_batches`, {
@@ -34120,7 +34134,7 @@ class FileBatches extends APIResource {
   }
 }
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/vector-stores/files.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/vector-stores/files.mjs
 class Files3 extends APIResource {
   create(vectorStoreID, body, options) {
     return this._client.post(path`/vector_stores/${vectorStoreID}/files`, {
@@ -34220,7 +34234,7 @@ class Files3 extends APIResource {
   }
 }
 
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/vector-stores/vector-stores.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/vector-stores/vector-stores.mjs
 class VectorStores extends APIResource {
   constructor() {
     super(...arguments);
@@ -34277,7 +34291,7 @@ class VectorStores extends APIResource {
 }
 VectorStores.Files = Files3;
 VectorStores.FileBatches = FileBatches;
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/videos.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/videos.mjs
 class Videos extends APIResource {
   create(body, options) {
     return this._client.post("/videos", multipartFormRequestOptions({ body, ...options, __security: { bearerAuth: true } }, this._client));
@@ -34323,7 +34337,7 @@ class Videos extends APIResource {
     return this._client.post(path`/videos/${videoID}/remix`, maybeMultipartFormRequestOptions({ body, ...options, __security: { bearerAuth: true } }, this._client));
   }
 }
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/resources/webhooks/webhooks.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/resources/webhooks/webhooks.mjs
 var _Webhooks_instances;
 var _Webhooks_validateSecret;
 var _Webhooks_getRequiredHeader;
@@ -34389,7 +34403,7 @@ _Webhooks_instances = new WeakSet, _Webhooks_validateSecret = function _Webhooks
   }
   return value;
 };
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/client.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/client.mjs
 var _OpenAI_instances;
 var _a4;
 var _OpenAI_encoder;
@@ -34948,7 +34962,7 @@ OpenAI.Evals = Evals;
 OpenAI.Containers = Containers;
 OpenAI.Skills = Skills;
 OpenAI.Videos = Videos;
-// ../node_modules/.bun/openai@6.39.0+68a1e3a0c4588df3/node_modules/openai/azure.mjs
+// ../node_modules/.bun/openai@6.39.0+aa659455601024e1/node_modules/openai/azure.mjs
 var _deployments_endpoints = new Set([
   "/completions",
   "/chat/completions",

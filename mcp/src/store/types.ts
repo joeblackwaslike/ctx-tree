@@ -50,6 +50,13 @@ export interface RetentionConfig {
   supersededDays: number;
 }
 
+export type BackendKind = 'sqlite' | 'edgelite';
+
+export interface BackendConfig {
+  kind: BackendKind;     // env: MEMTREE_BACKEND
+  schemaPath?: string;   // edgelite only — env: MEMTREE_SCHEMA_PATH
+}
+
 export interface MemtreeConfig {
   embeddingModel: string;
   summarizerModel: string;
@@ -57,6 +64,7 @@ export interface MemtreeConfig {
   walkers: WalkerConfig;
   capture: CaptureConfig;
   trustedExecution?: boolean;
+  backend?: BackendConfig;
 }
 
 export interface IngestPayload {
