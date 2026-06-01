@@ -34307,129 +34307,43 @@ class WalkerCoordinator {
 }
 
 // src/tools/search.ts
-function searchKeyword(db, query, limit = 20, filters = {}) {
-  if (!query.trim())
-    return { nodes: [] };
-  const { where, params } = buildFilterSQL(filters);
-  try {
-    const nodes = db.query(`
-      SELECT n.* FROM nodes n
-      JOIN nodes_fts f ON f.id = n.id
-      WHERE nodes_fts MATCH ? AND ${where}
-      ORDER BY bm25(nodes_fts)
-      LIMIT ?
-    `).all(query, ...params, limit);
-    return { nodes };
-  } catch {
-    return { nodes: [] };
-  }
+async function searchKeyword(store, query, limit = 20, filters = {}) {
+  const nodes = await store.searchKeyword(query, filters, limit);
+  return { nodes };
 }
-function normalizeModelName(model) {
-  return model.replace(/^[^/]+\//, "");
-}
-var modelCheckCache = new WeakMap;
-function checkModelMismatch(db, config2) {
-  const normalizedConfigModel = normalizeModelName(config2.embeddingModel);
-  if (modelCheckCache.get(db) === normalizedConfigModel)
-    return;
-  const storedModels = db.prepare(`SELECT DISTINCT embedding_model FROM nodes_vec LIMIT 2`).all();
-  if (storedModels.length > 1 || storedModels[0] && storedModels[0].embedding_model !== normalizedConfigModel) {
-    throw new McpError(ErrorCode.InvalidParams, `embedding model mismatch: re-embed required before semantic search`);
-  }
-  modelCheckCache.set(db, normalizedConfigModel);
-}
-async function searchSemantic(db, config2, provider, query, limit = 20, filters = {}) {
+async function searchSemantic(store, config2, provider, query, limit = 20, filters = {}) {
   if (!provider) {
     throw new McpError(ErrorCode.InvalidParams, "semantic search requires an embedding provider");
   }
-  checkModelMismatch(db, config2);
-  const { where, params } = buildFilterSQL(filters);
   const [queryVec] = await provider.embed([query]);
-  const queryFloat = new Float32Array(queryVec);
-  const rows = db.query(`
-    SELECT v.id, v.embedding FROM nodes_vec v
-    JOIN nodes n ON v.id = n.id
-    WHERE ${where}
-  `).all(...params);
-  if (rows.length === 0)
-    return { nodes: [] };
-  const scored = rows.map((row) => {
-    const storedVec = new Float32Array(row.embedding.buffer, row.embedding.byteOffset, row.embedding.byteLength / 4);
-    const sim = cosineSimilarity(queryFloat, storedVec);
-    return { id: row.id, sim };
-  });
-  scored.sort((a2, b4) => b4.sim - a2.sim);
-  const topIds = scored.slice(0, limit).map((r2) => r2.id);
-  if (topIds.length === 0)
-    return { nodes: [] };
-  const placeholders = topIds.map(() => "?").join(",");
-  const nodes = db.query(`
-    SELECT * FROM nodes WHERE id IN (${placeholders})
-  `).all(...topIds);
-  const nodeMap = new Map(nodes.map((n4) => [n4.id, n4]));
-  const orderedNodes = topIds.map((id) => nodeMap.get(id)).filter((n4) => n4 !== undefined);
-  return { nodes: orderedNodes };
+  const nodes = await store.searchSemantic(queryVec, provider.model, filters, limit);
+  return { nodes };
 }
-async function searchHybrid(db, config2, provider, query, limit = 20, filters = {}) {
+async function searchHybrid(store, config2, provider, query, limit = 20, filters = {}) {
   if (!provider) {
     throw new McpError(ErrorCode.InvalidParams, "hybrid search requires an embedding provider");
   }
-  checkModelMismatch(db, config2);
-  const keywordResults = searchKeyword(db, query, limit * 2, filters).nodes;
-  const semanticResults = (await searchSemantic(db, config2, provider, query, limit * 2, filters)).nodes;
+  const keywordResults = (await searchKeyword(store, query, limit * 2, filters)).nodes;
+  const semanticResults = (await searchSemantic(store, config2, provider, query, limit * 2, filters)).nodes;
   const RRF_K = 60;
   const scores = new Map;
   keywordResults.forEach((n4, i3) => scores.set(n4.id, (scores.get(n4.id) ?? 0) + 1 / (RRF_K + i3 + 1)));
   semanticResults.forEach((n4, i3) => scores.set(n4.id, (scores.get(n4.id) ?? 0) + 1 / (RRF_K + i3 + 1)));
   const allNodes = new Map;
-  for (const n4 of [...keywordResults, ...semanticResults]) {
+  for (const n4 of [...keywordResults, ...semanticResults])
     allNodes.set(n4.id, n4);
-  }
   const sorted = [...allNodes.values()].sort((a2, b4) => (scores.get(b4.id) ?? 0) - (scores.get(a2.id) ?? 0));
   return { nodes: sorted.slice(0, limit) };
 }
 
 // src/tools/neighbors.ts
-var MAX_DEPTH = 5;
-function getNeighborsDeep(db, nodeId, depth = 1, edgeKinds, filters = {}) {
-  const cap = Math.min(depth, MAX_DEPTH);
-  const { where, params } = buildFilterSQL(filters, "n");
-  const kindFilter = edgeKinds?.length ? `AND e.kind IN (${edgeKinds.map(() => "?").join(",")})` : "";
-  const kindParams = edgeKinds ?? [];
-  const visited = new Set([nodeId]);
-  const result = [];
-  let frontier = [nodeId];
-  for (let d2 = 0;d2 < cap; d2++) {
-    if (frontier.length === 0)
-      break;
-    const placeholders = frontier.map(() => "?").join(",");
-    const next = db.query(`
-      SELECT DISTINCT n.* FROM nodes n
-      JOIN edges e ON (e.src_id IN (${placeholders}) AND e.dst_id = n.id)
-                   OR (e.dst_id IN (${placeholders}) AND e.src_id = n.id)
-      WHERE ${where} ${kindFilter}
-    `).all(...frontier, ...frontier, ...params, ...kindParams);
-    const newNodes = next.filter((n4) => !visited.has(n4.id));
-    for (const n4 of newNodes) {
-      visited.add(n4.id);
-      result.push(n4);
-    }
-    frontier = newNodes.map((n4) => n4.id);
-  }
-  return result;
+async function getNeighborsDeep(store, nodeId, depth = 1, edgeKinds, filters = {}) {
+  return store.getNeighborsDeep(nodeId, depth, edgeKinds, filters);
 }
 
 // src/tools/path-to-root.ts
-function getPathToRoot(db, nodeId) {
-  const path4 = [];
-  let current = db.query("SELECT * FROM nodes WHERE id = ?").get(nodeId);
-  while (current) {
-    path4.push(current);
-    if (!current.parent_id)
-      break;
-    current = db.query("SELECT * FROM nodes WHERE id = ?").get(current.parent_id);
-  }
-  return path4;
+async function getPathToRoot(store, nodeId) {
+  return store.getPathToRoot(nodeId);
 }
 
 // src/tools/recent.ts
@@ -34441,16 +34355,11 @@ var CONTENT_KINDS = [
   "observation",
   "web_chunk"
 ];
-function getRecent(db, since, limit = 50, filters = {}) {
-  const effectiveFilters = {
+async function getRecent(store, since, limit = 50, filters = {}) {
+  return store.getRecentNodes(since, limit, {
     kind: CONTENT_KINDS,
-    ...filters,
-    ...since ? { since } : {}
-  };
-  const { where, params } = buildFilterSQL(effectiveFilters);
-  return db.query(`
-    SELECT * FROM nodes WHERE ${where} ORDER BY created_at DESC LIMIT ?
-  `).all(...params, limit);
+    ...filters
+  });
 }
 
 // src/tools/read.ts
@@ -34618,7 +34527,7 @@ async function treeSitterChunk(source, lang) {
 `));
   }
 }
-async function memtreeRead(db, config2, params) {
+async function memtreeRead(store, config2, params) {
   const { path: path4, lines, budget_tokens = 2000 } = params;
   if (shouldDropPath(path4, config2.capture.pathDenylistExtra ?? [])) {
     throw new Error(`Path rejected by denylist: ${path4}`);
@@ -34631,7 +34540,7 @@ async function memtreeRead(db, config2, params) {
   }
   const mtime = Math.round(stat.mtimeMs);
   const ext = extname(path4).toLowerCase();
-  markStaleByFilePath(db, path4, mtime);
+  await store.markStaleByFilePath(path4, mtime);
   let raw = readFileSync4(path4, "utf8");
   const originalBytes = Buffer.byteLength(raw, "utf8");
   let truncated = false;
@@ -34674,15 +34583,15 @@ async function memtreeRead(db, config2, params) {
   }
   const fileRootUri = `file://${path4}`;
   let fileRootId;
-  const cachedRoot = getNodeBySourceUri(db, fileRootUri);
+  const cachedRoot = await store.getNodeBySourceUri(fileRootUri);
   if (cachedRoot && cachedRoot.mtime === mtime) {
     fileRootId = cachedRoot.id;
   } else {
     if (cachedRoot)
-      updateNodeStatus(db, cachedRoot.id, "stale");
+      await store.updateNodeStatus(cachedRoot.id, "stale");
     fileRootId = ulid2();
     const emptyHash = createHash2("sha256").update("").digest("hex");
-    insertNode(db, fileRootId, {
+    await store.insertNode(fileRootId, {
       parent_id: null,
       kind: "file_chunk",
       source_uri: fileRootUri,
@@ -34695,7 +34604,7 @@ async function memtreeRead(db, config2, params) {
       metadata: JSON.stringify({ filePath: path4, is_file_root: true })
     });
     if (cachedRoot)
-      insertEdge(db, { src_id: fileRootId, dst_id: cachedRoot.id, kind: "supersedes" });
+      await store.insertEdge({ src_id: fileRootId, dst_id: cachedRoot.id, kind: "supersedes" });
   }
   const nodeIds = [];
   const seenNames = new Set;
@@ -34709,15 +34618,15 @@ async function memtreeRead(db, config2, params) {
   for (const chunk of included) {
     const chunkUri = `file://${path4}#${uniqueSymbolKey(chunk)}`;
     const contentHash = createHash2("sha256").update(chunk.content).digest("hex");
-    const cached2 = getNodeBySourceUri(db, chunkUri);
+    const cached2 = await store.getNodeBySourceUri(chunkUri);
     if (cached2 && cached2.mtime === mtime) {
       nodeIds.push(cached2.id);
       continue;
     }
     if (cached2)
-      updateNodeStatus(db, cached2.id, "stale");
+      await store.updateNodeStatus(cached2.id, "stale");
     const nodeId = ulid2();
-    insertNode(db, nodeId, {
+    await store.insertNode(nodeId, {
       parent_id: fileRootId,
       kind: "file_chunk",
       source_uri: chunkUri,
@@ -34730,7 +34639,7 @@ async function memtreeRead(db, config2, params) {
       metadata: JSON.stringify({ filePath: path4, chunking, symbolName: chunk.symbolName })
     });
     if (cached2)
-      insertEdge(db, { src_id: nodeId, dst_id: cached2.id, kind: "supersedes" });
+      await store.insertEdge({ src_id: nodeId, dst_id: cached2.id, kind: "supersedes" });
     nodeIds.push(nodeId);
   }
   const content = included.map((c2) => c2.content).join(`
@@ -34742,7 +34651,7 @@ async function memtreeRead(db, config2, params) {
 // src/tools/grep.ts
 import { spawnSync } from "child_process";
 import { createHash as createHash3 } from "crypto";
-async function memtreeGrep(db, config2, params) {
+async function memtreeGrep(store, config2, params) {
   const { pattern, path: path4 = ".", caseInsensitive, fileGlob, maxCount = 500 } = params;
   const pathDenylistExtra = config2.capture.pathDenylistExtra ?? [];
   if (shouldDropPath(path4, pathDenylistExtra)) {
@@ -34787,7 +34696,7 @@ async function memtreeGrep(db, config2, params) {
   const contentHash = createHash3("sha256").update(truncContent).digest("hex");
   const nodeId = ulid2();
   if (Buffer.byteLength(content, "utf8") >= config2.capture.filterMinSize) {
-    insertNode(db, nodeId, {
+    await store.insertNode(nodeId, {
       parent_id: null,
       kind: "tool_output",
       source_uri: `tool:Grep#${contentHash.slice(0, 8)}`,
@@ -34822,7 +34731,7 @@ async function memtreeGrep(db, config2, params) {
       if (Buffer.byteLength(fileContent, "utf8") < config2.capture.filterMinSize)
         continue;
       const fileHash = createHash3("sha256").update(fileContent).digest("hex");
-      insertNode(db, ulid2(), {
+      await store.insertNode(ulid2(), {
         parent_id: nodeId,
         kind: "file_chunk",
         source_uri: `file://${filePath}`,
@@ -34851,57 +34760,6 @@ function scoreNode(node, graphDistance, queryRank, hasQuery) {
   const recencyDecay = Math.exp(-ageHours / 24);
   return wDist * (1 / (1 + graphDistance)) + wRecency * recencyDecay + wQuery * queryRank;
 }
-function expandGraph(db, seedIds, maxDepth) {
-  const visited = new Map;
-  const queue = seedIds.map((id) => [id, 0]);
-  while (queue.length > 0) {
-    const [id, dist] = queue.shift();
-    if (visited.has(id))
-      continue;
-    visited.set(id, dist);
-    if (dist >= maxDepth)
-      continue;
-    const children = db.query("SELECT id FROM nodes WHERE parent_id = ? AND status = 'live'").all(id);
-    const edgeNeighbors = db.query(`
-      SELECT DISTINCT n.id FROM nodes n
-      JOIN edges e ON (e.src_id = ? AND e.dst_id = n.id)
-                   OR (e.dst_id = ? AND e.src_id = n.id)
-      WHERE n.status = 'live'
-    `).all(id, id);
-    for (const { id: nextId } of [...children, ...edgeNeighbors]) {
-      if (!visited.has(nextId))
-        queue.push([nextId, dist + 1]);
-    }
-  }
-  return visited;
-}
-function getFtsRanks(db, query, ids) {
-  if (!query.trim() || ids.length === 0)
-    return new Map;
-  const CHUNK = 999;
-  let rows = [];
-  try {
-    for (let i3 = 0;i3 < ids.length; i3 += CHUNK) {
-      const chunk = ids.slice(i3, i3 + CHUNK);
-      const placeholders = chunk.map(() => "?").join(",");
-      const batch = db.query(`
-        SELECT n.id, bm25(nodes_fts) AS rank FROM nodes n
-        JOIN nodes_fts f ON f.id = n.id
-        WHERE nodes_fts MATCH ? AND n.id IN (${placeholders})
-        ORDER BY rank
-      `).all(query, ...chunk);
-      rows.push(...batch);
-    }
-  } catch {
-    return new Map;
-  }
-  if (rows.length === 0)
-    return new Map;
-  const minRank = Math.min(...rows.map((r2) => r2.rank));
-  const maxRank = Math.max(...rows.map((r2) => r2.rank));
-  const range = maxRank - minRank || 1;
-  return new Map(rows.map((r2) => [r2.id, (maxRank - r2.rank) / range]));
-}
 function formatOutline(node) {
   const prefix = `[${node.id}] ${node.kind}: `;
   const suffix = "\u2026";
@@ -34909,93 +34767,62 @@ function formatOutline(node) {
   const preview = node.content.slice(0, maxPreview).replace(/\n/g, " ");
   return `${prefix}${preview}${suffix}`;
 }
-async function memtreeCompose(db, params) {
+async function memtreeCompose(store, params) {
   const { node_ids, budget_tokens, format = "raw", query } = params;
   const depth = Math.min(params.depth ?? 2, 2);
-  const distanceMap = expandGraph(db, node_ids, depth);
+  const distanceMap = await store.expandGraph(node_ids, depth);
   if (distanceMap.size === 0) {
     return { content: "", manifest: { included: [], dropped: [], truncated: [] } };
   }
   const allIds = [...distanceMap.keys()];
-  const CHUNK = 999;
-  const candidates = [];
-  for (let i3 = 0;i3 < allIds.length; i3 += CHUNK) {
-    const chunk = allIds.slice(i3, i3 + CHUNK);
-    const rows = db.query(`SELECT * FROM nodes WHERE id IN (${chunk.map(() => "?").join(",")}) AND status = 'live'`).all(...chunk);
-    candidates.push(...rows);
-  }
-  const ftsRanks = query ? getFtsRanks(db, query, allIds) : new Map;
-  const hasQuery = !!query;
+  const candidates = await store.getNodesByIds(allIds);
+  const ftsRanks = query ? await store.getFtsRanks(query, allIds) : new Map;
   const scored = candidates.map((node) => ({
     node,
-    score: scoreNode(node, distanceMap.get(node.id) ?? 99, ftsRanks.get(node.id) ?? 0, hasQuery)
-  })).sort((a2, b4) => b4.score - a2.score);
-  const contentItems = [];
+    score: scoreNode(node, distanceMap.get(node.id) ?? 0, ftsRanks.get(node.id) ?? 0, !!query)
+  }));
+  scored.sort((a2, b4) => b4.score - a2.score);
+  let budget = budget_tokens;
   const included = [];
   const dropped = [];
-  const summarySubstituted = [];
-  let usedTokens = 0;
+  const truncated = [];
+  const summary_substituted = [];
+  const parts2 = [];
   for (const { node } of scored) {
-    const tokens = estimateTokens2(format === "outline" ? formatOutline(node) : node.content);
-    if (usedTokens + tokens <= budget_tokens) {
-      included.push(node);
-      contentItems.push({ id: node.id, text: format === "outline" ? formatOutline(node) : node.content });
-      usedTokens += tokens;
-    } else if (format === "mixed") {
-      const summary = node.summary ?? null;
-      if (summary && summary.trim()) {
-        const summaryTokens = estimateTokens2(summary);
-        if (usedTokens + summaryTokens <= budget_tokens) {
-          included.push(node);
-          contentItems.push({ id: node.id, text: summary });
-          summarySubstituted.push(node.id);
-          usedTokens += summaryTokens;
-        } else {
-          dropped.push({ id: node.id, reason: "over_budget_no_summary" });
-        }
-      } else {
-        dropped.push({ id: node.id, reason: "over_budget_no_summary" });
-      }
-    } else {
-      dropped.push({ id: node.id, reason: "over_budget" });
+    if (node.status === "superseded") {
+      dropped.push({ id: node.id, reason: "superseded" });
+      continue;
     }
-  }
-  const liveIds = new Set(candidates.map((n4) => n4.id));
-  for (const id of node_ids) {
-    if (!liveIds.has(id)) {
-      const n4 = db.query("SELECT status FROM nodes WHERE id = ?").get(id);
-      if (n4 && (n4.status === "superseded" || n4.status === "pruned")) {
-        dropped.push({ id, reason: n4.status });
-      }
+    if (node.status === "pruned") {
+      dropped.push({ id: node.id, reason: "pruned" });
+      continue;
     }
+    let text = format === "outline" ? formatOutline(node) : node.content;
+    const usesSummary = format === "mixed" && node.summary && node.summary.length < node.content.length;
+    if (usesSummary) {
+      text = node.summary;
+      summary_substituted.push(node.id);
+    }
+    const tokens = estimateTokens2(text);
+    if (tokens > budget) {
+      if (budget < 50) {
+        dropped.push({ id: node.id, reason: "over_budget" });
+        continue;
+      }
+      const chars = budget * 4;
+      text = text.slice(0, chars);
+      truncated.push(node.id);
+    }
+    budget -= estimateTokens2(text);
+    included.push(node.id);
+    parts2.push(text);
   }
-  const truncated = included.filter((n4) => n4.truncated === 1).map((n4) => n4.id);
-  let content;
-  if (format === "outline") {
-    content = contentItems.map((item) => item.text).join(`
-`);
-  } else if (format === "mixed") {
-    content = contentItems.map((item) => item.text).join(`
+  return {
+    content: parts2.join(`
 
----
-
-`);
-  } else {
-    content = contentItems.map((item) => item.text).join(`
-
----
-
-`);
-  }
-  const manifest = {
-    included: included.map((n4) => n4.id),
-    dropped,
-    truncated
+`),
+    manifest: { included, dropped, truncated, ...summary_substituted.length ? { summary_substituted } : {} }
   };
-  if (format === "mixed" && summarySubstituted.length > 0) {
-    manifest.summary_substituted = summarySubstituted;
-  }
-  return { content, manifest };
 }
 
 // src/tools/browse.ts
@@ -35039,7 +34866,7 @@ function estimateTokens3(text) {
   return Math.ceil(text.length / 4);
 }
 var CACHE_TTL_MS = 60 * 60 * 1000;
-async function memtreeBrowse(db, _config, params) {
+async function memtreeBrowse(store, _config, params) {
   const { url, budget_tokens = 2000, force = false } = params;
   if (!url || typeof url !== "string") {
     throw new McpError(ErrorCode.InvalidParams, '"url" is required and must be a string');
@@ -35054,7 +34881,7 @@ async function memtreeBrowse(db, _config, params) {
     throw new McpError(ErrorCode.InvalidParams, `Only http/https URLs are supported`);
   }
   if (!force) {
-    const cached2 = getNodeBySourceUri(db, url);
+    const cached2 = await store.getNodeBySourceUri(url);
     if (cached2 && Date.now() - cached2.updated_at < CACHE_TTL_MS) {
       const meta2 = JSON.parse(cached2.metadata);
       const bodyText2 = budgetContent(cached2.content, budget_tokens);
@@ -35093,16 +34920,15 @@ async function memtreeBrowse(db, _config, params) {
   const bodyText = extractBodyText(html);
   const { text: content, truncated } = budgetContent(bodyText, budget_tokens);
   const contentHash = createHash4("sha256").update(bodyText).digest("hex");
-  const existing = getNodeBySourceUri(db, url);
+  const existing = await store.getNodeBySourceUri(url);
   if (existing) {
     if (existing.content_hash === contentHash) {
-      db.run("UPDATE nodes SET updated_at = ? WHERE id = ?", Date.now(), existing.id);
       return { nodeId: existing.id, url, title, description, headings, content, truncated, cached: true };
     }
-    updateNodeStatus(db, existing.id, "stale");
+    await store.updateNodeStatus(existing.id, "stale");
   }
   const nodeId = ulid2();
-  insertNode(db, nodeId, {
+  await store.insertNode(nodeId, {
     parent_id: null,
     kind: "web_chunk",
     source_uri: url,
@@ -35115,7 +34941,7 @@ async function memtreeBrowse(db, _config, params) {
     metadata: JSON.stringify({ url, title, description, headings })
   });
   if (existing) {
-    insertEdge(db, { src_id: nodeId, dst_id: existing.id, kind: "supersedes" });
+    await store.insertEdge({ src_id: nodeId, dst_id: existing.id, kind: "supersedes" });
   }
   return { nodeId, url, title, description, headings, content, truncated, cached: false };
 }
@@ -35130,7 +34956,7 @@ function budgetContent(text, budget) {
 import { createHash as createHash5 } from "crypto";
 var DEFAULT_TIMEOUT_MS = 30000;
 var PREVIEW_CHARS = 500;
-async function memtreeMonitor(db, _config, params) {
+async function memtreeMonitor(store, _config, params) {
   const { command, timeout_ms = DEFAULT_TIMEOUT_MS, cwd } = params;
   if (!command || typeof command !== "string") {
     throw new McpError(ErrorCode.InvalidParams, '"command" is required and must be a string');
@@ -35161,10 +34987,9 @@ ${stderrBuf}` : ""));
   const lines = output.split(`
 `);
   const preview = output.slice(-PREVIEW_CHARS);
-  const existing = getNodeBySourceUri(db, sourceUri);
+  const existing = await store.getNodeBySourceUri(sourceUri);
   if (existing) {
     if (existing.content_hash === contentHash) {
-      db.run("UPDATE nodes SET updated_at = ? WHERE id = ?", Date.now(), existing.id);
       return {
         nodeId: existing.id,
         command,
@@ -35174,10 +34999,10 @@ ${stderrBuf}` : ""));
         cached: true
       };
     }
-    updateNodeStatus(db, existing.id, "stale");
+    await store.updateNodeStatus(existing.id, "stale");
   }
   const nodeId = ulid2();
-  insertNode(db, nodeId, {
+  await store.insertNode(nodeId, {
     parent_id: null,
     kind: "tool_output",
     source_uri: sourceUri,
@@ -35190,7 +35015,7 @@ ${stderrBuf}` : ""));
     metadata: JSON.stringify({ command, exit_code: exitCode, cwd: cwd ?? process.cwd() })
   });
   if (existing) {
-    insertEdge(db, { src_id: nodeId, dst_id: existing.id, kind: "supersedes" });
+    await store.insertEdge({ src_id: nodeId, dst_id: existing.id, kind: "supersedes" });
   }
   return {
     nodeId,
@@ -35204,7 +35029,7 @@ ${stderrBuf}` : ""));
 
 // src/tools/note.ts
 import { createHash as createHash6 } from "crypto";
-function memtreeNote(db, _config, params) {
+async function memtreeNote(store, _config, params) {
   const { content, title } = params;
   if (!content || typeof content !== "string") {
     throw new McpError(ErrorCode.InvalidParams, '"content" is required and must be a string');
@@ -35213,7 +35038,7 @@ function memtreeNote(db, _config, params) {
 `)[0].slice(0, 80);
   const nodeId = ulid2();
   const contentHash = createHash6("sha256").update(content).digest("hex");
-  insertNode(db, nodeId, {
+  await store.insertNode(nodeId, {
     parent_id: null,
     kind: "note",
     source_uri: `note://${contentHash.slice(0, 16)}`,
@@ -35237,7 +35062,7 @@ import { exec } from "child_process";
 import { promisify } from "util";
 import { createHash as createHash7 } from "crypto";
 var execAsync = promisify(exec);
-async function memtreeBash(db, config2, params) {
+async function memtreeBash(store, config2, params) {
   const { command, budget_tokens = 2000 } = params;
   if (shouldDropBashCommand(command)) {
     throw new McpError(ErrorCode.InvalidParams, `Command rejected by denylist: ${command}`);
@@ -35290,7 +35115,7 @@ async function memtreeBash(db, config2, params) {
   if (content.length >= config2.capture.filterMinSize) {
     const commandHash = createHash7("sha256").update(command).digest("hex").slice(0, 8);
     const contentHash = createHash7("sha256").update(content).digest("hex");
-    insertNode(db, nodeId, {
+    await store.insertNode(nodeId, {
       parent_id: null,
       kind: "tool_output",
       source_uri: `tool:Bash#${commandHash}`,

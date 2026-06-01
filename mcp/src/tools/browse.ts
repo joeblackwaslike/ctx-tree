@@ -1,9 +1,7 @@
 import { createHash } from 'node:crypto';
 import { ulid } from 'ulid';
-import type { Database } from 'bun:sqlite';
-import type { MemtreeConfig } from '../store/types';
-import { insertNode, getNodeBySourceUri, updateNodeStatus } from '../store/nodes';
-import { insertEdge } from '../store/edges';
+import type { StoreBackend } from '../store/index.js';
+import type { MemtreeConfig } from '../store/types.js';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 
 export interface BrowseParams {
@@ -99,7 +97,7 @@ const CACHE_TTL_MS = 60 * 60 * 1000;
 // ── Main function ─────────────────────────────────────────────────────────────
 
 export async function memtreeBrowse(
-  db: Database,
+  store: StoreBackend,
   _config: MemtreeConfig,
   params: BrowseParams
 ): Promise<BrowseResult> {
@@ -122,7 +120,7 @@ export async function memtreeBrowse(
 
   // Cache check (skip if force=true or node is stale)
   if (!force) {
-    const cached = getNodeBySourceUri(db, url);
+    const cached = await store.getNodeBySourceUri(url);
     if (cached && Date.now() - cached.updated_at < CACHE_TTL_MS) {
       const meta = JSON.parse(cached.metadata) as {
         title: string; description: string; headings: string[];
@@ -169,19 +167,17 @@ export async function memtreeBrowse(
   const contentHash = createHash('sha256').update(bodyText).digest('hex');
 
   // Check for existing node with same content (avoid duplicate storage)
-  const existing = getNodeBySourceUri(db, url);
+  const existing = await store.getNodeBySourceUri(url);
   if (existing) {
     if (existing.content_hash === contentHash) {
-      // Content unchanged — bump updated_at by touching the node
-      db.run('UPDATE nodes SET updated_at = ? WHERE id = ?', Date.now(), existing.id);
       return { nodeId: existing.id, url, title, description, headings, content, truncated, cached: true };
     }
-    updateNodeStatus(db, existing.id, 'stale');
+    await store.updateNodeStatus(existing.id, 'stale');
   }
 
   // Store new node
   const nodeId = ulid();
-  insertNode(db, nodeId, {
+  await store.insertNode(nodeId, {
     parent_id: null,
     kind: 'web_chunk',
     source_uri: url,
@@ -195,7 +191,7 @@ export async function memtreeBrowse(
   });
 
   if (existing) {
-    insertEdge(db, { src_id: nodeId, dst_id: existing.id, kind: 'supersedes' });
+    await store.insertEdge({ src_id: nodeId, dst_id: existing.id, kind: 'supersedes' });
   }
 
   return { nodeId, url, title, description, headings, content, truncated, cached: false };
