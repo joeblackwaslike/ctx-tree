@@ -1,5 +1,5 @@
-import type { Database } from 'bun:sqlite';
-import type { MemtreeNode, ComposeManifest } from '../store/types';
+import type { StoreBackend } from '../store/index.js';
+import type { MemtreeNode, ComposeManifest } from '../store/types.js';
 
 export interface ComposeParams {
   node_ids: string[];
@@ -32,68 +32,7 @@ function scoreNode(
   return wDist * (1 / (1 + graphDistance)) + wRecency * recencyDecay + wQuery * queryRank;
 }
 
-function expandGraph(
-  db: Database,
-  seedIds: string[],
-  maxDepth: number
-): Map<string, number> {
-  const visited = new Map<string, number>();
-  const queue: [string, number][] = seedIds.map(id => [id, 0]);
-
-  while (queue.length > 0) {
-    const [id, dist] = queue.shift()!;
-    if (visited.has(id)) continue;
-    visited.set(id, dist);
-    if (dist >= maxDepth) continue;
-
-    const children = db.query(
-      "SELECT id FROM nodes WHERE parent_id = ? AND status = 'live'"
-    ).all(id) as { id: string }[];
-
-    const edgeNeighbors = db.query(`
-      SELECT DISTINCT n.id FROM nodes n
-      JOIN edges e ON (e.src_id = ? AND e.dst_id = n.id)
-                   OR (e.dst_id = ? AND e.src_id = n.id)
-      WHERE n.status = 'live'
-    `).all(id, id) as { id: string }[];
-
-    for (const { id: nextId } of [...children, ...edgeNeighbors]) {
-      if (!visited.has(nextId)) queue.push([nextId, dist + 1]);
-    }
-  }
-
-  return visited;
-}
-
-function getFtsRanks(db: Database, query: string, ids: string[]): Map<string, number> {
-  if (!query.trim() || ids.length === 0) return new Map();
-  const CHUNK = 999;
-  let rows: { id: string; rank: number }[] = [];
-  try {
-    for (let i = 0; i < ids.length; i += CHUNK) {
-      const chunk = ids.slice(i, i + CHUNK);
-      const placeholders = chunk.map(() => '?').join(',');
-      const batch = db.query(`
-        SELECT n.id, bm25(nodes_fts) AS rank FROM nodes n
-        JOIN nodes_fts f ON f.id = n.id
-        WHERE nodes_fts MATCH ? AND n.id IN (${placeholders})
-        ORDER BY rank
-      `).all(query, ...chunk) as { id: string; rank: number }[];
-      rows.push(...batch);
-    }
-  } catch {
-    return new Map();
-  }
-
-  if (rows.length === 0) return new Map();
-  const minRank = Math.min(...rows.map(r => r.rank));
-  const maxRank = Math.max(...rows.map(r => r.rank));
-  const range = maxRank - minRank || 1;
-  return new Map(rows.map(r => [r.id, (maxRank - r.rank) / range]));
-}
-
 function formatOutline(node: MemtreeNode): string {
-  // Prefix: "[<id>] <kind>: " + "…" — ensure the outline is always shorter than raw content.
   const prefix = `[${node.id}] ${node.kind}: `;
   const suffix = '…';
   const maxPreview = Math.max(0, Math.min(120, node.content.length - prefix.length - suffix.length - 1));
@@ -102,102 +41,76 @@ function formatOutline(node: MemtreeNode): string {
 }
 
 export async function memtreeCompose(
-  db: Database,
+  store: StoreBackend,
   params: ComposeParams
 ): Promise<ComposeResult> {
   const { node_ids, budget_tokens, format = 'raw', query } = params;
   const depth = Math.min(params.depth ?? 2, 2);
 
-  const distanceMap = expandGraph(db, node_ids, depth);
+  const distanceMap = await store.expandGraph(node_ids, depth);
   if (distanceMap.size === 0) {
     return { content: '', manifest: { included: [], dropped: [], truncated: [] } };
   }
 
   const allIds = [...distanceMap.keys()];
-  const CHUNK = 999;
-  const candidates: MemtreeNode[] = [];
-  for (let i = 0; i < allIds.length; i += CHUNK) {
-    const chunk = allIds.slice(i, i + CHUNK);
-    const rows = db.query(
-      `SELECT * FROM nodes WHERE id IN (${chunk.map(() => '?').join(',')}) AND status = 'live'`
-    ).all(...chunk) as MemtreeNode[];
-    candidates.push(...rows);
-  }
+  const candidates = await store.getNodesByIds(allIds);
 
-  const ftsRanks = query ? getFtsRanks(db, query, allIds) : new Map<string, number>();
-  const hasQuery = !!query;
+  const ftsRanks = query
+    ? await store.getFtsRanks(query, allIds)
+    : new Map<string, number>();
 
   const scored = candidates.map(node => ({
     node,
-    score: scoreNode(node, distanceMap.get(node.id) ?? 99, ftsRanks.get(node.id) ?? 0, hasQuery),
-  })).sort((a, b) => b.score - a.score);
+    score: scoreNode(
+      node,
+      distanceMap.get(node.id) ?? 0,
+      ftsRanks.get(node.id) ?? 0,
+      !!query,
+    ),
+  }));
+  scored.sort((a, b) => b.score - a.score);
 
-  // contentItems preserves scored order for mixed format
-  const contentItems: Array<{ id: string; text: string }> = [];
-  const included: MemtreeNode[] = [];
+  let budget = budget_tokens;
+  const included: string[] = [];
   const dropped: ComposeManifest['dropped'] = [];
-  const summarySubstituted: string[] = [];
-  let usedTokens = 0;
+  const truncated: string[] = [];
+  const summary_substituted: string[] = [];
+  const parts: string[] = [];
 
   for (const { node } of scored) {
-    const tokens = estimateTokens(format === 'outline' ? formatOutline(node) : node.content);
-    if (usedTokens + tokens <= budget_tokens) {
-      included.push(node);
-      contentItems.push({ id: node.id, text: format === 'outline' ? formatOutline(node) : node.content });
-      usedTokens += tokens;
-    } else if (format === 'mixed') {
-      // Try summary substitution
-      const summary = node.summary ?? null;
-      if (summary && summary.trim()) {
-        const summaryTokens = estimateTokens(summary);
-        if (usedTokens + summaryTokens <= budget_tokens) {
-          // Use summary instead of raw content
-          included.push(node);
-          contentItems.push({ id: node.id, text: summary });
-          summarySubstituted.push(node.id);
-          usedTokens += summaryTokens;
-        } else {
-          // Summary also too big — drop
-          dropped.push({ id: node.id, reason: 'over_budget_no_summary' });
-        }
-      } else {
-        // No summary available — drop
-        dropped.push({ id: node.id, reason: 'over_budget_no_summary' });
-      }
-    } else {
-      dropped.push({ id: node.id, reason: 'over_budget' });
+    if (node.status === 'superseded') {
+      dropped.push({ id: node.id, reason: 'superseded' });
+      continue;
     }
-  }
-
-  const liveIds = new Set(candidates.map(n => n.id));
-  for (const id of node_ids) {
-    if (!liveIds.has(id)) {
-      const n = db.query('SELECT status FROM nodes WHERE id = ?').get(id) as { status: string } | undefined;
-      if (n && (n.status === 'superseded' || n.status === 'pruned')) {
-        dropped.push({ id, reason: n.status as 'superseded' | 'pruned' });
-      }
+    if (node.status === 'pruned') {
+      dropped.push({ id: node.id, reason: 'pruned' });
+      continue;
     }
+
+    let text = format === 'outline' ? formatOutline(node) : node.content;
+    const usesSummary = format === 'mixed' && node.summary && node.summary.length < node.content.length;
+    if (usesSummary) {
+      text = node.summary!;
+      summary_substituted.push(node.id);
+    }
+
+    const tokens = estimateTokens(text);
+    if (tokens > budget) {
+      if (budget < 50) {
+        dropped.push({ id: node.id, reason: 'over_budget' });
+        continue;
+      }
+      const chars = budget * 4;
+      text = text.slice(0, chars);
+      truncated.push(node.id);
+    }
+    budget -= estimateTokens(text);
+    included.push(node.id);
+    parts.push(text);
   }
 
-  const truncated = included.filter(n => n.truncated === 1).map(n => n.id);
-
-  let content: string;
-  if (format === 'outline') {
-    content = contentItems.map(item => item.text).join('\n');
-  } else if (format === 'mixed') {
-    content = contentItems.map(item => item.text).join('\n\n---\n\n');
-  } else {
-    content = contentItems.map(item => item.text).join('\n\n---\n\n');
-  }
-
-  const manifest: ComposeManifest = {
-    included: included.map(n => n.id),
-    dropped,
-    truncated,
+  return {
+    content: parts.join('\n\n'),
+    manifest: { included, dropped, truncated, ...(summary_substituted.length ? { summary_substituted } : {}) },
   };
-  if (format === 'mixed' && summarySubstituted.length > 0) {
-    manifest.summary_substituted = summarySubstituted;
-  }
-
-  return { content, manifest };
 }

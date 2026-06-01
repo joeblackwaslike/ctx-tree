@@ -4,13 +4,16 @@ import { openDb, closeDb } from '../store/db.js';
 import { insertNode } from '../store/nodes.js';
 import { getEdgesFrom } from '../store/edges.js';
 import { runDedupeWalker } from './dedupe.js';
+import { wrapDatabase } from '../store/backends/sqlite/index.js';
 import { ulid } from 'ulid';
 import { DEFAULT_CONFIG } from '../config.js';
 import type { Database } from 'bun:sqlite';
+import type { StoreBackend } from '../store/index.js';
 
 const TEST_DB = '/tmp/memtree-dedupe-test.db';
 const cfg = DEFAULT_CONFIG;
 let db: Database;
+let store: StoreBackend;
 
 function insertFileChunk(id: string, sourceUri: string, createdAtOffset = 0): void {
   insertNode(db, id, {
@@ -39,7 +42,7 @@ function insertEmbedding(id: string, vector: number[]): void {
   );
 }
 
-beforeEach(() => { db = openDb(TEST_DB); });
+beforeEach(() => { db = openDb(TEST_DB); store = wrapDatabase(db); });
 afterEach(() => {
   closeDb(db);
   for (const f of [TEST_DB, TEST_DB + '-wal', TEST_DB + '-shm'])
@@ -51,12 +54,12 @@ describe('dedupe walker', () => {
     const id = ulid();
     insertFileChunk(id, 'file:///test.ts');
     // No nodes_vec row — should be a no-op
-    runDedupeWalker(db, cfg);
+    runDedupeWalker(store, cfg);
     const row = db.query(`SELECT status FROM nodes WHERE id = ?`).get(id) as { status: string } | null;
     expect(row?.status).toBe('live');
   });
 
-  test('prunes older of two near-duplicate nodes (cosine > 0.95)', () => {
+  test('prunes older of two near-duplicate nodes (cosine > 0.95)', async () => {
     const id1 = ulid();
     const id2 = ulid();
     insertFileChunk(id1, 'file:///dup.ts', 0);
@@ -66,7 +69,7 @@ describe('dedupe walker', () => {
     insertEmbedding(id1, [1, 0, 0, 0]);
     insertEmbedding(id2, [1, 0, 0, 0]);
 
-    runDedupeWalker(db, cfg);
+    await runDedupeWalker(store, cfg);
 
     const r1 = db.query(`SELECT status FROM nodes WHERE id = ?`).get(id1) as { status: string };
     const r2 = db.query(`SELECT status FROM nodes WHERE id = ?`).get(id2) as { status: string };
@@ -86,7 +89,7 @@ describe('dedupe walker', () => {
     insertEmbedding(id1, [1, 0, 0, 0]);
     insertEmbedding(id2, [0, 1, 0, 0]);
 
-    runDedupeWalker(db, cfg);
+    runDedupeWalker(store, cfg);
 
     const r1 = db.query(`SELECT status FROM nodes WHERE id = ?`).get(id1) as { status: string };
     const r2 = db.query(`SELECT status FROM nodes WHERE id = ?`).get(id2) as { status: string };
@@ -94,7 +97,7 @@ describe('dedupe walker', () => {
     expect(r2.status).toBe('live');
   });
 
-  test('inserts a supersedes edge from newer to older on dedup', () => {
+  test('inserts a supersedes edge from newer to older on dedup', async () => {
     const id1 = ulid();
     const id2 = ulid();
     insertFileChunk(id1, 'file:///edge.ts', 0);
@@ -103,7 +106,7 @@ describe('dedupe walker', () => {
     insertEmbedding(id1, [1, 0, 0, 0]);
     insertEmbedding(id2, [1, 0, 0, 0]);
 
-    runDedupeWalker(db, cfg);
+    await runDedupeWalker(store, cfg);
 
     // id2 (newer) supersedes id1 (older)
     const edges = getEdgesFrom(db, id2);
@@ -122,7 +125,7 @@ describe('dedupe walker', () => {
     insertEmbedding(id1, [1, 0, 0, 0]);
     insertEmbedding(id2, [1, 0, 0, 0]);
 
-    runDedupeWalker(db, cfg);
+    runDedupeWalker(store, cfg);
 
     const r1 = db.query(`SELECT status FROM nodes WHERE id = ?`).get(id1) as { status: string };
     const r2 = db.query(`SELECT status FROM nodes WHERE id = ?`).get(id2) as { status: string };

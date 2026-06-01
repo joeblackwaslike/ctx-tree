@@ -18,6 +18,7 @@ export const DEFAULT_CONFIG: MemtreeConfig = {
   },
   capture: { maxBytes: 100000, filterMinSize: 50 },
   trustedExecution: false,
+  backend: { kind: 'sqlite' },
 };
 
 function readJson(path: string): Partial<MemtreeConfig> {
@@ -55,5 +56,21 @@ export function loadConfig(projectRoot?: string): MemtreeConfig {
     ? readJson(projectPath)
     : {};
 
-  return deepMergeConfig(deepMergeConfig(DEFAULT_CONFIG, globalOverride), projectOverride);
+  let merged = deepMergeConfig(deepMergeConfig(DEFAULT_CONFIG, globalOverride), projectOverride);
+
+  // Env var overrides (highest priority)
+  if (process.env.MEMTREE_BACKEND) {
+    merged = {
+      ...merged,
+      backend: { ...merged.backend, kind: process.env.MEMTREE_BACKEND as import('./store/types.js').BackendKind },
+    };
+  }
+  if (process.env.MEMTREE_SCHEMA_PATH) {
+    merged = {
+      ...merged,
+      backend: { ...merged.backend, schemaPath: process.env.MEMTREE_SCHEMA_PATH },
+    };
+  }
+
+  return merged;
 }

@@ -1,4 +1,4 @@
-import type { Database } from 'bun:sqlite';
+import type { StoreBackend } from '../store/index.js';
 import type { MemtreeConfig } from '../store/types.js';
 import type { EmbeddingProvider } from '../store/types.js';
 import type { SummarizerProvider } from '../store/types.js';
@@ -9,8 +9,15 @@ import { runEmbeddingWalker } from './embedding.js';
 import { runSummarizerWalker } from './summarizer.js';
 import { runDedupeWalker } from './dedupe.js';
 
-function withErrorBoundary(name: string, fn: () => void): void {
-  try { fn(); } catch (e) {
+function withErrorBoundary(name: string, fn: () => void | Promise<void>): void {
+  try {
+    const result = fn();
+    if (result instanceof Promise) {
+      result.catch(e => {
+        process.stderr.write(`memtree ${name} error: ${e}\n`);
+      });
+    }
+  } catch (e) {
     process.stderr.write(`memtree ${name} error: ${e}\n`);
   }
 }
@@ -18,31 +25,33 @@ function withErrorBoundary(name: string, fn: () => void): void {
 export class WalkerCoordinator {
   private timers: ReturnType<typeof setInterval>[] = [];
 
-  startupSweep(db: Database, config: MemtreeConfig): void {
+  async startupSweep(store: StoreBackend, config: MemtreeConfig): Promise<void> {
     let swept = 0;
     while (true) {
-      const before = (db.query("SELECT COUNT(*) as n FROM nodes WHERE status='pending'").get() as { n: number }).n;
+      const before = await store.countPendingNodes();
       if (before === 0) break;
-      withErrorBoundary('filter-startup-sweep', () => runFilterWalker(db, config));
+      await runFilterWalker(store, config);
       swept++;
       if (swept > 1000) break;
     }
     if (swept > 0) process.stderr.write(`memtree: startup sweep processed pending rows in ${swept} passes\n`);
   }
 
-  start(db: Database, config: MemtreeConfig, embedding?: EmbeddingProvider | null, summarizer?: SummarizerProvider | null): void {
-    this.startupSweep(db, config);
+  start(store: StoreBackend, config: MemtreeConfig, embedding?: EmbeddingProvider | null, summarizer?: SummarizerProvider | null): void {
+    this.startupSweep(store, config).catch(e => {
+      process.stderr.write(`memtree startup-sweep error: ${e}\n`);
+    });
 
     this.timers.push(
-      setInterval(() => withErrorBoundary('filter', () => runFilterWalker(db, config)), 500),
-      setInterval(() => withErrorBoundary('staleness', () => runStalenessWalker(db, config)), config.walkers.stalenessIntervalMs),
-      setInterval(() => withErrorBoundary('pruner', () => runPrunerWalker(db, config)), config.walkers.prunerIntervalMs),
+      setInterval(() => withErrorBoundary('filter', () => runFilterWalker(store, config)), 500),
+      setInterval(() => withErrorBoundary('staleness', () => runStalenessWalker(store, config)), config.walkers.stalenessIntervalMs),
+      setInterval(() => withErrorBoundary('pruner', () => runPrunerWalker(store, config)), config.walkers.prunerIntervalMs),
     );
 
     if (embedding) {
       this.timers.push(
         setInterval(
-          () => withErrorBoundary('embedding', () => runEmbeddingWalker(db, config, embedding)),
+          () => withErrorBoundary('embedding', () => runEmbeddingWalker(store, config, embedding)),
           config.walkers.embeddingIdleMs
         )
       );
@@ -51,7 +60,7 @@ export class WalkerCoordinator {
     if (summarizer) {
       this.timers.push(
         setInterval(
-          () => withErrorBoundary('summarizer', () => runSummarizerWalker(db, config, summarizer)),
+          () => withErrorBoundary('summarizer', () => runSummarizerWalker(store, config, summarizer)),
           config.walkers.summarizerIdleMs
         )
       );
@@ -60,7 +69,7 @@ export class WalkerCoordinator {
     if (config.walkers.dedupeIntervalMs > 0) {
       this.timers.push(
         setInterval(
-          () => withErrorBoundary('dedupe', () => runDedupeWalker(db, config)),
+          () => withErrorBoundary('dedupe', () => runDedupeWalker(store, config)),
           config.walkers.dedupeIntervalMs
         )
       );

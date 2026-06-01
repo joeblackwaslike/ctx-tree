@@ -1,9 +1,7 @@
 import { createHash } from 'node:crypto';
 import { ulid } from 'ulid';
-import type { Database } from 'bun:sqlite';
-import type { MemtreeConfig } from '../store/types';
-import { insertNode, getNodeBySourceUri, updateNodeStatus } from '../store/nodes';
-import { insertEdge } from '../store/edges';
+import type { StoreBackend } from '../store/index.js';
+import type { MemtreeConfig } from '../store/types.js';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import { redactBashOutput } from '../redaction';
 
@@ -26,7 +24,7 @@ const DEFAULT_TIMEOUT_MS = 30_000;
 const PREVIEW_CHARS = 500;
 
 export async function memtreeMonitor(
-  db: Database,
+  store: StoreBackend,
   _config: MemtreeConfig,
   params: MonitorParams,
 ): Promise<MonitorResult> {
@@ -67,10 +65,9 @@ export async function memtreeMonitor(
   const preview = output.slice(-PREVIEW_CHARS);
 
   // Check for existing node with identical output
-  const existing = getNodeBySourceUri(db, sourceUri);
+  const existing = await store.getNodeBySourceUri(sourceUri);
   if (existing) {
     if (existing.content_hash === contentHash) {
-      db.run('UPDATE nodes SET updated_at = ? WHERE id = ?', Date.now(), existing.id);
       return {
         nodeId: existing.id,
         command,
@@ -80,11 +77,11 @@ export async function memtreeMonitor(
         cached: true,
       };
     }
-    updateNodeStatus(db, existing.id, 'stale');
+    await store.updateNodeStatus(existing.id, 'stale');
   }
 
   const nodeId = ulid();
-  insertNode(db, nodeId, {
+  await store.insertNode(nodeId, {
     parent_id: null,
     kind: 'tool_output',
     source_uri: sourceUri,
@@ -98,7 +95,7 @@ export async function memtreeMonitor(
   });
 
   if (existing) {
-    insertEdge(db, { src_id: nodeId, dst_id: existing.id, kind: 'supersedes' });
+    await store.insertEdge({ src_id: nodeId, dst_id: existing.id, kind: 'supersedes' });
   }
 
   return {
