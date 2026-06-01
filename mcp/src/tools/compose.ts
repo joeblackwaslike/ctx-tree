@@ -97,15 +97,20 @@ export async function memtreeCompose(
     const tokens = estimateTokens(text);
     if (tokens > budget) {
       if (budget < 50) {
-        dropped.push({ id: node.id, reason: 'over_budget' });
+        // mixed format: no summary available → specific drop reason
+        if (format === 'mixed' && !node.summary) {
+          dropped.push({ id: node.id, reason: 'over_budget_no_summary' });
+        } else {
+          dropped.push({ id: node.id, reason: 'over_budget' });
+        }
         continue;
       }
       const chars = budget * 4;
       text = text.slice(0, chars);
-      truncated.push(node.id);
     }
     budget -= estimateTokens(text);
     included.push(node.id);
+    if (node.truncated === 1) truncated.push(node.id);
     parts.push(text);
   }
 

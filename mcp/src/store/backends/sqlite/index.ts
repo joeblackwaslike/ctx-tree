@@ -33,6 +33,15 @@ export async function createSqliteBackend(dbPath: string): Promise<StoreBackend>
   return new SqliteBackend(db);
 }
 
+/**
+ * Wrap an existing bun:sqlite Database in a StoreBackend adapter.
+ * Useful in tests that construct a Database directly (e.g. openDb(':memory:')).
+ * The caller is responsible for closing the underlying db.
+ */
+export function wrapDatabase(db: Database): StoreBackend {
+  return new SqliteBackend(db);
+}
+
 class SqliteBackend implements StoreBackend {
   constructor(private readonly db: Database) {}
 
