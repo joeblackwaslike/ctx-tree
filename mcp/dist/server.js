@@ -34081,32 +34081,29 @@ function deregisterProject(hash) {
 
 // src/walkers/filter.ts
 var BATCH_SIZE = 50;
-function runFilterWalker(db, config2) {
-  const pending = getPendingNodes(db, BATCH_SIZE);
+async function runFilterWalker(store, config2) {
+  const pending = await store.getPendingNodes(BATCH_SIZE);
   if (pending.length === 0)
     return;
-  const processBatch = db.transaction(() => {
-    for (const node of pending) {
-      if (node.original_bytes < config2.capture.filterMinSize) {
-        pruneNode(db, node.id);
-        continue;
-      }
-      const existing = db.query("SELECT id FROM nodes WHERE content_hash = ? AND status = 'live' AND id != ? LIMIT 1").get(node.content_hash, node.id);
-      if (existing) {
-        pruneNode(db, node.id);
-        continue;
-      }
-      updateNodeStatus(db, node.id, "live");
+  for (const node of pending) {
+    if (node.original_bytes < config2.capture.filterMinSize) {
+      await store.pruneNode(node.id);
+      continue;
     }
-  });
-  processBatch();
+    const existing = await store.getNodeByContentHash(node.content_hash);
+    if (existing && existing.id !== node.id && existing.status === "live") {
+      await store.pruneNode(node.id);
+      continue;
+    }
+    await store.updateNodeStatus(node.id, "live");
+  }
 }
 
 // src/walkers/staleness.ts
 import { statSync } from "fs";
-function runStalenessWalker(db, _config) {
+async function runStalenessWalker(store, _config) {
   const checkBefore = Date.now() - 5000;
-  const chunks = getLiveFileChunks(db, checkBefore);
+  const chunks = await store.getLiveFileChunks(checkBefore);
   for (const node of chunks) {
     const meta2 = JSON.parse(node.metadata);
     const filePath = meta2.filePath ?? node.source_uri?.replace(/^file:\/\//, "").split("#")[0];
@@ -34115,63 +34112,51 @@ function runStalenessWalker(db, _config) {
     try {
       const stat = statSync(filePath);
       if (Math.round(stat.mtimeMs) !== node.mtime) {
-        updateNodeStatus(db, node.id, "stale");
+        await store.updateNodeStatus(node.id, "stale");
       }
     } catch {
-      updateNodeStatus(db, node.id, "stale");
+      await store.updateNodeStatus(node.id, "stale");
     }
   }
 }
 
 // src/walkers/pruner.ts
-function runPrunerWalker(db, config2) {
+async function runPrunerWalker(store, config2) {
   const now = Date.now();
   const staleThreshold = now - config2.retention.staleHours * 60 * 60 * 1000;
   const supersededThreshold = now - config2.retention.supersededDays * 24 * 60 * 60 * 1000;
-  db.transaction(() => {
-    for (const node of getStaleNodes(db, staleThreshold)) {
-      pruneNode(db, node.id);
-    }
-    for (const node of getSupersededNodes(db, supersededThreshold)) {
-      pruneNode(db, node.id);
-    }
-  })();
+  for (const node of await store.getStaleNodes(staleThreshold)) {
+    await store.pruneNode(node.id);
+  }
+  for (const node of await store.getSupersededNodes(supersededThreshold)) {
+    await store.pruneNode(node.id);
+  }
 }
 
 // src/walkers/embedding.ts
 var inFlight = false;
-function runEmbeddingWalker(db, config2, provider) {
+function runEmbeddingWalker(store, config2, provider) {
   if (!provider)
     return;
   if (inFlight)
     return;
   const batchSize = config2.walkers.embeddingBatchSize;
-  const rows = db.query(`
-    SELECT n.id, n.content FROM nodes n
-    LEFT JOIN nodes_vec v ON n.id = v.id
-    WHERE n.status = 'live'
-      AND v.id IS NULL
-      AND length(n.content) > 0
-    LIMIT ?
-  `).all(batchSize);
-  if (rows.length === 0)
-    return;
-  inFlight = true;
-  const texts = rows.map((r2) => r2.content);
-  provider.embed(texts).then((vectors) => {
-    const now = Date.now();
-    const upsert = db.prepare(`
-      INSERT OR REPLACE INTO nodes_vec (id, embedding, embedding_model, embedding_dim, embedded_at)
-      VALUES (?, ?, ?, ?, ?)
-    `);
-    const insertBatch = db.transaction(() => {
-      for (let i3 = 0;i3 < rows.length; i3++) {
-        const vec = vectors[i3];
-        const blob = Buffer.from(new Float32Array(vec).buffer);
-        upsert.run(rows[i3].id, blob, provider.model, vec.length, now);
-      }
+  store.getPendingEmbeddingNodes(batchSize).then((rows) => {
+    if (rows.length === 0)
+      return;
+    inFlight = true;
+    const texts = rows.map((r2) => r2.content);
+    return provider.embed(texts).then((vectors) => {
+      const now = Date.now();
+      const upsertRows = rows.map((row, i3) => ({
+        id: row.id,
+        embedding: Buffer.from(new Float32Array(vectors[i3]).buffer),
+        model: provider.model,
+        dim: vectors[i3].length,
+        embeddedAt: now
+      }));
+      return store.batchUpsertNodeVec(upsertRows);
     });
-    insertBatch();
   }).catch((e2) => {
     process.stderr.write(`memtree embedding error: ${e2}
 `);
@@ -34183,37 +34168,34 @@ function runEmbeddingWalker(db, config2, provider) {
 // src/walkers/summarizer.ts
 var CHAR_THRESHOLD_MULTIPLIER = 20;
 var inFlight2 = false;
-function runSummarizerWalker(db, config2, provider) {
+function runSummarizerWalker(store, config2, provider) {
   if (!provider)
     return;
   if (inFlight2)
     return;
   const charThreshold = Math.max(500, config2.walkers.summarizerSubtreeThreshold * CHAR_THRESHOLD_MULTIPLIER);
   const batchSize = 10;
-  const rows = db.query(`
-    SELECT id, content, source_uri FROM nodes
-    WHERE status = 'live'
-      AND (summary IS NULL OR summary = '')
-      AND length(content) > ?
-    LIMIT ?
-  `).all(charThreshold, batchSize);
-  if (rows.length === 0)
-    return;
-  inFlight2 = true;
-  let pending = rows.length;
-  for (const row of rows) {
-    provider.summarize(row.content, row.source_uri ?? undefined).then((summary) => {
-      const now = Date.now();
-      db.run("UPDATE nodes SET summary = ?, updated_at = ? WHERE id = ?", summary, now, row.id);
-    }).catch((e2) => {
-      process.stderr.write(`memtree summarizer error: ${e2}
+  store.getNodesNeedingSummarization(charThreshold, batchSize).then((rows) => {
+    if (rows.length === 0)
+      return;
+    inFlight2 = true;
+    let pending = rows.length;
+    for (const row of rows) {
+      provider.summarize(row.content, row.source_uri ?? undefined).then((summary) => {
+        return store.updateNodeSummary(row.id, summary);
+      }).catch((e2) => {
+        process.stderr.write(`memtree summarizer error: ${e2}
 `);
-    }).finally(() => {
-      pending--;
-      if (pending === 0)
-        inFlight2 = false;
-    });
-  }
+      }).finally(() => {
+        pending--;
+        if (pending === 0)
+          inFlight2 = false;
+      });
+    }
+  }).catch((e2) => {
+    process.stderr.write(`memtree summarizer error: ${e2}
+`);
+  });
 }
 
 // src/walkers/dedupe.ts
@@ -34226,44 +34208,34 @@ function cosineSimilarity(a2, b4) {
   }
   return dot / (Math.sqrt(normA) * Math.sqrt(normB));
 }
-function runDedupeWalker(db, _config) {
-  const pairs = db.query(`
-    SELECT n1.id as id1, n2.id as id2,
-           v1.embedding as emb1, v2.embedding as emb2,
-           n1.created_at as ts1, n2.created_at as ts2
-    FROM nodes n1
-    JOIN nodes n2 ON n1.source_uri = n2.source_uri AND n1.id < n2.id
-    JOIN nodes_vec v1 ON n1.id = v1.id
-    JOIN nodes_vec v2 ON n2.id = v2.id
-    WHERE n1.kind = 'file_chunk'
-      AND n2.kind = 'file_chunk'
-      AND n1.status = 'live'
-      AND n2.status = 'live'
-      AND v1.embedding_model = v2.embedding_model
-    LIMIT 50
-  `).all();
+async function runDedupeWalker(store, _config) {
+  const pairs = await store.getDedupeCandidatePairs();
   if (pairs.length === 0)
     return;
   const now = Date.now();
-  db.transaction(() => {
-    for (const pair of pairs) {
-      const a2 = new Float32Array(pair.emb1.buffer, pair.emb1.byteOffset, pair.emb1.byteLength / 4);
-      const b4 = new Float32Array(pair.emb2.buffer, pair.emb2.byteOffset, pair.emb2.byteLength / 4);
-      const sim = cosineSimilarity(a2, b4);
-      if (sim > 0.95) {
-        const keepId = pair.ts1 >= pair.ts2 ? pair.id1 : pair.id2;
-        const pruneId = pair.ts1 >= pair.ts2 ? pair.id2 : pair.id1;
-        db.run(`UPDATE nodes SET status='pruned', updated_at=? WHERE id=?`, now, pruneId);
-        insertEdge(db, { src_id: keepId, dst_id: pruneId, kind: "supersedes" });
-      }
+  for (const pair of pairs) {
+    const a2 = new Float32Array(pair.emb1.buffer, pair.emb1.byteOffset, pair.emb1.byteLength / 4);
+    const b4 = new Float32Array(pair.emb2.buffer, pair.emb2.byteOffset, pair.emb2.byteLength / 4);
+    const sim = cosineSimilarity(a2, b4);
+    if (sim > 0.95) {
+      const keepId = pair.ts1 >= pair.ts2 ? pair.id1 : pair.id2;
+      const pruneId = pair.ts1 >= pair.ts2 ? pair.id2 : pair.id1;
+      await store.markNodeStatusPruned(pruneId, now);
+      await store.insertEdge({ src_id: keepId, dst_id: pruneId, kind: "supersedes" });
     }
-  })();
+  }
 }
 
 // src/walkers/coordinator.ts
 function withErrorBoundary(name2, fn2) {
   try {
-    fn2();
+    const result = fn2();
+    if (result instanceof Promise) {
+      result.catch((e2) => {
+        process.stderr.write(`memtree ${name2} error: ${e2}
+`);
+      });
+    }
   } catch (e2) {
     process.stderr.write(`memtree ${name2} error: ${e2}
 `);
@@ -34272,13 +34244,13 @@ function withErrorBoundary(name2, fn2) {
 
 class WalkerCoordinator {
   timers = [];
-  startupSweep(db, config2) {
+  async startupSweep(store, config2) {
     let swept = 0;
     while (true) {
-      const before = db.query("SELECT COUNT(*) as n FROM nodes WHERE status='pending'").get().n;
+      const before = await store.countPendingNodes();
       if (before === 0)
         break;
-      withErrorBoundary("filter-startup-sweep", () => runFilterWalker(db, config2));
+      await runFilterWalker(store, config2);
       swept++;
       if (swept > 1000)
         break;
@@ -34287,17 +34259,20 @@ class WalkerCoordinator {
       process.stderr.write(`memtree: startup sweep processed pending rows in ${swept} passes
 `);
   }
-  start(db, config2, embedding, summarizer) {
-    this.startupSweep(db, config2);
-    this.timers.push(setInterval(() => withErrorBoundary("filter", () => runFilterWalker(db, config2)), 500), setInterval(() => withErrorBoundary("staleness", () => runStalenessWalker(db, config2)), config2.walkers.stalenessIntervalMs), setInterval(() => withErrorBoundary("pruner", () => runPrunerWalker(db, config2)), config2.walkers.prunerIntervalMs));
+  start(store, config2, embedding, summarizer) {
+    this.startupSweep(store, config2).catch((e2) => {
+      process.stderr.write(`memtree startup-sweep error: ${e2}
+`);
+    });
+    this.timers.push(setInterval(() => withErrorBoundary("filter", () => runFilterWalker(store, config2)), 500), setInterval(() => withErrorBoundary("staleness", () => runStalenessWalker(store, config2)), config2.walkers.stalenessIntervalMs), setInterval(() => withErrorBoundary("pruner", () => runPrunerWalker(store, config2)), config2.walkers.prunerIntervalMs));
     if (embedding) {
-      this.timers.push(setInterval(() => withErrorBoundary("embedding", () => runEmbeddingWalker(db, config2, embedding)), config2.walkers.embeddingIdleMs));
+      this.timers.push(setInterval(() => withErrorBoundary("embedding", () => runEmbeddingWalker(store, config2, embedding)), config2.walkers.embeddingIdleMs));
     }
     if (summarizer) {
-      this.timers.push(setInterval(() => withErrorBoundary("summarizer", () => runSummarizerWalker(db, config2, summarizer)), config2.walkers.summarizerIdleMs));
+      this.timers.push(setInterval(() => withErrorBoundary("summarizer", () => runSummarizerWalker(store, config2, summarizer)), config2.walkers.summarizerIdleMs));
     }
     if (config2.walkers.dedupeIntervalMs > 0) {
-      this.timers.push(setInterval(() => withErrorBoundary("dedupe", () => runDedupeWalker(db, config2)), config2.walkers.dedupeIntervalMs));
+      this.timers.push(setInterval(() => withErrorBoundary("dedupe", () => runDedupeWalker(store, config2)), config2.walkers.dedupeIntervalMs));
     }
   }
   stop() {
@@ -42785,13 +42760,13 @@ var ring = [];
 var ringHead = 0;
 var ringCount = 0;
 var drainScheduled = false;
-function enqueuePayload(db, config2, payload) {
+function enqueuePayload(store, config2, payload) {
   if (ringCount >= RING_SIZE) {
     process.stderr.write(`[memtree/ingest] ring buffer full (${RING_SIZE}), dropping payload tool=${payload.tool}
 `);
     return;
   }
-  ring[ringHead] = { db, config: config2, payload };
+  ring[ringHead] = { store, config: config2, payload };
   ringHead = (ringHead + 1) % RING_SIZE;
   ringCount++;
   if (!drainScheduled) {
@@ -42807,13 +42782,16 @@ function drainRing() {
     const idx = (tail + i3) % RING_SIZE;
     const item = ring[idx];
     if (item) {
-      processPayloadSync(item.db, item.config, item.payload);
+      processPayloadAsync(item.store, item.config, item.payload).catch((err2) => {
+        process.stderr.write(`[memtree/ingest] async processing error: ${err2}
+`);
+      });
       ring[idx] = undefined;
     }
   }
   ringCount = 0;
 }
-function processPayloadSync(db, config2, payload) {
+async function processPayloadAsync(store, config2, payload) {
   const capture = config2.capture;
   if (payload.tool === "Read" && capture.read === false) {
     process.stderr.write(`[memtree/ingest] dropped: read capture disabled
@@ -42900,7 +42878,7 @@ function processPayloadSync(db, config2, payload) {
   }
   const contentHash = createHash8("sha256").update(content).digest("hex");
   try {
-    insertNode(db, ulid2(), {
+    await store.insertNode(ulid2(), {
       parent_id: null,
       kind,
       source_uri: sourceUri,
@@ -42918,9 +42896,9 @@ function processPayloadSync(db, config2, payload) {
 `);
   }
 }
-function processIngest(db, config2, payload) {
+async function processIngest(store, config2, payload) {
   try {
-    enqueuePayload(db, config2, payload);
+    enqueuePayload(store, config2, payload);
   } catch (err2) {
     process.stderr.write(`[memtree/ingest] unexpected error in processIngest: ${err2}
 `);
