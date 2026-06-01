@@ -27193,7 +27193,6 @@ async function createSqliteBackend(dbPath) {
   const db = openDb(dbPath);
   return new SqliteBackend(db);
 }
-
 class SqliteBackend {
   db;
   constructor(db) {
@@ -34781,15 +34780,20 @@ async function memtreeCompose(store, params) {
     const tokens = estimateTokens2(text);
     if (tokens > budget) {
       if (budget < 50) {
-        dropped.push({ id: node.id, reason: "over_budget" });
+        if (format === "mixed" && !node.summary) {
+          dropped.push({ id: node.id, reason: "over_budget_no_summary" });
+        } else {
+          dropped.push({ id: node.id, reason: "over_budget" });
+        }
         continue;
       }
       const chars = budget * 4;
       text = text.slice(0, chars);
-      truncated.push(node.id);
     }
     budget -= estimateTokens2(text);
     included.push(node.id);
+    if (node.truncated === 1)
+      truncated.push(node.id);
     parts2.push(text);
   }
   return {
