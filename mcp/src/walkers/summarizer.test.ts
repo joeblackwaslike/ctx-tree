@@ -3,13 +3,16 @@ import { unlinkSync, existsSync } from 'fs';
 import { openDb, closeDb } from '../store/db.js';
 import { insertNode } from '../store/nodes.js';
 import { runSummarizerWalker } from './summarizer.js';
+import { wrapDatabase } from '../store/backends/sqlite/index.js';
 import { ulid } from 'ulid';
 import { DEFAULT_CONFIG } from '../config.js';
 import type { Database } from 'bun:sqlite';
+import type { StoreBackend } from '../store/index.js';
 import type { SummarizerProvider } from '../store/types.js';
 
 const TEST_DB = '/tmp/memtree-summarizer-test.db';
 const cfg = DEFAULT_CONFIG;
+let store: StoreBackend;
 
 // A content string longer than the threshold (default: max(500, 25*20=500) chars)
 const LONG_CONTENT = 'x'.repeat(600);
@@ -34,6 +37,7 @@ function insertLiveNode(id: string, content = LONG_CONTENT, source_uri: string |
 beforeEach(() => {
   if (existsSync(TEST_DB)) unlinkSync(TEST_DB);
   db = openDb(TEST_DB);
+  store = wrapDatabase(db);
 });
 
 afterEach(() => {
@@ -45,7 +49,7 @@ describe('summarizer walker', () => {
   test('no-ops when provider is null', () => {
     const id = ulid();
     insertLiveNode(id);
-    runSummarizerWalker(db, cfg, null);
+    runSummarizerWalker(store, cfg, null);
     const row = db.query<{ summary: string | null }, [string]>(
       'SELECT summary FROM nodes WHERE id = ?'
     ).get(id);
@@ -55,7 +59,7 @@ describe('summarizer walker', () => {
   test('fetches live nodes with long content and calls summarize', async () => {
     const id = ulid();
     insertLiveNode(id);
-    runSummarizerWalker(db, cfg, mockProvider);
+    runSummarizerWalker(store, cfg, mockProvider);
     await new Promise(r => setTimeout(r, 50));
     const row = db.query<{ summary: string | null }, [string]>(
       'SELECT summary FROM nodes WHERE id = ?'
@@ -74,7 +78,7 @@ describe('summarizer walker', () => {
       summarize: async () => { callCount++; return 'summary'; },
     };
 
-    runSummarizerWalker(db, cfg, countingProvider);
+    runSummarizerWalker(store, cfg, countingProvider);
     await new Promise(r => setTimeout(r, 50));
     expect(callCount).toBe(0);
   });
@@ -91,7 +95,7 @@ describe('summarizer walker', () => {
       summarize: async () => { callCount++; return 'new summary'; },
     };
 
-    runSummarizerWalker(db, cfg, countingProvider);
+    runSummarizerWalker(store, cfg, countingProvider);
     await new Promise(r => setTimeout(r, 50));
     expect(callCount).toBe(0);
   });
@@ -110,7 +114,7 @@ describe('summarizer walker', () => {
     (process.stderr as any).write = (chunk: string) => { stderrChunks.push(chunk); return true; };
 
     try {
-      expect(() => runSummarizerWalker(db, cfg, errorProvider)).not.toThrow();
+      expect(() => runSummarizerWalker(store, cfg, errorProvider)).not.toThrow();
       await new Promise(r => setTimeout(r, 50));
       const logged = stderrChunks.join('');
       expect(logged).toMatch(/memtree summarizer error/);

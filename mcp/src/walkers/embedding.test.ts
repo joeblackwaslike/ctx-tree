@@ -3,13 +3,16 @@ import { unlinkSync, existsSync } from 'fs';
 import { openDb, closeDb } from '../store/db.js';
 import { insertNode } from '../store/nodes.js';
 import { runEmbeddingWalker } from './embedding.js';
+import { wrapDatabase } from '../store/backends/sqlite/index.js';
 import { ulid } from 'ulid';
 import { DEFAULT_CONFIG } from '../config.js';
 import type { Database } from 'bun:sqlite';
+import type { StoreBackend } from '../store/index.js';
 import type { EmbeddingProvider } from '../store/types.js';
 
 const TEST_DB = '/tmp/memtree-embedding-test.db';
 let db: Database;
+let store: StoreBackend;
 const cfg = DEFAULT_CONFIG;
 
 const mockProvider: EmbeddingProvider = {
@@ -26,7 +29,7 @@ function insertLiveNode(id: string, content = 'content long enough to be live he
   });
 }
 
-beforeEach(() => { db = openDb(TEST_DB); });
+beforeEach(() => { db = openDb(TEST_DB); store = wrapDatabase(db); });
 afterEach(() => {
   closeDb(db);
   for (const f of [TEST_DB, TEST_DB + '-wal', TEST_DB + '-shm'])
@@ -37,7 +40,7 @@ describe('embedding walker', () => {
   test('no-ops when provider is null', () => {
     const id = ulid();
     insertLiveNode(id);
-    runEmbeddingWalker(db, cfg, null);
+    runEmbeddingWalker(store, cfg, null);
     // give any async a tick to settle — but since provider is null, nothing should happen
     const row = db.query('SELECT id FROM nodes_vec WHERE id = ?').get(id);
     expect(row).toBeNull();
@@ -46,7 +49,7 @@ describe('embedding walker', () => {
   test('fetches unembedded live nodes and writes to nodes_vec', async () => {
     const id = ulid();
     insertLiveNode(id);
-    runEmbeddingWalker(db, cfg, mockProvider);
+    runEmbeddingWalker(store, cfg, mockProvider);
     // wait for the async embed+insert to complete
     await new Promise(r => setTimeout(r, 50));
     const row = db.query<{ id: string; embedding: Uint8Array; embedding_model: string; embedding_dim: number; embedded_at: number }, [string]>(
@@ -81,7 +84,7 @@ describe('embedding walker', () => {
       },
     };
 
-    runEmbeddingWalker(db, cfg, countingProvider);
+    runEmbeddingWalker(store, cfg, countingProvider);
     await new Promise(r => setTimeout(r, 50));
     expect(embedCallCount).toBe(0);
   });
@@ -102,7 +105,7 @@ describe('embedding walker', () => {
 
     try {
       // Should not throw
-      expect(() => runEmbeddingWalker(db, cfg, errorProvider)).not.toThrow();
+      expect(() => runEmbeddingWalker(store, cfg, errorProvider)).not.toThrow();
       await new Promise(r => setTimeout(r, 50));
       const logged = stderrChunks.join('');
       expect(logged).toMatch(/memtree embedding error/);
@@ -118,7 +121,7 @@ describe('embedding walker', () => {
   test('nodes_vec row has correct embedding_model, embedding_dim, and non-null BLOB embedding', async () => {
     const id = ulid();
     insertLiveNode(id, 'some content that is definitely long enough for the test');
-    runEmbeddingWalker(db, cfg, mockProvider);
+    runEmbeddingWalker(store, cfg, mockProvider);
     await new Promise(r => setTimeout(r, 50));
 
     const row = db.query<{ embedding: Uint8Array; embedding_model: string; embedding_dim: number }, [string]>(

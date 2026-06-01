@@ -6,12 +6,15 @@ import { insertNode } from '../store/nodes';
 import { buildFilterSQL } from './filters';
 import { searchKeyword } from './search';
 import { getRecent } from './recent';
+import { wrapDatabase } from '../store/backends/sqlite/index.js';
 import type { Database } from 'bun:sqlite';
+import type { StoreBackend } from '../store/index.js';
 
 const TEST_DB = '/tmp/memtree-filters-test.db';
 let db: Database;
+let store: StoreBackend;
 
-beforeEach(() => { db = openDb(TEST_DB); });
+beforeEach(() => { db = openDb(TEST_DB); store = wrapDatabase(db); });
 afterEach(() => {
   closeDb(db);
   for (const f of [TEST_DB, TEST_DB + '-wal', TEST_DB + '-shm'])
@@ -109,25 +112,25 @@ describe('buildFilterSQL — metadata filters', () => {
 // ── Integration tests ────────────────────────────────────────────────────────
 
 describe('searchKeyword with metadata filters', () => {
-  test('filters by metadata.tool returns only matching nodes', () => {
+  test('filters by metadata.tool returns only matching nodes', async () => {
     node('bash1', 'bash output content here long', { tool: 'Bash' });
     node('read1', 'read output content here long', { tool: 'Read' });
     node('bash2', 'bash another output content', { tool: 'Bash' });
 
-    const { nodes } = searchKeyword(db, 'output', 20, { metadata: { tool: 'Bash' } });
+    const { nodes } = await searchKeyword(store, 'output', 20, { metadata: { tool: 'Bash' } });
     const ids = nodes.map(n => n.id);
     expect(ids).toContain('bash1');
     expect(ids).toContain('bash2');
     expect(ids).not.toContain('read1');
   });
 
-  test('filters by metadata.gitignored = true returns only gitignored nodes', () => {
+  test('filters by metadata.gitignored = true returns only gitignored nodes', async () => {
     node('gi1', 'gitignored file content here', { gitignored: true });
     node('gi2', 'another gitignored file content', { gitignored: true });
     node('normal1', 'normal tracked file content', { gitignored: false });
     node('normal2', 'another tracked file content here', {});
 
-    const { nodes } = searchKeyword(db, 'content', 20, { metadata: { gitignored: true } });
+    const { nodes } = await searchKeyword(store, 'content', 20, { metadata: { gitignored: true } });
     const ids = nodes.map(n => n.id);
     expect(ids).toContain('gi1');
     expect(ids).toContain('gi2');
@@ -137,22 +140,22 @@ describe('searchKeyword with metadata filters', () => {
 });
 
 describe('getRecent with metadata filters', () => {
-  test('filters by metadata.tool in recent', () => {
+  test('filters by metadata.tool in recent', async () => {
     node('r1', 'recent bash content', { tool: 'Bash' });
     node('r2', 'recent write content', { tool: 'Write' });
 
-    const nodes = getRecent(db, undefined, 50, { metadata: { tool: 'Bash' } });
+    const nodes = await getRecent(store, undefined, 50, { metadata: { tool: 'Bash' } });
     const ids = nodes.map(n => n.id);
     expect(ids).toContain('r1');
     expect(ids).not.toContain('r2');
   });
 
-  test('filters by metadata.gitignored = true in recent', () => {
+  test('filters by metadata.gitignored = true in recent', async () => {
     node('gi1', 'gitignored recent content here', { gitignored: true });
     node('gi2', 'another gitignored recent content', { gitignored: true });
     node('normal1', 'normal tracked recent content', {});
 
-    const nodes = getRecent(db, undefined, 50, { metadata: { gitignored: true } });
+    const nodes = await getRecent(store, undefined, 50, { metadata: { gitignored: true } });
     const ids = nodes.map(n => n.id);
     expect(ids).toContain('gi1');
     expect(ids).toContain('gi2');

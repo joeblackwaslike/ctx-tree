@@ -3,11 +3,14 @@ import { unlinkSync, existsSync } from 'fs';
 import { openDb, closeDb } from '../store/db';
 import { insertNode } from '../store/nodes';
 import { searchSemantic, searchHybrid } from './search';
+import { wrapDatabase } from '../store/backends/sqlite/index.js';
 import type { Database } from 'bun:sqlite';
+import type { StoreBackend } from '../store/index.js';
 import type { EmbeddingProvider, MemtreeConfig, Filters } from '../store/types';
 
 const TEST_DB = '/tmp/memtree-search-semantic-test.db';
 let db: Database;
+let store: StoreBackend;
 
 const config: MemtreeConfig = {
   embeddingModel: 'test-model',
@@ -64,6 +67,7 @@ function insertEmbedding(id: string, vec: number[], model = 'test-model') {
 
 beforeEach(() => {
   db = openDb(TEST_DB);
+  store = wrapDatabase(db);
 });
 
 afterEach(() => {
@@ -75,14 +79,14 @@ afterEach(() => {
 describe('searchSemantic', () => {
   test('throws when provider is null', async () => {
     await expect(
-      searchSemantic(db, config, null, 'query', 10)
+      searchSemantic(store, config, null, 'query', 10)
     ).rejects.toThrow('semantic search requires an embedding provider');
   });
 
   test('returns empty results when nodes_vec is empty', async () => {
     node('n1', 'some content here');
     const provider = makeProvider({ query: [1, 0, 0] });
-    const result = await searchSemantic(db, config, provider, 'query', 10);
+    const result = await searchSemantic(store, config, provider, 'query', 10);
     expect(result.nodes).toHaveLength(0);
   });
 
@@ -99,7 +103,7 @@ describe('searchSemantic', () => {
     insertEmbedding('n3', [0, 1, 0]);
 
     const provider = makeProvider({ query: [1, 0, 0] });
-    const result = await searchSemantic(db, config, provider, 'query', 3);
+    const result = await searchSemantic(store, config, provider, 'query', 3);
 
     expect(result.nodes.length).toBeGreaterThan(0);
     // n1 should come first (highest similarity to [1,0,0])
@@ -114,7 +118,7 @@ describe('searchSemantic', () => {
       insertEmbedding(`n${i}`, [i * 0.1, 0, 0]);
     }
     const provider = makeProvider({ query: [1, 0, 0] });
-    const result = await searchSemantic(db, config, provider, 'query', 2);
+    const result = await searchSemantic(store, config, provider, 'query', 2);
     expect(result.nodes).toHaveLength(2);
   });
 
@@ -126,7 +130,7 @@ describe('searchSemantic', () => {
     db.run(`UPDATE nodes SET status = 'stale' WHERE id = 'stale1'`);
 
     const provider = makeProvider({ query: [1, 0, 0] });
-    const result = await searchSemantic(db, config, provider, 'query', 10);
+    const result = await searchSemantic(store, config, provider, 'query', 10);
     const ids = result.nodes.map(n => n.id);
     expect(ids).toContain('live1');
     expect(ids).not.toContain('stale1');
@@ -138,7 +142,7 @@ describe('searchSemantic', () => {
 
     const provider = makeProvider({ query: [1, 0, 0] });
     await expect(
-      searchSemantic(db, config, provider, 'query', 10)
+      searchSemantic(store, config, provider, 'query', 10)
     ).rejects.toThrow('embedding model mismatch: re-embed required before semantic search');
   });
 });
@@ -146,7 +150,7 @@ describe('searchSemantic', () => {
 describe('searchHybrid', () => {
   test('throws when provider is null', async () => {
     await expect(
-      searchHybrid(db, config, null, 'query', 10)
+      searchHybrid(store, config, null, 'query', 10)
     ).rejects.toThrow('hybrid search requires an embedding provider');
   });
 
@@ -156,7 +160,7 @@ describe('searchHybrid', () => {
 
     const provider = makeProvider({ query: [1, 0, 0] });
     await expect(
-      searchHybrid(db, config, provider, 'query', 10)
+      searchHybrid(store, config, provider, 'query', 10)
     ).rejects.toThrow('embedding model mismatch: re-embed required before semantic search');
   });
 
@@ -174,7 +178,7 @@ describe('searchHybrid', () => {
     insertEmbedding('n3', [0.99, 0.1, 0]);
 
     const provider = makeProvider({ 'fox jumps': [1, 0, 0] });
-    const result = await searchHybrid(db, config, provider, 'fox jumps', 5);
+    const result = await searchHybrid(store, config, provider, 'fox jumps', 5);
 
     expect(result.nodes.length).toBeGreaterThan(0);
     // All nodes should appear (merged from both lists)
@@ -192,7 +196,7 @@ describe('searchHybrid', () => {
     insertEmbedding('n1', [1, 0, 0]);
 
     const provider = makeProvider({ fox: [1, 0, 0] });
-    const result = await searchHybrid(db, config, provider, 'fox', 20);
+    const result = await searchHybrid(store, config, provider, 'fox', 20);
 
     // n1 may appear in both keyword and semantic — ensure it only appears once
     const ids = result.nodes.map(n => n.id);
@@ -206,7 +210,7 @@ describe('searchHybrid', () => {
       insertEmbedding(`n${i}`, [i * 0.1, 0, 0]);
     }
     const provider = makeProvider({ fox: [1, 0, 0] });
-    const result = await searchHybrid(db, config, provider, 'fox', 3);
+    const result = await searchHybrid(store, config, provider, 'fox', 3);
     expect(result.nodes).toHaveLength(3);
   });
 });
