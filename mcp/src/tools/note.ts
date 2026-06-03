@@ -1,8 +1,7 @@
 import { createHash } from 'node:crypto';
 import { ulid } from 'ulid';
-import type { Database } from 'bun:sqlite';
-import type { MemtreeConfig } from '../store/types';
-import { insertNode } from '../store/nodes';
+import type { StoreBackend } from '../store/index.js';
+import type { MemtreeConfig } from '../store/types.js';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 
 export interface NoteParams {
@@ -16,11 +15,11 @@ export interface NoteResult {
   preview: string;
 }
 
-export function memtreeNote(
-  db: Database,
+export async function memtreeNote(
+  store: StoreBackend,
   _config: MemtreeConfig,
   params: NoteParams,
-): NoteResult {
+): Promise<NoteResult> {
   const { content, title } = params;
 
   if (!content || typeof content !== 'string') {
@@ -31,7 +30,7 @@ export function memtreeNote(
   const nodeId       = ulid();
   const contentHash  = createHash('sha256').update(content).digest('hex');
 
-  insertNode(db, nodeId, {
+  await store.insertNode(nodeId, {
     parent_id:      null,
     kind:           'note',
     source_uri:     `note://${contentHash.slice(0, 16)}`,

@@ -10,7 +10,8 @@ import { execSync } from 'child_process';
 import { mkdirSync, chmodSync, unlinkSync, existsSync } from 'fs';
 import * as net from 'net';
 import { join } from 'path';
-import { openDb, closeDb } from './store/db.js';
+import { createBackend } from './store/index.js';
+import type { StoreBackend } from './store/index.js';
 import { loadConfig } from './config.js';
 import { computeProjectHash, registerProject, deregisterProject } from './project-hash.js';
 import { WalkerCoordinator } from './walkers/coordinator.js';
@@ -79,7 +80,7 @@ const dbPath = join(storeDir, 'store.db');
 mkdirSync(storeDir, { recursive: true, mode: 0o700 });
 
 const config = loadConfig(process.env.MEMTREE_CWD ?? process.cwd());
-const db = openDb(dbPath);
+const store: StoreBackend = await createBackend(config.backend ?? { kind: 'sqlite' }, dbPath);
 chmodSync(dbPath, 0o600);
 
 // Register this project in projects.tsv
@@ -90,7 +91,7 @@ const { embedding, summarizer: _summarizer } = loadProviders(config);
 
 // ── Walkers ───────────────────────────────────────────────────────────────────
 const walkers = new WalkerCoordinator();
-walkers.start(db, config, embedding, _summarizer);
+walkers.start(store, config, embedding, _summarizer);
 
 // ── Ingest socket ─────────────────────────────────────────────────────────────
 const ingestSockPath = join(storeDir, 'ingest.sock');
@@ -119,7 +120,7 @@ const ingestServer = net.createServer((socket) => {
       if (!line) continue;
       try {
         const payload = JSON.parse(line) as IngestPayload;
-        processIngest(db, config, payload);
+        processIngest(store, config, payload);
       } catch (err) {
         process.stderr.write(`[memtree/ingest] failed to parse line: ${err}\n`);
       }
@@ -323,10 +324,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
         if (typeof query !== 'string') throw new McpError(ErrorCode.InvalidParams, '"query" is required and must be a string');
         if (mode === 'semantic') {
-          const result = await searchSemantic(db, config, embedding, query, limit, filters);
+          const result = await searchSemantic(store, config, embedding, query, limit, filters);
           return { content: [{ type: 'text', text: JSON.stringify(result) }] };
         } else if (mode === 'hybrid') {
-          const result = await searchHybrid(db, config, embedding, query, limit, filters);
+          const result = await searchHybrid(store, config, embedding, query, limit, filters);
           return { content: [{ type: 'text', text: JSON.stringify(result) }] };
         } else if (mode !== undefined && mode !== 'keyword') {
           throw new McpError(
@@ -334,7 +335,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             `Unsupported mode: "${mode}". Supported modes: "keyword", "semantic", "hybrid".`,
           );
         }
-        const result = searchKeyword(db, query, limit, filters);
+        const result = await searchKeyword(store, query, limit, filters);
         return { content: [{ type: 'text', text: JSON.stringify(result) }] };
       }
 
@@ -347,14 +348,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
         if (typeof node_id !== 'string') throw new McpError(ErrorCode.InvalidParams, '"node_id" is required and must be a string');
         const cap = Math.min(depth ?? 1, 5);
-        const result = getNeighborsDeep(db, node_id, cap, edge_kinds as any, filters);
+        const result = await getNeighborsDeep(store, node_id, cap, edge_kinds as any, filters);
         return { content: [{ type: 'text', text: JSON.stringify(result) }] };
       }
 
       case 'memtree_path_to_root': {
         const { node_id } = args as { node_id: string };
         if (typeof node_id !== 'string') throw new McpError(ErrorCode.InvalidParams, '"node_id" is required and must be a string');
-        const result = getPathToRoot(db, node_id);
+        const result = await getPathToRoot(store, node_id);
         return { content: [{ type: 'text', text: JSON.stringify(result) }] };
       }
 
@@ -364,7 +365,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           limit?: number;
           filters?: Filters;
         };
-        const result = getRecent(db, since, limit, filters);
+        const result = await getRecent(store, since, limit, filters);
         return { content: [{ type: 'text', text: JSON.stringify(result) }] };
       }
 
@@ -375,7 +376,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           budget_tokens?: number;
         };
         if (typeof path !== 'string') throw new McpError(ErrorCode.InvalidParams, '"path" is required and must be a string');
-        const result = await memtreeRead(db, config, { path, lines, budget_tokens });
+        const result = await memtreeRead(store, config, { path, lines, budget_tokens });
         return { content: [{ type: 'text', text: result.content }] };
       }
 
@@ -388,7 +389,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
         if (typeof pattern !== 'string') throw new McpError(ErrorCode.InvalidParams, '"pattern" is required and must be a string');
         if (!rgAvailable) throw new McpError(ErrorCode.InvalidParams, '`rg` (ripgrep) is not installed. Install via: brew install ripgrep');
-        const result = await memtreeGrep(db, config, {
+        const result = await memtreeGrep(store, config, {
           pattern,
           path,
           caseInsensitive: case_insensitive,
@@ -407,7 +408,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
         if (!Array.isArray(node_ids)) throw new McpError(ErrorCode.InvalidParams, '"node_ids" is required and must be an array');
         if (typeof budget_tokens !== 'number') throw new McpError(ErrorCode.InvalidParams, '"budget_tokens" is required and must be a number');
-        const result = await memtreeCompose(db, {
+        const result = await memtreeCompose(store, {
           node_ids,
           budget_tokens,
           format,
@@ -426,7 +427,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case 'memtree_note': {
         const { content, title } = args as { content: string; title?: string };
-        const result = memtreeNote(db, config, { content, title });
+        const result = await memtreeNote(store, config, { content, title });
         return {
           content: [{ type: 'text', text: JSON.stringify(result) }],
         };
@@ -438,7 +439,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           timeout_ms?: number;
           cwd?: string;
         };
-        const result = await memtreeMonitor(db, config, { command, timeout_ms, cwd });
+        const result = await memtreeMonitor(store, config, { command, timeout_ms, cwd });
         return {
           content: [
             {
@@ -463,7 +464,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           budget_tokens?: number;
           force?: boolean;
         };
-        const result = await memtreeBrowse(db, config, { url, budget_tokens, force });
+        const result = await memtreeBrowse(store, config, { url, budget_tokens, force });
         return {
           content: [
             {
@@ -486,13 +487,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case 'memtree_bash': {
         const { command, budget_tokens } = args as { command: string; budget_tokens?: number };
         if (typeof command !== 'string') throw new McpError(ErrorCode.InvalidParams, '"command" is required and must be a string');
-        const result = await memtreeBash(db, config, { command, budget_tokens });
+        const result = await memtreeBash(store, config, { command, budget_tokens });
         return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
       }
 
       case 'memtree_visualize': {
         const { port, open } = args as { port?: number; open?: boolean };
-        const result = await memtreeVisualize(db, { port, open });
+        const result = await memtreeVisualize(store, { port, open });
         return {
           content: [{
             type: 'text',
@@ -513,11 +514,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 // ── Transport & lifecycle ─────────────────────────────────────────────────────
 const transport = new StdioServerTransport();
 
-function shutdown(): void {
+async function shutdown(): Promise<void> {
   ingestServer.close();
   try { unlinkSync(ingestSockPath); } catch { /* already gone */ }
   walkers.stop();
-  closeDb(db);
+  await store.close();
   deregisterProject(projectHash);
   process.exit(0);
 }

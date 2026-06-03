@@ -1,8 +1,7 @@
 import { createHash } from 'crypto';
 import { execFileSync } from 'child_process';
 import { ulid } from 'ulid';
-import type Database from 'bun:sqlite';
-import { insertNode } from './store/nodes.js';
+import type { StoreBackend } from './store/index.js';
 import { shouldDropPath, redactBashOutput, shouldDropBashCommand } from './redaction/index.js';
 import type { IngestPayload, MemtreeConfig } from './store/types.js';
 
@@ -105,19 +104,19 @@ function extractSourceUri(payload: IngestPayload): string {
 
 // ── Ring buffer (bounded ingestion queue) ─────────────────────────────────────
 const RING_SIZE = 1_000;
-const ring: Array<{ db: Database; config: MemtreeConfig; payload: IngestPayload }> = [];
+const ring: Array<{ store: StoreBackend; config: MemtreeConfig; payload: IngestPayload }> = [];
 let ringHead = 0;
 let ringCount = 0;
 let drainScheduled = false;
 
-function enqueuePayload(db: Database, config: MemtreeConfig, payload: IngestPayload): void {
+function enqueuePayload(store: StoreBackend, config: MemtreeConfig, payload: IngestPayload): void {
   if (ringCount >= RING_SIZE) {
     process.stderr.write(
       `[memtree/ingest] ring buffer full (${RING_SIZE}), dropping payload tool=${payload.tool}\n`,
     );
     return;
   }
-  ring[ringHead] = { db, config, payload };
+  ring[ringHead] = { store, config, payload };
   ringHead = (ringHead + 1) % RING_SIZE;
   ringCount++;
 
@@ -135,7 +134,9 @@ function drainRing(): void {
     const idx = (tail + i) % RING_SIZE;
     const item = ring[idx];
     if (item) {
-      processPayloadSync(item.db, item.config, item.payload);
+      processPayloadAsync(item.store, item.config, item.payload).catch(err => {
+        process.stderr.write(`[memtree/ingest] async processing error: ${err}\n`);
+      });
       ring[idx] = undefined as any;
     }
   }
@@ -143,7 +144,7 @@ function drainRing(): void {
 }
 
 // ── Core processing ───────────────────────────────────────────────────────────
-function processPayloadSync(db: Database, config: MemtreeConfig, payload: IngestPayload): void {
+async function processPayloadAsync(store: StoreBackend, config: MemtreeConfig, payload: IngestPayload): Promise<void> {
   const capture = config.capture;
 
   // 1. Per-tool opt-out flags
@@ -246,7 +247,7 @@ function processPayloadSync(db: Database, config: MemtreeConfig, payload: Ingest
 
   // 12. Insert node (fast path — status='live'), then record dedup only on success
   try {
-    insertNode(db, ulid(), {
+    await store.insertNode(ulid(), {
       parent_id: null,
       kind,
       source_uri: sourceUri,
@@ -283,20 +284,20 @@ export function _resetIngestState(): void {
  * Main entry point for ingesting a captured tool payload.
  * Fire-and-forget — never throws, logs drops to stderr.
  */
-export function processIngest(db: Database, config: MemtreeConfig, payload: IngestPayload): void {
+export async function processIngest(store: StoreBackend, config: MemtreeConfig, payload: IngestPayload): Promise<void> {
   try {
-    enqueuePayload(db, config, payload);
+    enqueuePayload(store, config, payload);
   } catch (err) {
     process.stderr.write(`[memtree/ingest] unexpected error in processIngest: ${err}\n`);
   }
 }
 
 /**
- * Exported for testing — synchronous processing that bypasses the ring buffer.
+ * Exported for testing — async processing that bypasses the ring buffer.
  */
-export function _processIngestSyncForTests(db: Database, config: MemtreeConfig, payload: IngestPayload): void {
+export async function _processIngestSyncForTests(store: StoreBackend, config: MemtreeConfig, payload: IngestPayload): Promise<void> {
   try {
-    processPayloadSync(db, config, payload);
+    await processPayloadAsync(store, config, payload);
   } catch (err) {
     process.stderr.write(`[memtree/ingest] unexpected error in processIngestSync: ${err}\n`);
   }

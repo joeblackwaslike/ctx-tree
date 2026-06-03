@@ -3,10 +3,9 @@ import { promisify } from 'util';
 import { createHash } from 'crypto';
 import { ulid } from 'ulid';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
-import type { Database } from 'bun:sqlite';
+import type { StoreBackend } from '../store/index.js';
 import type { MemtreeConfig } from '../store/types.js';
 import { shouldDropBashCommand, redactBashOutput } from '../redaction/index.js';
-import { insertNode } from '../store/nodes.js';
 
 const execAsync = promisify(exec);
 
@@ -24,7 +23,7 @@ export interface BashResult {
 }
 
 export async function memtreeBash(
-  db: Database,
+  store: StoreBackend,
   config: MemtreeConfig,
   params: BashParams
 ): Promise<BashResult> {
@@ -105,7 +104,7 @@ export async function memtreeBash(
     const commandHash = createHash('sha256').update(command).digest('hex').slice(0, 8);
     const contentHash = createHash('sha256').update(content).digest('hex');
 
-    insertNode(db, nodeId, {
+    await store.insertNode(nodeId, {
       parent_id: null,
       kind: 'tool_output',
       source_uri: `tool:Bash#${commandHash}`,

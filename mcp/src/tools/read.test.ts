@@ -4,15 +4,19 @@ import { join } from 'path';
 import { openDb, closeDb } from '../store/db';
 import { memtreeRead } from './read';
 import { DEFAULT_CONFIG } from '../config';
+import { wrapDatabase } from '../store/backends/sqlite/index.js';
 import type { Database } from 'bun:sqlite';
+import type { StoreBackend } from '../store/index.js';
 
 const TEST_DB = '/tmp/memtree-read-test.db';
 const FIXTURE_DIR = '/tmp/memtree-read-fixtures';
 let db: Database;
+let store: StoreBackend;
 const cfg = DEFAULT_CONFIG;
 
 beforeEach(() => {
   db = openDb(TEST_DB);
+  store = wrapDatabase(db);
   mkdirSync(FIXTURE_DIR, { recursive: true });
 });
 afterEach(() => {
@@ -26,7 +30,7 @@ describe('memtreeRead', () => {
   test('reads a file and returns content within budget', async () => {
     const filePath = join(FIXTURE_DIR, 'sample.ts');
     writeFileSync(filePath, 'export const foo = 1;\nexport const bar = 2;\n');
-    const result = await memtreeRead(db, cfg, { path: filePath, budget_tokens: 200 });
+    const result = await memtreeRead(store, cfg, { path: filePath, budget_tokens: 200 });
     expect(result.content).toContain('foo');
     expect(result.nodeIds[0]).toBeTruthy();
   });
@@ -34,7 +38,7 @@ describe('memtreeRead', () => {
   test('creates file_chunk node in store with symbol-name source_uri', async () => {
     const filePath = join(FIXTURE_DIR, 'cached.ts');
     writeFileSync(filePath, 'export function hello() { return "world"; }\n');
-    await memtreeRead(db, cfg, { path: filePath, budget_tokens: 500 });
+    await memtreeRead(store, cfg, { path: filePath, budget_tokens: 500 });
     type Row = { id: string; source_uri: string; parent_id: string | null; metadata: string };
     const nodes = db.query("SELECT id, source_uri, parent_id, metadata FROM nodes WHERE kind = 'file_chunk'").all() as Row[];
     const root = nodes.find(n => !n.source_uri.includes('#'));
@@ -48,9 +52,9 @@ describe('memtreeRead', () => {
   test('returns cached result when mtime unchanged', async () => {
     const filePath = join(FIXTURE_DIR, 'stable.ts');
     writeFileSync(filePath, 'export const x = 42;\n// padding to meet size threshold\n');
-    const r1 = await memtreeRead(db, cfg, { path: filePath, budget_tokens: 500 });
+    const r1 = await memtreeRead(store, cfg, { path: filePath, budget_tokens: 500 });
     const count1 = (db.query("SELECT COUNT(*) as n FROM nodes").get() as { n: number }).n;
-    const r2 = await memtreeRead(db, cfg, { path: filePath, budget_tokens: 500 });
+    const r2 = await memtreeRead(store, cfg, { path: filePath, budget_tokens: 500 });
     const count2 = (db.query("SELECT COUNT(*) as n FROM nodes").get() as { n: number }).n;
     expect(count2).toBe(count1);
     expect(r2.nodeIds[0]).toBe(r1.nodeIds[0]);
@@ -60,7 +64,7 @@ describe('memtreeRead', () => {
   test('symbol-name URI is stable when function shifts lines', async () => {
     const filePath = join(FIXTURE_DIR, 'shift.ts');
     writeFileSync(filePath, 'function greet() { return "hi"; }\n');
-    const r1 = await memtreeRead(db, cfg, { path: filePath, budget_tokens: 500 });
+    const r1 = await memtreeRead(store, cfg, { path: filePath, budget_tokens: 500 });
     const uri1 = (db.query("SELECT source_uri FROM nodes WHERE kind='file_chunk' AND source_uri LIKE '%#%' LIMIT 1").get() as any).source_uri;
     expect(uri1).toMatch(/#greet$/);
 
@@ -69,7 +73,7 @@ describe('memtreeRead', () => {
     writeFileSync(filePath, '// header comment\nfunction greet() { return "hi"; }\n');
     const future = new Date(Date.now() + 2000);
     utimesSync(filePath, future, future);
-    const r2 = await memtreeRead(db, cfg, { path: filePath, budget_tokens: 500 });
+    const r2 = await memtreeRead(store, cfg, { path: filePath, budget_tokens: 500 });
     const uri2 = (db.query("SELECT source_uri FROM nodes WHERE kind='file_chunk' AND status='live' AND source_uri LIKE '%#%' LIMIT 1").get() as any).source_uri;
     expect(uri2).toMatch(/#greet$/);
     expect(uri2).toBe(uri1);
@@ -89,7 +93,7 @@ describe('memtreeRead', () => {
       'const B2 = 20;',      // line 5
       'const B3 = 30;',      // line 6
     ].join('\n'));
-    const result = await memtreeRead(db, cfg, { path: filePath, lines: [4, 6], budget_tokens: 2000 });
+    const result = await memtreeRead(store, cfg, { path: filePath, lines: [4, 6], budget_tokens: 2000 });
     expect(result.content).toContain('BLOCK_B');
     expect(result.content).not.toContain('BLOCK_A');
   });
@@ -97,7 +101,7 @@ describe('memtreeRead', () => {
   test('falls back to window chunking for unknown file type', async () => {
     const filePath = join(FIXTURE_DIR, 'data.xyz');
     writeFileSync(filePath, Array(210).fill('x').join('\n'));
-    const result = await memtreeRead(db, cfg, { path: filePath, budget_tokens: 2000 });
+    const result = await memtreeRead(store, cfg, { path: filePath, budget_tokens: 2000 });
     expect(result.content).toBeTruthy();
     const meta = JSON.parse(
       (db.query("SELECT metadata FROM nodes WHERE kind='file_chunk' AND json_extract(metadata,'$.is_file_root') IS NULL LIMIT 1").get() as any).metadata
@@ -108,7 +112,7 @@ describe('memtreeRead', () => {
   test('window chunks use L<start>-<end> source_uri fragment', async () => {
     const filePath = join(FIXTURE_DIR, 'plain.txt');
     writeFileSync(filePath, Array(10).fill('line').join('\n'));
-    await memtreeRead(db, cfg, { path: filePath, budget_tokens: 2000 });
+    await memtreeRead(store, cfg, { path: filePath, budget_tokens: 2000 });
     const nodes = db.query("SELECT source_uri FROM nodes WHERE kind='file_chunk' AND source_uri LIKE '%#%'").all() as Array<{ source_uri: string }>;
     expect(nodes[0].source_uri).toMatch(/#L\d+-\d+$/);
   });
@@ -116,7 +120,7 @@ describe('memtreeRead', () => {
   test('rejects path matching denylist (.env)', async () => {
     const filePath = join(FIXTURE_DIR, '.env');
     writeFileSync(filePath, 'SECRET=abc\n');
-    await expect(memtreeRead(db, cfg, { path: filePath, budget_tokens: 200 }))
+    await expect(memtreeRead(store, cfg, { path: filePath, budget_tokens: 200 }))
       .rejects.toThrow('Path rejected by denylist');
   });
 
@@ -137,7 +141,7 @@ export class Greeter {
   }
 }
 `);
-    const result = await memtreeRead(db, cfg, { path: filePath, budget_tokens: 2000 });
+    const result = await memtreeRead(store, cfg, { path: filePath, budget_tokens: 2000 });
     expect(result.content).toBeTruthy();
     // Verify that the chunking strategy is 'treesitter', not 'window'
     expect(result.chunking).toBe('treesitter');

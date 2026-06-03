@@ -2,10 +2,8 @@ import { readFileSync, statSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { ulid } from 'ulid';
 import { extname } from 'node:path';
-import type { Database } from 'bun:sqlite';
-import type { MemtreeConfig } from '../store/types';
-import { insertNode, getNodeBySourceUri, updateNodeStatus, markStaleByFilePath } from '../store/nodes';
-import { insertEdge } from '../store/edges';
+import type { StoreBackend } from '../store/index.js';
+import type { MemtreeConfig } from '../store/types.js';
 import { shouldDropPath } from '../redaction';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 
@@ -147,7 +145,7 @@ async function treeSitterChunk(source: string, lang: TreeSitterLanguage): Promis
 }
 
 export async function memtreeRead(
-  db: Database,
+  store: StoreBackend,
   config: MemtreeConfig,
   params: ReadParams
 ): Promise<ReadResult> {
@@ -167,7 +165,7 @@ export async function memtreeRead(
   const ext = extname(path).toLowerCase();
 
   // Stale any cached reads of this file whose mtime no longer matches.
-  markStaleByFilePath(db, path, mtime);
+  await store.markStaleByFilePath(path, mtime);
 
   let raw = readFileSync(path, 'utf8');
   const originalBytes = Buffer.byteLength(raw, 'utf8');
@@ -216,14 +214,14 @@ export async function memtreeRead(
   // Get or create the file root node (navigation anchor; parent of all per-chunk nodes).
   const fileRootUri = `file://${path}`;
   let fileRootId: string;
-  const cachedRoot = getNodeBySourceUri(db, fileRootUri);
+  const cachedRoot = await store.getNodeBySourceUri(fileRootUri);
   if (cachedRoot && cachedRoot.mtime === mtime) {
     fileRootId = cachedRoot.id;
   } else {
-    if (cachedRoot) updateNodeStatus(db, cachedRoot.id, 'stale');
+    if (cachedRoot) await store.updateNodeStatus(cachedRoot.id, 'stale');
     fileRootId = ulid();
     const emptyHash = createHash('sha256').update('').digest('hex');
-    insertNode(db, fileRootId, {
+    await store.insertNode(fileRootId, {
       parent_id: null,
       kind: 'file_chunk',
       source_uri: fileRootUri,
@@ -235,7 +233,7 @@ export async function memtreeRead(
       original_bytes: originalBytes,
       metadata: JSON.stringify({ filePath: path, is_file_root: true }),
     });
-    if (cachedRoot) insertEdge(db, { src_id: fileRootId, dst_id: cachedRoot.id, kind: 'supersedes' });
+    if (cachedRoot) await store.insertEdge({ src_id: fileRootId, dst_id: cachedRoot.id, kind: 'supersedes' });
   }
 
   const nodeIds: string[] = [];
@@ -255,16 +253,16 @@ export async function memtreeRead(
     const chunkUri = `file://${path}#${uniqueSymbolKey(chunk)}`;
     const contentHash = createHash('sha256').update(chunk.content).digest('hex');
 
-    const cached = getNodeBySourceUri(db, chunkUri);
+    const cached = await store.getNodeBySourceUri(chunkUri);
     if (cached && cached.mtime === mtime) {
       nodeIds.push(cached.id);
       continue;
     }
 
-    if (cached) updateNodeStatus(db, cached.id, 'stale');
+    if (cached) await store.updateNodeStatus(cached.id, 'stale');
 
     const nodeId = ulid();
-    insertNode(db, nodeId, {
+    await store.insertNode(nodeId, {
       parent_id: fileRootId,
       kind: 'file_chunk',
       source_uri: chunkUri,
@@ -277,7 +275,7 @@ export async function memtreeRead(
       metadata: JSON.stringify({ filePath: path, chunking, symbolName: chunk.symbolName }),
     });
 
-    if (cached) insertEdge(db, { src_id: nodeId, dst_id: cached.id, kind: 'supersedes' });
+    if (cached) await store.insertEdge({ src_id: nodeId, dst_id: cached.id, kind: 'supersedes' });
 
     nodeIds.push(nodeId);
   }
