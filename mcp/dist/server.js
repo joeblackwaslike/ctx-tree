@@ -27252,6 +27252,12 @@ class SqliteBackend {
   async getEdgesFrom(srcId) {
     return getEdgesFrom(this.db, srcId);
   }
+  async getNodesSince(since) {
+    return this.db.query("SELECT * FROM nodes WHERE updated_at >= ?").all(since);
+  }
+  async getAllEdges() {
+    return this.db.query("SELECT * FROM edges").all();
+  }
   async searchKeyword(query, filters = {}, limit = 20) {
     if (!query.trim())
       return [];
@@ -27475,7 +27481,7 @@ class SqliteBackend {
   }
 }
 
-// ../node_modules/.bun/edgelite@file+..+..+..+edgelight+.worktrees+phase-7-public-api+d4639ecd6b79af1f/node_modules/edgelite/dist/db.js
+// ../node_modules/.bun/edgelite@file+..+edgelight+.worktrees+phase-7-public-api+d4639ecd6b79af1f/node_modules/edgelite/dist/db.js
 import { mkdirSync as mkdirSync3 } from "fs";
 import path2 from "path";
 
@@ -33147,7 +33153,7 @@ u();
 var n3 = async (s4, t) => ({ emscriptenOpts: t, bundlePath: new URL("../vector.tar.gz", import.meta.url) });
 var o4 = { name: "pgvector", setup: n3 };
 
-// ../node_modules/.bun/edgelite@file+..+..+..+edgelight+.worktrees+phase-7-public-api+d4639ecd6b79af1f/node_modules/edgelite/dist/errors.js
+// ../node_modules/.bun/edgelite@file+..+edgelight+.worktrees+phase-7-public-api+d4639ecd6b79af1f/node_modules/edgelite/dist/errors.js
 class EdgeLiteRuntimeError extends Error {
   cause;
   constructor(message, cause) {
@@ -33171,7 +33177,7 @@ class EdgeLiteConcurrencyError extends Error {
   }
 }
 
-// ../node_modules/.bun/edgelite@file+..+..+..+edgelight+.worktrees+phase-7-public-api+d4639ecd6b79af1f/node_modules/edgelite/dist/migration/apply.js
+// ../node_modules/.bun/edgelite@file+..+edgelight+.worktrees+phase-7-public-api+d4639ecd6b79af1f/node_modules/edgelite/dist/migration/apply.js
 import { readFileSync, readdirSync } from "fs";
 import path from "path";
 async function applyMigrations(pglite, migrationsDir, options = {}) {
@@ -33217,7 +33223,7 @@ function getMigrationFiles(migrationsDir) {
   }
 }
 
-// ../node_modules/.bun/edgelite@file+..+..+..+edgelight+.worktrees+phase-7-public-api+d4639ecd6b79af1f/node_modules/edgelite/dist/runtime/compile.js
+// ../node_modules/.bun/edgelite@file+..+edgelight+.worktrees+phase-7-public-api+d4639ecd6b79af1f/node_modules/edgelite/dist/runtime/compile.js
 function compileQuery(query) {
   switch (query.kind) {
     case "select": {
@@ -33369,7 +33375,7 @@ function compileOp(expr, alias, parameters) {
   return `${col} ${expr.operator} $${parameters.length}`;
 }
 
-// ../node_modules/.bun/edgelite@file+..+..+..+edgelight+.worktrees+phase-7-public-api+d4639ecd6b79af1f/node_modules/edgelite/dist/runtime/map.js
+// ../node_modules/.bun/edgelite@file+..+edgelight+.worktrees+phase-7-public-api+d4639ecd6b79af1f/node_modules/edgelite/dist/runtime/map.js
 function mapResult(rows, shape) {
   if (!shape)
     return rows;
@@ -33397,7 +33403,7 @@ function mapRow(row, shape) {
   return result;
 }
 
-// ../node_modules/.bun/edgelite@file+..+..+..+edgelight+.worktrees+phase-7-public-api+d4639ecd6b79af1f/node_modules/edgelite/dist/runtime/execute.js
+// ../node_modules/.bun/edgelite@file+..+edgelight+.worktrees+phase-7-public-api+d4639ecd6b79af1f/node_modules/edgelite/dist/runtime/execute.js
 var ERROR_SQL_PREVIEW_LENGTH = 80;
 async function execute(pglite, query) {
   const compiled = compileQuery(query);
@@ -33418,7 +33424,7 @@ async function execute(pglite, query) {
   }
 }
 
-// ../node_modules/.bun/edgelite@file+..+..+..+edgelight+.worktrees+phase-7-public-api+d4639ecd6b79af1f/node_modules/edgelite/dist/db.js
+// ../node_modules/.bun/edgelite@file+..+edgelight+.worktrees+phase-7-public-api+d4639ecd6b79af1f/node_modules/edgelite/dist/db.js
 async function openDb2(dbPath, schemaPath, options = {}) {
   mkdirSync3(dbPath, { recursive: true });
   const pglite = await Ue2.create(dbPath, {
@@ -33573,7 +33579,6 @@ function makeRef(table, links) {
 }
 
 // src/store/backends/edgelite/index.ts
-var NOT_IMPL = (name2) => new Error(`EdgeLite backend: ${name2} is NotImplemented in Phase 7 \u2014 deferred to Phase 8`);
 async function createEdgeliteBackend(dbPath, schemaPath) {
   const db = await openDb2(dbPath, schemaPath, { autoMigrate: true });
   return new EdgeliteBackend(db);
@@ -33881,6 +33886,19 @@ class EdgeliteBackend {
     })));
     return rows.map(toMemtreeEdge);
   }
+  async getNodesSince(since) {
+    const rows = await this.db.pglite.query("SELECT * FROM nodes WHERE updated_at >= $1", [since]);
+    return rows.rows.map(toMemtreeNode);
+  }
+  async getAllEdges() {
+    const rows = await this.db.run(edgelite_default.select(edgelite_default.Edge, (edge) => ({
+      src_id: true,
+      dst_id: true,
+      kind: true,
+      created_at: true
+    })));
+    return rows.map(toMemtreeEdge);
+  }
   async searchKeyword(query, _filters = {}, limit = 20) {
     if (!query.trim())
       return [];
@@ -33891,44 +33909,229 @@ class EdgeliteBackend {
       return [];
     }
   }
-  async searchSemantic(_vector, _embeddingModel, _filters = {}, _limit = 20) {
-    throw NOT_IMPL("searchSemantic");
+  async searchSemantic(vector, embeddingModel, filters = {}, limit = 20) {
+    const vecStr = "[" + vector.join(",") + "]";
+    const normalizedModel = embeddingModel.replace(/^[^/]+\//, "");
+    const conditions = [`v.embedding_model = $2`];
+    const params = [vecStr, normalizedModel];
+    let idx = 3;
+    const statuses = filters.status?.length ? filters.status : ["live"];
+    conditions.push(`n.status = ANY($${idx++}::text[])`);
+    params.push(statuses);
+    if (filters.kind?.length) {
+      conditions.push(`n.kind = ANY($${idx++}::text[])`);
+      params.push(filters.kind);
+    }
+    if (filters.since != null) {
+      conditions.push(`n.created_at >= $${idx++}`);
+      params.push(filters.since);
+    }
+    if (filters.until != null) {
+      conditions.push(`n.created_at <= $${idx++}`);
+      params.push(filters.until);
+    }
+    if (filters.parent_id != null) {
+      conditions.push(`n.parent_id = $${idx++}`);
+      params.push(filters.parent_id);
+    }
+    if (filters.session_id != null) {
+      conditions.push(`n.metadata->>'session_id' = $${idx++}`);
+      params.push(filters.session_id);
+    }
+    if (filters.metadata?.tool != null) {
+      conditions.push(`n.metadata->>'tool' = $${idx++}`);
+      params.push(filters.metadata.tool);
+    }
+    if (filters.metadata?.session_id != null) {
+      conditions.push(`n.metadata->>'session_id' = $${idx++}`);
+      params.push(filters.metadata.session_id);
+    }
+    params.push(limit);
+    const result = await this.db.pglite.query(`SELECT n.* FROM nodes n
+       JOIN nodes_vec v ON n.id = v.id
+       WHERE ${conditions.join(" AND ")}
+       ORDER BY v.embedding <=> $1::vector
+       LIMIT $${idx}`, params);
+    return result.rows.map(toMemtreeNode);
   }
-  async getNodesByIds(_ids) {
-    throw NOT_IMPL("getNodesByIds");
+  async getNodesByIds(ids) {
+    if (ids.length === 0)
+      return [];
+    const CHUNK = 500;
+    const result = [];
+    for (let i3 = 0;i3 < ids.length; i3 += CHUNK) {
+      const chunk = ids.slice(i3, i3 + CHUNK);
+      const rows = await this.db.pglite.query(`SELECT * FROM nodes WHERE id = ANY($1::text[]) AND status = 'live'`, [chunk]);
+      result.push(...rows.rows.map(toMemtreeNode));
+    }
+    return result;
   }
-  async getRecentNodes(_since, _limit, _filters) {
-    throw NOT_IMPL("getRecentNodes");
+  async getRecentNodes(since, limit = 50, filters = {}) {
+    const conditions = [];
+    const params = [];
+    let idx = 1;
+    if (since != null) {
+      conditions.push(`created_at >= $${idx++}`);
+      params.push(since);
+    }
+    if (filters.status) {
+      conditions.push(`status = $${idx++}`);
+      params.push(filters.status);
+    }
+    if (filters.kind) {
+      conditions.push(`kind = $${idx++}`);
+      params.push(filters.kind);
+    }
+    if (filters.until != null) {
+      conditions.push(`created_at <= $${idx++}`);
+      params.push(filters.until);
+    }
+    if (filters.parent_id != null) {
+      conditions.push(`parent_id = $${idx++}`);
+      params.push(filters.parent_id);
+    }
+    const where = conditions.length > 0 ? conditions.join(" AND ") : "TRUE";
+    params.push(limit);
+    const rows = await this.db.pglite.query(`SELECT * FROM nodes WHERE ${where} ORDER BY created_at DESC LIMIT $${idx}`, params);
+    return rows.rows.map(toMemtreeNode);
   }
-  async getPathToRoot(_nodeId) {
-    throw NOT_IMPL("getPathToRoot");
+  async getPathToRoot(nodeId) {
+    const path3 = [];
+    let currentId = nodeId;
+    while (currentId != null) {
+      const result = await this.db.pglite.query("SELECT * FROM nodes WHERE id = $1", [currentId]);
+      if (result.rows.length === 0)
+        break;
+      const row = result.rows[0];
+      path3.push(toMemtreeNode(row));
+      currentId = row.parent_id ?? null;
+    }
+    return path3;
   }
-  async getNeighborsDeep(_nodeId, _depth, _edgeKinds, _filters) {
-    throw NOT_IMPL("getNeighborsDeep");
+  async getNeighborsDeep(nodeId, depth = 1, edgeKinds, filters = {}) {
+    const cap = Math.min(depth, 5);
+    const visited = new Set([nodeId]);
+    const result = [];
+    let frontier = [nodeId];
+    for (let d2 = 0;d2 < cap; d2++) {
+      if (frontier.length === 0)
+        break;
+      const nextNodes = [];
+      for (const fId of frontier) {
+        let rows;
+        if (edgeKinds && edgeKinds.length > 0) {
+          rows = await this.db.run(edgelite_default.neighbors(fId, { edgeKinds }));
+        } else {
+          const res = await this.db.pglite.query(`SELECT DISTINCT n.* FROM nodes n
+             JOIN edges e
+               ON (e.src_id = $1 AND e.dst_id = n.id)
+               OR (e.dst_id = $1 AND e.src_id = n.id)`, [fId]);
+          rows = res.rows;
+        }
+        for (const row of rows) {
+          if (!visited.has(row.id))
+            nextNodes.push(toMemtreeNode(row));
+        }
+      }
+      const fresh = nextNodes.filter((n4) => {
+        if (visited.has(n4.id))
+          return false;
+        if (filters.kind && n4.kind !== filters.kind)
+          return false;
+        if (filters.status && n4.status !== filters.status)
+          return false;
+        if (filters.since != null && n4.created_at < filters.since)
+          return false;
+        if (filters.until != null && n4.created_at > filters.until)
+          return false;
+        if (filters.parent_id != null && n4.parent_id !== filters.parent_id)
+          return false;
+        return true;
+      });
+      for (const n4 of fresh) {
+        visited.add(n4.id);
+        result.push(n4);
+      }
+      frontier = fresh.map((n4) => n4.id);
+    }
+    return result;
   }
-  async expandGraph(_seedIds, _maxDepth) {
-    throw NOT_IMPL("expandGraph");
+  async expandGraph(seedIds, maxDepth) {
+    const visited = new Map;
+    const queue = seedIds.map((id) => [id, 0]);
+    while (queue.length > 0) {
+      const [id, dist] = queue.shift();
+      if (visited.has(id))
+        continue;
+      visited.set(id, dist);
+      if (dist >= maxDepth)
+        continue;
+      const childRows = await this.db.pglite.query(`SELECT id FROM nodes WHERE parent_id = $1 AND status = 'live'`, [id]);
+      const neighborRows = await this.db.run(edgelite_default.neighbors(id, {}));
+      const nextIds = [
+        ...childRows.rows.map((r2) => r2.id),
+        ...neighborRows.map((r2) => r2.id)
+      ];
+      for (const nextId of nextIds) {
+        if (!visited.has(nextId))
+          queue.push([nextId, dist + 1]);
+      }
+    }
+    return visited;
   }
-  async getFtsRanks(_query, _ids) {
-    throw NOT_IMPL("getFtsRanks");
+  async getFtsRanks(query, ids) {
+    if (!query.trim() || ids.length === 0)
+      return new Map;
+    try {
+      const rows = await this.db.run(edgelite_default.fts(edgelite_default.Node, query));
+      const idSet = new Set(ids);
+      const matched = rows.filter((r2) => idSet.has(r2.id)).map((r2) => r2.id);
+      if (matched.length === 0)
+        return new Map;
+      return new Map(matched.map((id) => [id, 1]));
+    } catch {
+      return new Map;
+    }
   }
-  async getPendingEmbeddingNodes(_batchSize) {
-    throw NOT_IMPL("getPendingEmbeddingNodes");
+  async getPendingEmbeddingNodes(batchSize) {
+    const result = await this.db.pglite.query(`SELECT n.id, n.content FROM nodes n
+       LEFT JOIN nodes_vec v ON n.id = v.id
+       WHERE n.status = 'live'
+         AND v.id IS NULL
+         AND length(n.content) > 0
+       LIMIT $1`, [batchSize]);
+    return result.rows;
   }
-  async batchUpsertNodeVec(_rows) {
-    throw NOT_IMPL("batchUpsertNodeVec");
+  async batchUpsertNodeVec(rows) {
+    for (const row of rows) {
+      const floats = new Float32Array(row.embedding.buffer, row.embedding.byteOffset, row.embedding.byteLength / 4);
+      const vecStr = "[" + Array.from(floats).join(",") + "]";
+      await this.db.pglite.query(`INSERT INTO nodes_vec (id, embedding, embedding_model, embedding_dim, embedded_at)
+         VALUES ($1, $2::vector, $3, $4, $5)
+         ON CONFLICT (id) DO UPDATE SET
+           embedding = EXCLUDED.embedding,
+           embedding_model = EXCLUDED.embedding_model,
+           embedding_dim = EXCLUDED.embedding_dim,
+           embedded_at = EXCLUDED.embedded_at`, [row.id, vecStr, row.model, row.dim, row.embeddedAt]);
+    }
   }
   async getStoredEmbeddingModels() {
-    throw NOT_IMPL("getStoredEmbeddingModels");
+    const result = await this.db.pglite.query("SELECT DISTINCT embedding_model FROM nodes_vec LIMIT 2");
+    return result.rows.map((r2) => r2.embedding_model);
   }
   async getDedupeCandidatePairs() {
-    throw NOT_IMPL("getDedupeCandidatePairs");
+    return [];
   }
-  async markNodeStatusPruned(_id, _now) {
-    throw NOT_IMPL("markNodeStatusPruned");
+  async markNodeStatusPruned(id, _now) {
+    return this.pruneNode(id);
   }
-  async getNodesNeedingSummarization(_charThreshold, _limit) {
-    throw NOT_IMPL("getNodesNeedingSummarization");
+  async getNodesNeedingSummarization(charThreshold, limit) {
+    const rows = await this.db.pglite.query(`SELECT id, content, source_uri FROM nodes
+       WHERE status = 'live'
+         AND (summary IS NULL OR summary = '')
+         AND length(content) > $1
+       LIMIT $2`, [charThreshold, limit]);
+    return rows.rows;
   }
   async close() {
     await this.db.close();
@@ -34610,7 +34813,7 @@ async function memtreeRead(store, config2, params) {
       mtime,
       truncated: truncated ? 1 : 0,
       original_bytes: originalBytes,
-      metadata: JSON.stringify({ filePath: path4, chunking, symbolName: chunk.symbolName })
+      metadata: JSON.stringify({ filePath: path4, chunking, symbolName: chunk.symbolName, chunkCount: included.length })
     });
     if (cached2)
       await store.insertEdge({ src_id: nodeId, dst_id: cached2.id, kind: "supersedes" });
@@ -35124,33 +35327,26 @@ import { readFileSync as readFileSync5 } from "fs";
 import { join as join4 } from "path";
 
 // src/visualize/watcher.ts
-class DbWatcher {
-  db;
+class StoreWatcher {
+  store;
   intervalMs;
   listeners = new Set;
   timer = null;
   lastMs = 0;
+  seeded = false;
   knownNodeIds = new Set;
   knownEdgeIds = new Set;
-  nodesSince;
-  edgesSince;
-  constructor(db, intervalMs = 200) {
-    this.db = db;
+  constructor(store, intervalMs = 200) {
+    this.store = store;
     this.intervalMs = intervalMs;
-    this.nodesSince = db.query("SELECT * FROM nodes WHERE updated_at >= ?");
-    this.edgesSince = db.query("SELECT * FROM edges WHERE created_at >= ?");
   }
   start() {
     if (this.timer)
       return;
-    this.lastMs = Date.now();
-    for (const n4 of this.db.query("SELECT id FROM nodes").all()) {
-      this.knownNodeIds.add(n4.id);
-    }
-    for (const e2 of this.db.query("SELECT src_id, dst_id, kind FROM edges").all()) {
-      this.knownEdgeIds.add(`${e2.src_id}:${e2.dst_id}:${e2.kind}`);
-    }
-    this.timer = setInterval(() => this._poll(), this.intervalMs);
+    this.timer = setInterval(() => {
+      this._poll();
+    }, this.intervalMs);
+    this._seed();
   }
   stop() {
     if (this.timer) {
@@ -35168,25 +35364,43 @@ class DbWatcher {
         this.stop();
     };
   }
-  _poll() {
-    if (this.listeners.size === 0)
+  async _seed() {
+    try {
+      const [nodes, edges] = await Promise.all([
+        this.store.getNodesSince(0),
+        this.store.getAllEdges()
+      ]);
+      for (const n4 of nodes)
+        this.knownNodeIds.add(n4.id);
+      for (const edge of edges)
+        this.knownEdgeIds.add(`${edge.src_id}:${edge.dst_id}:${edge.kind}`);
+      this.lastMs = Date.now();
+      this.seeded = true;
+    } catch {}
+  }
+  async _poll() {
+    if (!this.seeded || this.listeners.size === 0)
       return;
     const since = this.lastMs;
     this.lastMs = Date.now();
-    const changedNodes = this.nodesSince.all(since);
-    for (const node of changedNodes) {
-      const op = this.knownNodeIds.has(node.id) ? "update" : "insert";
-      this.knownNodeIds.add(node.id);
-      this.emit({ op, table: "nodes", id: node.id, data: node });
-    }
-    const newEdges = this.edgesSince.all(since);
-    for (const edge of newEdges) {
-      const compositeId = `${edge.src_id}:${edge.dst_id}:${edge.kind}`;
-      if (!this.knownEdgeIds.has(compositeId)) {
-        this.knownEdgeIds.add(compositeId);
-        this.emit({ op: "insert", table: "edges", id: compositeId, data: edge });
+    try {
+      const changedNodes = await this.store.getNodesSince(since);
+      for (const node of changedNodes) {
+        const op = this.knownNodeIds.has(node.id) ? "update" : "insert";
+        this.knownNodeIds.add(node.id);
+        this.emit({ op, table: "nodes", id: node.id, data: node });
       }
-    }
+    } catch {}
+    try {
+      const allEdges = await this.store.getAllEdges();
+      for (const edge of allEdges) {
+        const compositeId = `${edge.src_id}:${edge.dst_id}:${edge.kind}`;
+        if (!this.knownEdgeIds.has(compositeId)) {
+          this.knownEdgeIds.add(compositeId);
+          this.emit({ op: "insert", table: "edges", id: compositeId, data: edge });
+        }
+      }
+    } catch {}
   }
   emit(event) {
     for (const listener of this.listeners) {
@@ -35213,7 +35427,7 @@ var VALID_KINDS = new Set([
 ]);
 
 class VisualizeServer {
-  db;
+  store;
   httpServer = null;
   watcher;
   unsubscribe = null;
@@ -35222,11 +35436,11 @@ class VisualizeServer {
   started = false;
   host;
   port;
-  constructor(db, options = {}) {
-    this.db = db;
+  constructor(store, options = {}) {
+    this.store = store;
     this.host = options.host ?? "127.0.0.1";
     this.port = options.port ?? 7777;
-    this.watcher = new DbWatcher(db);
+    this.watcher = new StoreWatcher(store);
     this.ui = readFileSync5(join4(import.meta.dir, "ui.html"), "utf8");
   }
   async start() {
@@ -35237,7 +35451,7 @@ class VisualizeServer {
     this.httpServer = Bun.serve({
       hostname: this.host,
       port: effectivePort,
-      fetch(req, server) {
+      async fetch(req, server) {
         const url = new URL(req.url);
         if (url.pathname === "/api/events") {
           if (server.upgrade(req))
@@ -35248,24 +35462,25 @@ class VisualizeServer {
           return new Response(self2.ui, { headers: { "Content-Type": "text/html; charset=utf-8" } });
         }
         if (url.pathname === "/api/state") {
-          const { nodes, edges } = self2.snapshot(url.searchParams);
+          const { nodes, edges } = await self2.snapshot(url.searchParams);
           return Response.json({ nodes, edges });
         }
         if (url.pathname.startsWith("/api/node/")) {
           const id = url.pathname.slice("/api/node/".length);
-          const node = self2.db.query("SELECT * FROM nodes WHERE id = ?").get(id);
+          const node = await self2.store.getNode(id);
           return node ? Response.json(node) : new Response("Not found", { status: 404 });
         }
         if (url.pathname === "/health") {
-          return Response.json(self2.stats());
+          return Response.json(await self2.stats());
         }
         return new Response("Not found", { status: 404 });
       },
       websocket: {
         open(ws) {
           self2.clients.add(ws);
-          const { nodes, edges } = self2.snapshot(new URLSearchParams);
-          ws.send(JSON.stringify({ op: "snapshot", nodes, edges }));
+          self2.snapshot(new URLSearchParams).then(({ nodes, edges }) => {
+            ws.send(JSON.stringify({ op: "snapshot", nodes, edges }));
+          }).catch(() => {});
         },
         message() {},
         close(ws) {
@@ -35288,10 +35503,12 @@ class VisualizeServer {
   get url() {
     return `http://${this.host}:${this.port}`;
   }
-  stats() {
-    const nodeCount = this.db.query("SELECT COUNT(*) as count FROM nodes").get()?.count ?? 0;
-    const edgeCount = this.db.query("SELECT COUNT(*) as count FROM edges").get()?.count ?? 0;
-    return { status: "ok", nodeCount, edgeCount };
+  async stats() {
+    const [nodes, edges] = await Promise.all([
+      this.store.getRecentNodes(undefined, 1e5),
+      this.store.getAllEdges()
+    ]);
+    return { status: "ok", nodeCount: nodes.length, edgeCount: edges.length };
   }
   async stop() {
     this.unsubscribe?.();
@@ -35301,29 +35518,30 @@ class VisualizeServer {
     this.clients.clear();
     this.started = false;
   }
-  snapshot(params) {
-    const conditions = [];
-    const args2 = [];
+  async snapshot(params) {
     const rawKinds = (params.get("kind") ?? "").split(",").filter((k4) => VALID_KINDS.has(k4));
-    if (rawKinds.length) {
-      conditions.push(`kind IN (${rawKinds.map(() => "?").join(",")})`);
-      args2.push(...rawKinds);
-    }
     const rawStatuses = (params.get("status") ?? "").split(",").filter((s4) => VALID_STATUSES.has(s4));
-    if (rawStatuses.length) {
-      conditions.push(`status IN (${rawStatuses.map(() => "?").join(",")})`);
-      args2.push(...rawStatuses);
-    } else {
-      conditions.push(`status != 'pruned'`);
-    }
     const sessionId = params.get("session_id");
-    if (sessionId) {
-      conditions.push(`json_extract(metadata, '$.session_id') = ?`);
-      args2.push(sessionId);
-    }
-    const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
-    const nodes = this.db.query(`SELECT * FROM nodes ${where}`).all(...args2);
-    const edges = this.db.query("SELECT * FROM edges").all();
+    const [allNodes, edges] = await Promise.all([
+      this.store.getRecentNodes(undefined, 1e5),
+      this.store.getAllEdges()
+    ]);
+    const nodes = allNodes.filter((n4) => {
+      if (rawKinds.length && !rawKinds.includes(n4.kind))
+        return false;
+      if (rawStatuses.length ? !rawStatuses.includes(n4.status) : n4.status === "pruned")
+        return false;
+      if (sessionId) {
+        try {
+          const meta2 = typeof n4.metadata === "string" ? JSON.parse(n4.metadata) : n4.metadata;
+          if (meta2?.session_id !== sessionId)
+            return false;
+        } catch {
+          return false;
+        }
+      }
+      return true;
+    });
     return { nodes, edges };
   }
 }

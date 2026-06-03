@@ -109,9 +109,98 @@ for (const { name, create, cleanup } of fixtures) {
       expect(edges[0].kind).toBe('references');
     });
 
-    test('searchSemantic throws NotImplemented on edgelite', async () => {
-      if (name !== 'edgelite') return;
-      await expect(store.searchSemantic([1, 2, 3], 'model')).rejects.toThrow('NotImplemented');
+    test('searchSemantic returns empty array when no vectors stored', async () => {
+      const results = await store.searchSemantic([1, 2, 3], 'model');
+      expect(Array.isArray(results)).toBe(true);
+    });
+
+    test('getNeighbors returns directly connected nodes via edges', async () => {
+      await store.insertNode('nb-parent', {
+        parent_id: null, kind: 'note', source_uri: null,
+        content: 'parent', content_hash: 'nb-p', status: 'live',
+        mtime: 0, truncated: 0, original_bytes: 0, metadata: '{}',
+      });
+      await store.insertNode('nb-child', {
+        parent_id: 'nb-parent', kind: 'note', source_uri: null,
+        content: 'child', content_hash: 'nb-c', status: 'live',
+        mtime: 0, truncated: 0, original_bytes: 0, metadata: '{}',
+      });
+      await store.insertEdge({ src_id: 'nb-parent', dst_id: 'nb-child', kind: 'references' });
+
+      const neighbors = await store.getNeighbors('nb-parent');
+      expect(neighbors.some(n => n.id === 'nb-child')).toBe(true);
+    });
+
+    test('getNeighborsDeep returns nodes up to specified depth via edges', async () => {
+      await store.insertNode('gnd-root', {
+        parent_id: null, kind: 'note', source_uri: null,
+        content: 'root', content_hash: 'gnd-r', status: 'live',
+        mtime: 0, truncated: 0, original_bytes: 0, metadata: '{}',
+      });
+      await store.insertNode('gnd-mid', {
+        parent_id: 'gnd-root', kind: 'note', source_uri: null,
+        content: 'mid', content_hash: 'gnd-m', status: 'live',
+        mtime: 0, truncated: 0, original_bytes: 0, metadata: '{}',
+      });
+      await store.insertNode('gnd-leaf', {
+        parent_id: 'gnd-mid', kind: 'note', source_uri: null,
+        content: 'leaf', content_hash: 'gnd-l', status: 'live',
+        mtime: 0, truncated: 0, original_bytes: 0, metadata: '{}',
+      });
+      await store.insertEdge({ src_id: 'gnd-root', dst_id: 'gnd-mid', kind: 'references' });
+      await store.insertEdge({ src_id: 'gnd-mid', dst_id: 'gnd-leaf', kind: 'references' });
+
+      const deep = await store.getNeighborsDeep('gnd-root', 2);
+      expect(deep.some(n => n.id === 'gnd-mid')).toBe(true);
+      expect(deep.some(n => n.id === 'gnd-leaf')).toBe(true);
+    });
+
+    test('getPathToRoot walks parent_id chain from grandchild to root', async () => {
+      await store.insertNode('ptr-root', {
+        parent_id: null, kind: 'note', source_uri: null,
+        content: 'root', content_hash: 'ptr-r', status: 'live',
+        mtime: 0, truncated: 0, original_bytes: 0, metadata: '{}',
+      });
+      await store.insertNode('ptr-child', {
+        parent_id: 'ptr-root', kind: 'note', source_uri: null,
+        content: 'child', content_hash: 'ptr-c', status: 'live',
+        mtime: 0, truncated: 0, original_bytes: 0, metadata: '{}',
+      });
+      await store.insertNode('ptr-grand', {
+        parent_id: 'ptr-child', kind: 'note', source_uri: null,
+        content: 'grand', content_hash: 'ptr-g', status: 'live',
+        mtime: 0, truncated: 0, original_bytes: 0, metadata: '{}',
+      });
+
+      const path = await store.getPathToRoot('ptr-grand');
+      expect(path.map(n => n.id)).toEqual(['ptr-grand', 'ptr-child', 'ptr-root']);
+    });
+
+    test('getRecentNodes respects limit and returns live nodes', async () => {
+      for (let i = 0; i < 5; i++) {
+        await store.insertNode(`rec-${i}`, {
+          parent_id: null, kind: 'note', source_uri: null,
+          content: `content-${i}`, content_hash: `rec-hash-${i}`, status: 'live',
+          mtime: 0, truncated: 0, original_bytes: 0, metadata: '{}',
+        });
+      }
+
+      const all = await store.getRecentNodes(0, 10);
+      const limited = await store.getRecentNodes(0, 3);
+
+      expect(all.length).toBe(5);
+      expect(limited.length).toBe(3);
+      // All returned nodes should be from the inserted set
+      const insertedIds = new Set(Array.from({ length: 5 }, (_, i) => `rec-${i}`));
+      expect(all.every(n => insertedIds.has(n.id))).toBe(true);
+    });
+
+    test('getOrCreateSessionNode is idempotent for the same sessionId', async () => {
+      const first = await store.getOrCreateSessionNode('session-contract-test');
+      const second = await store.getOrCreateSessionNode('session-contract-test');
+
+      expect(first.id).toBe(second.id);
+      expect(second.id).toBeTruthy();
     });
   });
 }

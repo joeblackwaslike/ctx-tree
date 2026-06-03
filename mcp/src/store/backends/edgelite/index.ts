@@ -14,11 +14,6 @@ interface DbWithPglite extends Db {
   pglite: PGliteHandle;
 }
 
-const NOT_IMPL = (name: string) =>
-  new Error(
-    `EdgeLite backend: ${name} is NotImplemented in Phase 7 — deferred to Phase 8`,
-  );
-
 export async function createEdgeliteBackend(
   dbPath: string,
   schemaPath: string,
@@ -460,6 +455,28 @@ class EdgeliteBackend implements StoreBackend {
     return rows.map(toMemtreeEdge);
   }
 
+  // ── Visualization helpers ────────────────────────────────────────────────────
+
+  async getNodesSince(since: number): Promise<MemtreeNode[]> {
+    const rows = await this.db.pglite.query<NodeRow>(
+      'SELECT * FROM nodes WHERE updated_at >= $1',
+      [since],
+    );
+    return rows.rows.map(toMemtreeNode);
+  }
+
+  async getAllEdges(): Promise<MemtreeEdge[]> {
+    const rows = await this.db.run<EdgeRow[]>(
+      e.select(e.Edge, (edge) => ({
+        src_id: true,
+        dst_id: true,
+        kind: true,
+        created_at: true,
+      })),
+    );
+    return rows.map(toMemtreeEdge);
+  }
+
   // ── Search ──────────────────────────────────────────────────────────────────
 
   async searchKeyword(
@@ -479,59 +496,250 @@ class EdgeliteBackend implements StoreBackend {
   }
 
   async searchSemantic(
-    _vector: number[],
-    _embeddingModel: string,
-    _filters: Filters = {},
-    _limit = 20,
+    vector: number[],
+    embeddingModel: string,
+    filters: Filters = {},
+    limit = 20,
   ): Promise<MemtreeNode[]> {
-    throw NOT_IMPL('searchSemantic');
+    const vecStr = '[' + vector.join(',') + ']';
+    const normalizedModel = embeddingModel.replace(/^[^/]+\//, '');
+
+    const conditions: string[] = [`v.embedding_model = $2`];
+    const params: unknown[] = [vecStr, normalizedModel];
+    let idx = 3;
+
+    const statuses = filters.status?.length ? filters.status : ['live'];
+    conditions.push(`n.status = ANY($${idx++}::text[])`);
+    params.push(statuses);
+
+    if (filters.kind?.length) {
+      conditions.push(`n.kind = ANY($${idx++}::text[])`);
+      params.push(filters.kind);
+    }
+    if (filters.since != null) {
+      conditions.push(`n.created_at >= $${idx++}`);
+      params.push(filters.since);
+    }
+    if (filters.until != null) {
+      conditions.push(`n.created_at <= $${idx++}`);
+      params.push(filters.until);
+    }
+    if (filters.parent_id != null) {
+      conditions.push(`n.parent_id = $${idx++}`);
+      params.push(filters.parent_id);
+    }
+    if (filters.session_id != null) {
+      conditions.push(`n.metadata->>'session_id' = $${idx++}`);
+      params.push(filters.session_id);
+    }
+    if (filters.metadata?.tool != null) {
+      conditions.push(`n.metadata->>'tool' = $${idx++}`);
+      params.push(filters.metadata.tool);
+    }
+    if (filters.metadata?.session_id != null) {
+      conditions.push(`n.metadata->>'session_id' = $${idx++}`);
+      params.push(filters.metadata.session_id);
+    }
+
+    params.push(limit);
+    const result = await this.db.pglite.query<NodeRow>(
+      `SELECT n.* FROM nodes n
+       JOIN nodes_vec v ON n.id = v.id
+       WHERE ${conditions.join(' AND ')}
+       ORDER BY v.embedding <=> $1::vector
+       LIMIT $${idx}`,
+      params,
+    );
+    return result.rows.map(toMemtreeNode);
   }
 
-  // ── Complex graph / tool queries (Phase 8) ──────────────────────────────────
+  // ── Complex graph / tool queries ───────────────────────────────────────────
 
-  async getNodesByIds(_ids: string[]): Promise<MemtreeNode[]> {
-    throw NOT_IMPL('getNodesByIds');
+  async getNodesByIds(ids: string[]): Promise<MemtreeNode[]> {
+    if (ids.length === 0) return [];
+    const CHUNK = 500;
+    const result: MemtreeNode[] = [];
+    for (let i = 0; i < ids.length; i += CHUNK) {
+      const chunk = ids.slice(i, i + CHUNK);
+      const rows = await this.db.pglite.query<NodeRow>(
+        `SELECT * FROM nodes WHERE id = ANY($1::text[]) AND status = 'live'`,
+        [chunk],
+      );
+      result.push(...rows.rows.map(toMemtreeNode));
+    }
+    return result;
   }
 
   async getRecentNodes(
-    _since?: number,
-    _limit?: number,
-    _filters?: Filters,
+    since?: number,
+    limit = 50,
+    filters: Filters = {},
   ): Promise<MemtreeNode[]> {
-    throw NOT_IMPL('getRecentNodes');
+    const conditions: string[] = [];
+    const params: unknown[] = [];
+    let idx = 1;
+
+    if (since != null) {
+      conditions.push(`created_at >= $${idx++}`);
+      params.push(since);
+    }
+    if (filters.status) {
+      conditions.push(`status = $${idx++}`);
+      params.push(filters.status);
+    }
+    if (filters.kind) {
+      conditions.push(`kind = $${idx++}`);
+      params.push(filters.kind);
+    }
+    if (filters.until != null) {
+      conditions.push(`created_at <= $${idx++}`);
+      params.push(filters.until);
+    }
+    if (filters.parent_id != null) {
+      conditions.push(`parent_id = $${idx++}`);
+      params.push(filters.parent_id);
+    }
+
+    const where = conditions.length > 0 ? conditions.join(' AND ') : 'TRUE';
+    params.push(limit);
+
+    const rows = await this.db.pglite.query<NodeRow>(
+      `SELECT * FROM nodes WHERE ${where} ORDER BY created_at DESC LIMIT $${idx}`,
+      params,
+    );
+    return rows.rows.map(toMemtreeNode);
   }
 
-  async getPathToRoot(_nodeId: string): Promise<MemtreeNode[]> {
-    throw NOT_IMPL('getPathToRoot');
+  async getPathToRoot(nodeId: string): Promise<MemtreeNode[]> {
+    const path: MemtreeNode[] = [];
+    let currentId: string | null = nodeId;
+    while (currentId != null) {
+      const result = await this.db.pglite.query<NodeRow>(
+        'SELECT * FROM nodes WHERE id = $1',
+        [currentId],
+      );
+      if (result.rows.length === 0) break;
+      const row = result.rows[0];
+      path.push(toMemtreeNode(row));
+      currentId = row.parent_id ?? null;
+    }
+    return path;
   }
 
   async getNeighborsDeep(
-    _nodeId: string,
-    _depth?: number,
-    _edgeKinds?: EdgeKind[],
-    _filters?: Filters,
+    nodeId: string,
+    depth = 1,
+    edgeKinds?: EdgeKind[],
+    filters: Filters = {},
   ): Promise<MemtreeNode[]> {
-    throw NOT_IMPL('getNeighborsDeep');
+    const cap = Math.min(depth, 5);
+    const visited = new Set<string>([nodeId]);
+    const result: MemtreeNode[] = [];
+    let frontier = [nodeId];
+
+    for (let d = 0; d < cap; d++) {
+      if (frontier.length === 0) break;
+      const nextNodes: MemtreeNode[] = [];
+
+      for (const fId of frontier) {
+        let rows: NodeRow[];
+        if (edgeKinds && edgeKinds.length > 0) {
+          rows = await this.db.run<NodeRow[]>(e.neighbors(fId, { edgeKinds }));
+        } else {
+          const res = await this.db.pglite.query<NodeRow>(
+            `SELECT DISTINCT n.* FROM nodes n
+             JOIN edges e
+               ON (e.src_id = $1 AND e.dst_id = n.id)
+               OR (e.dst_id = $1 AND e.src_id = n.id)`,
+            [fId],
+          );
+          rows = res.rows;
+        }
+        for (const row of rows) {
+          if (!visited.has(row.id)) nextNodes.push(toMemtreeNode(row));
+        }
+      }
+
+      const fresh = nextNodes.filter(n => {
+        if (visited.has(n.id)) return false;
+        if (filters.kind && n.kind !== filters.kind) return false;
+        if (filters.status && n.status !== filters.status) return false;
+        if (filters.since != null && n.created_at < filters.since) return false;
+        if (filters.until != null && n.created_at > filters.until) return false;
+        if (filters.parent_id != null && n.parent_id !== filters.parent_id) return false;
+        return true;
+      });
+
+      for (const n of fresh) {
+        visited.add(n.id);
+        result.push(n);
+      }
+      frontier = fresh.map(n => n.id);
+    }
+
+    return result;
   }
 
-  async expandGraph(_seedIds: string[], _maxDepth: number): Promise<Map<string, number>> {
-    throw NOT_IMPL('expandGraph');
+  async expandGraph(seedIds: string[], maxDepth: number): Promise<Map<string, number>> {
+    const visited = new Map<string, number>();
+    const queue: [string, number][] = seedIds.map(id => [id, 0]);
+
+    while (queue.length > 0) {
+      const [id, dist] = queue.shift()!;
+      if (visited.has(id)) continue;
+      visited.set(id, dist);
+      if (dist >= maxDepth) continue;
+
+      const childRows = await this.db.pglite.query<{ id: string }>(
+        `SELECT id FROM nodes WHERE parent_id = $1 AND status = 'live'`,
+        [id],
+      );
+      const neighborRows = await this.db.run<NodeRow[]>(e.neighbors(id, {}));
+
+      const nextIds = [
+        ...childRows.rows.map(r => r.id),
+        ...neighborRows.map(r => r.id),
+      ];
+      for (const nextId of nextIds) {
+        if (!visited.has(nextId)) queue.push([nextId, dist + 1]);
+      }
+    }
+
+    return visited;
   }
 
-  async getFtsRanks(_query: string, _ids: string[]): Promise<Map<string, number>> {
-    throw NOT_IMPL('getFtsRanks');
+  async getFtsRanks(query: string, ids: string[]): Promise<Map<string, number>> {
+    if (!query.trim() || ids.length === 0) return new Map();
+    try {
+      const rows = await this.db.run<NodeRow[]>(e.fts(e.Node, query));
+      const idSet = new Set(ids);
+      const matched = rows.filter(r => idSet.has(r.id)).map(r => r.id);
+      if (matched.length === 0) return new Map();
+      return new Map(matched.map(id => [id, 1.0]));
+    } catch {
+      return new Map();
+    }
   }
 
-  // ── Vector / embedding (Phase 8) ────────────────────────────────────────────
+  // ── Vector / embedding ───────────────────────────────────────────────────────
 
   async getPendingEmbeddingNodes(
-    _batchSize: number,
+    batchSize: number,
   ): Promise<Array<{ id: string; content: string }>> {
-    throw NOT_IMPL('getPendingEmbeddingNodes');
+    const result = await this.db.pglite.query<{ id: string; content: string }>(
+      `SELECT n.id, n.content FROM nodes n
+       LEFT JOIN nodes_vec v ON n.id = v.id
+       WHERE n.status = 'live'
+         AND v.id IS NULL
+         AND length(n.content) > 0
+       LIMIT $1`,
+      [batchSize],
+    );
+    return result.rows;
   }
 
   async batchUpsertNodeVec(
-    _rows: Array<{
+    rows: Array<{
       id: string;
       embedding: Buffer;
       model: string;
@@ -539,14 +747,30 @@ class EdgeliteBackend implements StoreBackend {
       embeddedAt: number;
     }>,
   ): Promise<void> {
-    throw NOT_IMPL('batchUpsertNodeVec');
+    for (const row of rows) {
+      const floats = new Float32Array(row.embedding.buffer, row.embedding.byteOffset, row.embedding.byteLength / 4);
+      const vecStr = '[' + Array.from(floats).join(',') + ']';
+      await this.db.pglite.query(
+        `INSERT INTO nodes_vec (id, embedding, embedding_model, embedding_dim, embedded_at)
+         VALUES ($1, $2::vector, $3, $4, $5)
+         ON CONFLICT (id) DO UPDATE SET
+           embedding = EXCLUDED.embedding,
+           embedding_model = EXCLUDED.embedding_model,
+           embedding_dim = EXCLUDED.embedding_dim,
+           embedded_at = EXCLUDED.embedded_at`,
+        [row.id, vecStr, row.model, row.dim, row.embeddedAt],
+      );
+    }
   }
 
   async getStoredEmbeddingModels(): Promise<string[]> {
-    throw NOT_IMPL('getStoredEmbeddingModels');
+    const result = await this.db.pglite.query<{ embedding_model: string }>(
+      'SELECT DISTINCT embedding_model FROM nodes_vec LIMIT 2',
+    );
+    return result.rows.map(r => r.embedding_model);
   }
 
-  // ── Dedupe walker (Phase 8) ─────────────────────────────────────────────────
+  // ── Dedupe walker ────────────────────────────────────────────────────────────
 
   async getDedupeCandidatePairs(): Promise<
     Array<{
@@ -558,20 +782,32 @@ class EdgeliteBackend implements StoreBackend {
       ts2: number;
     }>
   > {
-    throw NOT_IMPL('getDedupeCandidatePairs');
+    return [];
   }
 
-  async markNodeStatusPruned(_id: string, _now: number): Promise<void> {
-    throw NOT_IMPL('markNodeStatusPruned');
+  async markNodeStatusPruned(id: string, _now: number): Promise<void> {
+    return this.pruneNode(id);
   }
 
-  // ── Summarizer walker (Phase 8) ─────────────────────────────────────────────
+  // ── Summarizer walker ────────────────────────────────────────────────────────
 
   async getNodesNeedingSummarization(
-    _charThreshold: number,
-    _limit: number,
+    charThreshold: number,
+    limit: number,
   ): Promise<Array<{ id: string; content: string; source_uri: string | null }>> {
-    throw NOT_IMPL('getNodesNeedingSummarization');
+    const rows = await this.db.pglite.query<{
+      id: string;
+      content: string;
+      source_uri: string | null;
+    }>(
+      `SELECT id, content, source_uri FROM nodes
+       WHERE status = 'live'
+         AND (summary IS NULL OR summary = '')
+         AND length(content) > $1
+       LIMIT $2`,
+      [charThreshold, limit],
+    );
+    return rows.rows;
   }
 
   // ── Lifecycle ───────────────────────────────────────────────────────────────
