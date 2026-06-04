@@ -9,7 +9,7 @@ sidebar_position: 2
 ctx-tree sits between Claude Code and every tool call. This page explains the full pipeline from tool interception to context-efficient recall.
 
 :::tip Interactive visualization
-For a click-to-inspect visualization of every node type, hook, pipeline, and search pattern, see the **[How It Works interactive walkthrough](/how-it-works.html)**.
+For a click-to-inspect visualization of every node type, hook, pipeline, and search pattern, see the **[How It Works interactive walkthrough](pathname:///ctx-tree/how-it-works.html)**.
 :::
 
 ---
