@@ -276,7 +276,8 @@ async function serverStart(args) {
     options: {
       cwd: { type: "string" },
       port: { type: "string" },
-      open: { type: "boolean", default: true }
+      open: { type: "boolean", default: true },
+      json: { type: "boolean", default: false }
     },
     strict: true
   });
@@ -293,13 +294,19 @@ async function serverStart(args) {
   }
   const db = new Database(dbPath, { readonly: true });
   const srv = new VisualizeServer(db, { port });
-  const { url } = await srv.start();
-  console.log(`ctx-tree visualizer running at ${url}`);
-  console.log(`Watching: ${dbPath}`);
-  console.log(`Press Ctrl+C to stop.`);
-  if (values.open !== false) {
-    const opener = process.platform === "darwin" ? "open" : "xdg-open";
-    spawnSync(opener, [url], { stdio: "ignore" });
+  const { url, port: boundPort } = await srv.start();
+  const { nodeCount, edgeCount } = srv.stats();
+  if (values.json) {
+    process.stdout.write(JSON.stringify({ url, port: boundPort, nodeCount, edgeCount }) + `
+`);
+  } else {
+    console.log(`ctx-tree visualizer running at ${url}`);
+    console.log(`Watching: ${dbPath}`);
+    if (values.open !== false) {
+      const opener = process.platform === "darwin" ? "open" : "xdg-open";
+      spawnSync(opener, [url], { stdio: "ignore" });
+    }
+    console.log(`Press Ctrl+C to stop.`);
   }
   const shutdown = () => srv.stop().then(() => {
     db.close();
