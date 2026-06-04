@@ -2,6 +2,7 @@ import type { StoreBackend } from '../store/index.js';
 import type { CtxTreeConfig } from '../store/types.js';
 
 export function cosineSimilarity(a: Float32Array, b: Float32Array): number {
+  if (a.length !== b.length) return 0;
   let dot = 0, normA = 0, normB = 0;
   for (let i = 0; i < a.length; i++) {
     dot += a[i] * b[i];
@@ -25,8 +26,7 @@ export async function runDedupeWalker(store: StoreBackend, _config: CtxTreeConfi
     if (sim > 0.95) {
       const keepId = pair.ts1 >= pair.ts2 ? pair.id1 : pair.id2;
       const pruneId = pair.ts1 >= pair.ts2 ? pair.id2 : pair.id1;
-      await store.markNodeStatusPruned(pruneId, now);
-      await store.insertEdge({ src_id: keepId, dst_id: pruneId, kind: 'supersedes' });
+      await store.atomicPruneAndSupersede(pruneId, keepId, now);
     }
   }
 }

@@ -385,6 +385,13 @@ class SqliteBackend implements StoreBackend {
     this.db.run(`UPDATE nodes SET status='pruned', updated_at=? WHERE id=?`, now, id);
   }
 
+  async atomicPruneAndSupersede(pruneId: string, keepId: string, now: number): Promise<void> {
+    this.db.transaction(() => {
+      this.db.run(`UPDATE nodes SET status='pruned', updated_at=? WHERE id=?`, now, pruneId);
+      sqlInsertEdge(this.db, { src_id: keepId, dst_id: pruneId, kind: 'supersedes' });
+    })();
+  }
+
   // ── Summarizer walker ──────────────────────────────────────────────────────
 
   async getNodesNeedingSummarization(

@@ -10,12 +10,12 @@ export function runEmbeddingWalker(
 ): void {
   if (!provider) return;
   if (inFlight) return;
+  inFlight = true;
 
   const batchSize = config.walkers.embeddingBatchSize;
 
   store.getPendingEmbeddingNodes(batchSize).then(rows => {
     if (rows.length === 0) return;
-    inFlight = true;
     const texts = rows.map(r => r.content);
 
     return provider.embed(texts).then(vectors => {
