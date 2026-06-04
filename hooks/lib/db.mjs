@@ -19,7 +19,7 @@ export function getOrCreateSession(db, sessionId) {
      VALUES (?,NULL,'session',NULL,'','','live',0,?,?,0,0,?)`,
     id, now, now, JSON.stringify({ session_id: sessionId })
   );
-  // Re-query: if INSERT was ignored (race with MCP server), the winner's id is what we want.
+  // Re-query: whether INSERT succeeded or was ignored by a concurrent writer, return whichever row is now in the DB.
   const created = db.query(
     `SELECT id FROM nodes WHERE kind='session' AND json_extract(metadata,'$.session_id')=?`
   ).get(sessionId);

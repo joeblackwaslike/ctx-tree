@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# TODO(v1.2): replace this shell pipeline with a compiled hook binary
+# TODO: replace this shell pipeline with a compiled hook binary
 
 CTX_TREE_HOME="${CTX_TREE_HOME:-${HOME}/.ctx-tree}"
 

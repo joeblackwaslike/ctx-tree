@@ -1,6 +1,7 @@
 import type { StoreBackend } from '../store/index.js';
 import type { CtxTreeConfig } from '../store/types.js';
 
+/** Returns cosine similarity in [−1, 1]; returns 0 for incompatible vectors (different lengths, zero magnitude, or non-finite denominator). */
 export function cosineSimilarity(a: Float32Array, b: Float32Array): number {
   if (a.length !== b.length) return 0;
   let dot = 0, normA = 0, normB = 0;

@@ -81,10 +81,9 @@ export class DbWatcher {
       }
     }
 
-    // Deletions: nodes whose status is now 'pruned' or that are missing entirely
-    // In practice ctx-tree rarely hard-deletes nodes — pruned nodes get status='pruned'
-    // Emit 'update' for status changes (covered above). True hard-deletes are rare
-    // and will be caught on the next full snapshot (WebSocket reconnect).
+    // True hard-deletes: ctx-tree rarely removes rows — status changes to 'pruned' are
+    // emitted as updates (handled above). Missing rows will be caught on the next full
+    // snapshot triggered by WebSocket reconnect.
   }
 
   private emit(event: ChangeEvent): void {

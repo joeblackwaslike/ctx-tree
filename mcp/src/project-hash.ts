@@ -55,8 +55,9 @@ function readEntries(): Array<[string, string]> {
  * Ensures ~/.ctx-tree/ directory exists beforehand.
  *
  * Note: Not safe against concurrent read-modify-write across processes.
- * Multiple processes could both read, both modify, and both rename — last
- * one wins. However, data is advisory; stale entries are survivable.
+ * If two processes read, modify, and rename concurrently, the first rename
+ * is completely overwritten — not just superseded — by the second. Data is
+ * advisory; lost entries are re-created on next server start.
  */
 function writeEntries(entries: Array<[string, string]>): void {
   const PROJECTS_TSV = getProjectsTsvPath();
