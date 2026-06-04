@@ -103,6 +103,22 @@ class SqliteBackend implements StoreBackend {
     sqlPruneNode(this.db, id);
   }
 
+  async atomicBatchFilter(decisions: Array<{ id: string; action: 'prune' | 'promote' }>): Promise<void> {
+    if (decisions.length === 0) return;
+    const prune = this.db.prepare(
+      `UPDATE nodes SET status = 'pruned', content = '', updated_at = ? WHERE id = ?`
+    );
+    const promote = this.db.prepare(
+      `UPDATE nodes SET status = 'live', updated_at = ? WHERE id = ?`
+    );
+    const now = Date.now();
+    this.db.transaction(() => {
+      for (const { id, action } of decisions) {
+        (action === 'prune' ? prune : promote).run(now, id);
+      }
+    })();
+  }
+
   async updateNodeSummary(id: string, summary: string): Promise<void> {
     this.db.run('UPDATE nodes SET summary = ?, updated_at = ? WHERE id = ?', summary, Date.now(), id);
   }
@@ -160,14 +176,15 @@ class SqliteBackend implements StoreBackend {
       embeddingModelCache.set(this.db, normalizedModel);
     }
 
-    const { where, params } = buildFilterSQL(filters);
+    if (!Number.isFinite(limit) || limit < 1) throw new Error(`Invalid limit: ${limit}`);
+    const { where, params } = buildFilterSQL(filters, 'n');
     const queryFloat = new Float32Array(vector);
 
     const rows = this.db.query(`
       SELECT v.id, v.embedding FROM nodes_vec v
       JOIN nodes n ON v.id = n.id
       WHERE ${where}
-      LIMIT 500
+      LIMIT ${Math.min(Math.max(limit * 20, 500), 5000)}
     `).all(...params) as { id: string; embedding: Uint8Array }[];
 
     if (rows.length === 0) return [];

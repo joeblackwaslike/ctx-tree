@@ -30,6 +30,7 @@ export interface StoreBackend {
   getStaleNodes(olderThanMs: number): Promise<CtxTreeNode[]>;
   getSupersededNodes(olderThanMs: number): Promise<CtxTreeNode[]>;
   pruneNode(id: string): Promise<void>;
+  atomicBatchFilter(decisions: Array<{ id: string; action: 'prune' | 'promote' }>): Promise<void>;
   updateNodeSummary(id: string, summary: string): Promise<void>;
 
   // ── Edge CRUD ─────────────────────────────────────────────────────────────

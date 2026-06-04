@@ -399,6 +399,16 @@ class EdgeliteBackend implements StoreBackend {
     );
   }
 
+  async atomicBatchFilter(decisions: Array<{ id: string; action: 'prune' | 'promote' }>): Promise<void> {
+    for (const { id, action } of decisions) {
+      if (action === 'prune') {
+        await this.pruneNode(id);
+      } else {
+        await this.updateNodeStatus(id, 'live');
+      }
+    }
+  }
+
   async updateNodeSummary(id: string, summary: string): Promise<void> {
     await this.db.run(
       e.update(e.Node, (n) => ({
