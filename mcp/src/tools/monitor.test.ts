@@ -72,7 +72,7 @@ describe('ctxTreeMonitor', () => {
   });
 
   it('throws on missing command', async () => {
-    await expect(ctxTreeMonitor(db, config, { command: '' })).rejects.toThrow();
+    await expect(ctxTreeMonitor(store, config, { command: '' })).rejects.toThrow();
   });
 
   it('respects cwd option', async () => {

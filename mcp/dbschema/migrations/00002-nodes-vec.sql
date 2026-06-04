@@ -1,3 +1,5 @@
+CREATE EXTENSION IF NOT EXISTS vector;
+
 CREATE TABLE nodes_vec (
   id TEXT PRIMARY KEY REFERENCES nodes(id) ON DELETE CASCADE,
   embedding vector NOT NULL,
