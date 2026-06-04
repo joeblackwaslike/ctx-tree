@@ -40,6 +40,7 @@ writeFileSync(stateFile, JSON.stringify({ sessionNodeId, ts: now, taskPreview: t
 if (!existsSync(dbPath)) {
   // Store not initialised yet — inject tool map only
   emitEnrichedPrompt(toolInput, taskText, sessionNodeId, []);
+  process.exit(0);
 }
 
 let db;
@@ -47,6 +48,7 @@ try {
   db = new Database(dbPath);
 } catch {
   emitEnrichedPrompt(toolInput, taskText, sessionNodeId, []);
+  process.exit(0);
 }
 
 // ── Upsert session node ───────────────────────────────────────────────────────

@@ -179,7 +179,8 @@ class SqliteBackend implements StoreBackend {
         normA += queryFloat[i] * queryFloat[i];
         normB += stored[i] * stored[i];
       }
-      return { id: row.id, sim: dot / (Math.sqrt(normA) * Math.sqrt(normB)) };
+      const denom = Math.sqrt(normA) * Math.sqrt(normB);
+      return { id: row.id, sim: (!isFinite(denom) || denom === 0) ? 0 : dot / denom };
     });
     scored.sort((a, b) => b.sim - a.sim);
 
