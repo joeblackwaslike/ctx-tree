@@ -1,6 +1,7 @@
 import type { StoreBackend } from '../store/index.js';
 import type { CtxTreeConfig, EmbeddingProvider } from '../store/types.js';
 
+// module-level flag: only one batch runs at a time per process
 let inFlight = false;
 
 export function runEmbeddingWalker(

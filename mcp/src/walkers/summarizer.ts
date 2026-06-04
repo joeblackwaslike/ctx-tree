@@ -3,6 +3,7 @@ import type { CtxTreeConfig, SummarizerProvider } from '../store/types.js';
 
 const CHAR_THRESHOLD_MULTIPLIER = 20;
 
+// module-level flag: only one batch runs at a time per process
 let inFlight = false;
 
 export function runSummarizerWalker(
