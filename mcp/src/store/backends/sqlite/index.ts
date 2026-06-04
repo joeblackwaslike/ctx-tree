@@ -167,6 +167,7 @@ class SqliteBackend implements StoreBackend {
       SELECT v.id, v.embedding FROM nodes_vec v
       JOIN nodes n ON v.id = n.id
       WHERE ${where}
+      LIMIT 500
     `).all(...params) as { id: string; embedding: Uint8Array }[];
 
     if (rows.length === 0) return [];

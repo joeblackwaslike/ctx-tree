@@ -59,7 +59,7 @@ export async function ctxTreeBash(
   try {
     const result = await execAsync(command, {
       encoding: 'utf8',
-      maxBuffer: 100 * 1024 * 1024,
+      maxBuffer: 10 * 1024 * 1024,
       timeout: 30_000,
     });
     rawStdout = result.stdout;
