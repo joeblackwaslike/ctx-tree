@@ -34,7 +34,8 @@ let state;
 try {
   state = JSON.parse(readFileSync(stateFile, 'utf8'));
   unlinkSync(stateFile);
-} catch {
+} catch (err) {
+  process.stderr.write(`[ctx-tree] failed to read state file: ${err}\n`);
   process.exit(0);
 }
 
@@ -48,7 +49,8 @@ if (!existsSync(dbPath)) process.exit(0);
 let db;
 try {
   db = new Database(dbPath);
-} catch {
+} catch (err) {
+  process.stderr.write(`[ctx-tree] hook error: ${err}\n`);
   process.exit(0);
 }
 
@@ -94,8 +96,9 @@ const insertEdge = db.prepare(`
 for (const node of captured) {
   try {
     insertEdge.run({ $src: summaryId, $dst: node.id, $now: now });
-  } catch {
+  } catch (err) {
     // FK violation if node was pruned between capture and now — skip
+    process.stderr.write(`[ctx-tree] hook error: ${err}\n`);
   }
 }
 

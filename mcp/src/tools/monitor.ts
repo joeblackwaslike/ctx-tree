@@ -25,13 +25,20 @@ const PREVIEW_CHARS = 500;
 
 export async function ctxTreeMonitor(
   store: StoreBackend,
-  _config: CtxTreeConfig,
+  config: CtxTreeConfig,
   params: MonitorParams,
 ): Promise<MonitorResult> {
   const { command, timeout_ms = DEFAULT_TIMEOUT_MS, cwd } = params;
 
   if (!command || typeof command !== 'string') {
     throw new McpError(ErrorCode.InvalidParams, '"command" is required and must be a string');
+  }
+
+  if (!config.trustedExecution) {
+    throw new McpError(
+      ErrorCode.InvalidParams,
+      'ctx_tree_monitor requires trustedExecution: true in config. Set it in your ctx-tree config to enable this tool.',
+    );
   }
 
   const sourceUri = `cmd://${createHash('sha256').update(command).digest('hex').slice(0, 16)}`;

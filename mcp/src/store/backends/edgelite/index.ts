@@ -789,6 +789,13 @@ class EdgeliteBackend implements StoreBackend {
     return this.pruneNode(id);
   }
 
+  async atomicPruneAndSupersede(pruneId: string, keepId: string, _now: number): Promise<void> {
+    // EdgeDB transactions are not yet wired in Phase 7; execute sequentially.
+    // getDedupeCandidatePairs() returns [] on this backend so this path is unreachable.
+    await this.pruneNode(pruneId);
+    await this.insertEdge({ src_id: keepId, dst_id: pruneId, kind: 'supersedes' });
+  }
+
   // ── Summarizer walker ────────────────────────────────────────────────────────
 
   async getNodesNeedingSummarization(

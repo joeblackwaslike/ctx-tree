@@ -24,6 +24,7 @@ export async function searchSemantic(
   limit = 20,
   filters: Filters = {}
 ): Promise<SearchResult> {
+  if (!query.trim()) return { nodes: [] };
   if (!provider) {
     throw new McpError(ErrorCode.InvalidParams, 'semantic search requires an embedding provider');
   }
@@ -40,6 +41,7 @@ export async function searchHybrid(
   limit = 20,
   filters: Filters = {}
 ): Promise<SearchResult> {
+  if (!query.trim()) return { nodes: [] };
   if (!provider) {
     throw new McpError(ErrorCode.InvalidParams, 'hybrid search requires an embedding provider');
   }

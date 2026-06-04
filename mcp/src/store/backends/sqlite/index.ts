@@ -167,6 +167,7 @@ class SqliteBackend implements StoreBackend {
       SELECT v.id, v.embedding FROM nodes_vec v
       JOIN nodes n ON v.id = n.id
       WHERE ${where}
+      LIMIT 500
     `).all(...params) as { id: string; embedding: Uint8Array }[];
 
     if (rows.length === 0) return [];
@@ -179,7 +180,8 @@ class SqliteBackend implements StoreBackend {
         normA += queryFloat[i] * queryFloat[i];
         normB += stored[i] * stored[i];
       }
-      return { id: row.id, sim: dot / (Math.sqrt(normA) * Math.sqrt(normB)) };
+      const denom = Math.sqrt(normA) * Math.sqrt(normB);
+      return { id: row.id, sim: (!isFinite(denom) || denom === 0) ? 0 : dot / denom };
     });
     scored.sort((a, b) => b.sim - a.sim);
 
@@ -383,6 +385,13 @@ class SqliteBackend implements StoreBackend {
 
   async markNodeStatusPruned(id: string, now: number): Promise<void> {
     this.db.run(`UPDATE nodes SET status='pruned', updated_at=? WHERE id=?`, now, id);
+  }
+
+  async atomicPruneAndSupersede(pruneId: string, keepId: string, now: number): Promise<void> {
+    this.db.transaction(() => {
+      this.db.run(`UPDATE nodes SET status='pruned', updated_at=? WHERE id=?`, now, pruneId);
+      sqlInsertEdge(this.db, { src_id: keepId, dst_id: pruneId, kind: 'supersedes' });
+    })();
   }
 
   // ── Summarizer walker ──────────────────────────────────────────────────────

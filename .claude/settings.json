@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "StartSession": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$(git rev-parse --show-toplevel)/.claude/scripts/pr-review-check.sh\""
+          }
+        ]
+      }
+    ]
+  }
+}

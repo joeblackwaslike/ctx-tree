@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# TODO(v1.2): replace this shell pipeline with a compiled hook binary
+# TODO: replace this shell pipeline with a compiled hook binary
 
 CTX_TREE_HOME="${CTX_TREE_HOME:-${HOME}/.ctx-tree}"
 
@@ -21,11 +21,13 @@ done
 SOCKET="${CTX_TREE_HOME}/${HASH}/ingest.sock"
 [[ ! -S "$SOCKET" ]] && exit 0
 
+_safe_json() { printf '%s' "${1:-null}" | jq '.' 2>/dev/null || printf 'null'; }
+
 jq -cn \
   --arg tool       "$CLAUDE_TOOL_NAME" \
   --arg cwd        "$DIR" \
   --arg session_id "${CLAUDE_SESSION_ID:-}" \
-  --argjson input    "${CLAUDE_TOOL_INPUT:-null}" \
-  --argjson response "${CLAUDE_TOOL_RESPONSE:-null}" \
+  --argjson input    "$(_safe_json "${CLAUDE_TOOL_INPUT:-}")" \
+  --argjson response "$(_safe_json "${CLAUDE_TOOL_RESPONSE:-}")" \
   '{tool:$tool,input:$input,response:$response,session_id:(if $session_id!="" then $session_id else null end),cwd:$cwd,ts:(now*1000|floor)}' \
 | socat - "UNIX-CONNECT:${SOCKET}" &>/dev/null || true

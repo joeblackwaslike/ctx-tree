@@ -9,7 +9,7 @@
  * Only processes results that contain recognisable URL fields.
  */
 
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { Database } from 'bun:sqlite';
@@ -72,7 +72,7 @@ for (const url of urls) {
 
   // Record a lightweight stub — the actual page content is fetched on demand
   // via ctx_tree_browse. We store the URL itself so FTS picks it up.
-  const nodeId      = crypto.randomUUID();
+  const nodeId      = randomUUID();
   const now         = Date.now();
   const contentHash = createHash('sha256').update(url).digest('hex');
 

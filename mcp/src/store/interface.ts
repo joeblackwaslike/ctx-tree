@@ -63,6 +63,8 @@ export interface StoreBackend {
     ts1: number; ts2: number;
   }>>;
   markNodeStatusPruned(id: string, now: number): Promise<void>;
+  /** Atomically mark pruneId as pruned and insert a supersedes edge from keepId → pruneId. */
+  atomicPruneAndSupersede(pruneId: string, keepId: string, now: number): Promise<void>;
 
   // ── Summarizer walker (EdgeLite: NotImplemented in Phase 7) ───────────────
   getNodesNeedingSummarization(charThreshold: number, limit: number): Promise<Array<{

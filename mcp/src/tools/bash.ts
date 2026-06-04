@@ -9,6 +9,12 @@ import { shouldDropBashCommand, redactBashOutput } from '../redaction/index.js';
 
 const execAsync = promisify(exec);
 
+function truncateToBytes(str: string, maxB: number): string {
+  if (Buffer.byteLength(str, 'utf8') <= maxB) return str;
+  const buf = Buffer.from(str, 'utf8').subarray(0, maxB);
+  return new TextDecoder('utf-8', { fatal: false }).decode(buf);
+}
+
 export interface BashParams {
   command: string;
   budget_tokens?: number;
@@ -53,7 +59,8 @@ export async function ctxTreeBash(
   try {
     const result = await execAsync(command, {
       encoding: 'utf8',
-      maxBuffer: 100 * 1024 * 1024,
+      maxBuffer: 10 * 1024 * 1024,
+      timeout: 30_000,
     });
     rawStdout = result.stdout;
     rawStderr = result.stderr;
@@ -73,31 +80,21 @@ export async function ctxTreeBash(
   const maxBytes = config.capture.maxBytes;
   const charBudget = budget_tokens * 4;
   let truncated = false;
-  let truncatedStdout = redactedStdout;
 
   const originalBytes = Buffer.byteLength(redactedStdout, 'utf8');
 
-  if (originalBytes > maxBytes) {
-    let low = 0, high = truncatedStdout.length;
-    while (low < high) {
-      const mid = Math.floor((low + high + 1) / 2);
-      if (Buffer.byteLength(truncatedStdout.slice(0, mid), 'utf8') <= maxBytes) {
-        low = mid;
-      } else {
-        high = mid - 1;
-      }
-    }
-    truncatedStdout = truncatedStdout.slice(0, low);
-    truncated = true;
-  }
+  let truncatedStdout = truncateToBytes(redactedStdout, maxBytes);
+  if (truncatedStdout.length < redactedStdout.length) truncated = true;
 
   if (truncatedStdout.length > charBudget) {
     truncatedStdout = truncatedStdout.slice(0, charBudget);
     truncated = true;
   }
 
+  const truncatedStderr = truncateToBytes(redactedStderr, maxBytes);
+
   // 6. Store in DB
-  const content = truncatedStdout || redactedStderr;
+  const content = truncatedStdout || truncatedStderr;
   const nodeId = ulid();
 
   if (content.length >= config.capture.filterMinSize) {
@@ -122,7 +119,7 @@ export async function ctxTreeBash(
   return {
     nodeId,
     stdout: truncatedStdout,
-    stderr: redactedStderr,
+    stderr: truncatedStderr,
     exit_code,
     truncated,
   };

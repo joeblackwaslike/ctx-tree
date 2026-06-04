@@ -1,6 +1,7 @@
 import type { StoreBackend } from '../store/index.js';
 import type { CtxTreeConfig, EmbeddingProvider } from '../store/types.js';
 
+// module-level flag: only one batch runs at a time per process
 let inFlight = false;
 
 export function runEmbeddingWalker(
@@ -10,12 +11,12 @@ export function runEmbeddingWalker(
 ): void {
   if (!provider) return;
   if (inFlight) return;
+  inFlight = true;
 
   const batchSize = config.walkers.embeddingBatchSize;
 
   store.getPendingEmbeddingNodes(batchSize).then(rows => {
     if (rows.length === 0) return;
-    inFlight = true;
     const texts = rows.map(r => r.content);
 
     return provider.embed(texts).then(vectors => {

@@ -34,19 +34,23 @@ mkdirSync(hooksDir, { recursive: true, mode: 0o700 });
 // ── Session node ID is deterministic — write state before any early exit ──────
 const sessionNodeId = `session_${sessionId}`;
 const now           = Date.now();
-const stateFile     = join(hooksDir, `${sessionId}-agent.json`);
+const safeSessionId = String(sessionId).replace(/[^a-zA-Z0-9_\-]/g, '_');
+const stateFile     = join(hooksDir, `${safeSessionId}-agent.json`);
 writeFileSync(stateFile, JSON.stringify({ sessionNodeId, ts: now, taskPreview: taskText.slice(0, 120) }));
 
 if (!existsSync(dbPath)) {
   // Store not initialised yet — inject tool map only
   emitEnrichedPrompt(toolInput, taskText, sessionNodeId, []);
+  process.exit(0);
 }
 
 let db;
 try {
   db = new Database(dbPath);
-} catch {
+} catch (err) {
+  process.stderr.write(`[ctx-tree] hook error: ${err}\n`);
   emitEnrichedPrompt(toolInput, taskText, sessionNodeId, []);
+  process.exit(0);
 }
 
 // ── Upsert session node ───────────────────────────────────────────────────────
@@ -88,7 +92,8 @@ if (keywords.length > 0) {
       ORDER BY rank
       LIMIT 5
     `).all({ $q: ftsQuery });
-  } catch {
+  } catch (err) {
+    process.stderr.write(`[ctx-tree] hook error: ${err}\n`);
     relevantNodes = [];
   }
 }

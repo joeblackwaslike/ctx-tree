@@ -7,7 +7,7 @@ import { wrapDatabase } from '../store/backends/sqlite/index.js';
 import type { StoreBackend } from '../store/index.js';
 import type { CtxTreeConfig } from '../store/types';
 
-const config = {} as CtxTreeConfig;
+const config = { trustedExecution: true } as unknown as CtxTreeConfig;
 
 let db: Database;
 let store: StoreBackend;
@@ -72,7 +72,7 @@ describe('ctxTreeMonitor', () => {
   });
 
   it('throws on missing command', async () => {
-    await expect(ctxTreeMonitor(db, config, { command: '' })).rejects.toThrow();
+    await expect(ctxTreeMonitor(store, config, { command: '' })).rejects.toThrow();
   });
 
   it('respects cwd option', async () => {
