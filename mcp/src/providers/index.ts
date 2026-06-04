@@ -22,7 +22,8 @@ export function loadProviders(config: CtxTreeConfig): {
         embedding = new OllamaEmbeddingProvider(config.embeddingModel);
       }
     } catch (err) {
-      process.stderr.write(`ctx-tree: embedding provider unavailable: ${err}\n`);
+      const msg = String(err).replace(/sk-[A-Za-z0-9_-]{10,}/g, 'sk-***');
+      process.stderr.write(`ctx-tree: embedding provider unavailable: ${msg}\n`);
       embedding = null;
     }
   }
@@ -38,7 +39,8 @@ export function loadProviders(config: CtxTreeConfig): {
         summarizer = new OllamaSummarizerProvider(config.summarizerModel);
       }
     } catch (err) {
-      process.stderr.write(`ctx-tree: summarizer provider unavailable: ${err}\n`);
+      const msg = String(err).replace(/sk-[A-Za-z0-9_-]{10,}/g, 'sk-***');
+      process.stderr.write(`ctx-tree: summarizer provider unavailable: ${msg}\n`);
       summarizer = null;
     }
   }

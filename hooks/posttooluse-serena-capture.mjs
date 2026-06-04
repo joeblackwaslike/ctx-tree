@@ -10,7 +10,8 @@
  * a session is a no-op.
  */
 
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
+import { ulid } from './lib/ulid.mjs';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { Database } from 'bun:sqlite';
@@ -142,7 +143,7 @@ if (originalBytes > MAX_BYTES) {
 // ── Insert node ───────────────────────────────────────────────────────────────
 const now         = Date.now();
 const contentHash = createHash('sha256').update(finalContent).digest('hex');
-const nodeId      = randomUUID();
+const nodeId      = ulid();
 const metadata    = JSON.stringify({
   tool:        toolName,
   serena_tool: serenaTool,
