@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "prs=$(gh pr list --repo joeblackwaslike/ctx-tree --state open --json number,title,reviews 2>/dev/null); count=$(echo \"$prs\" | jq 'length' 2>/dev/null); if [ \"${count:-0}\" -gt 0 ]; then printf '\\n\\033[33m⚠️  Open PRs with review feedback:\\033[0m\\n'; echo \"$prs\" | jq -r '.[] | \"  PR #\\(.number): \\(.title) (\\(.reviews | length) review(s))\"'; printf '  Run: gh pr view <number> to see feedback\\n\\n'; fi"
+            "command": "bash \"$(git rev-parse --show-toplevel)/.claude/scripts/pr-review-check.sh\""
           }
         ]
       }

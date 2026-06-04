@@ -19,9 +19,12 @@ export function runSummarizerWalker(
   );
   const batchSize = 10;
 
+  inFlight = true;
   store.getNodesNeedingSummarization(charThreshold, batchSize).then(rows => {
-    if (rows.length === 0) return;
-    inFlight = true;
+    if (rows.length === 0) {
+      inFlight = false;
+      return;
+    }
     let pending = rows.length;
 
     for (const row of rows) {
@@ -35,6 +38,7 @@ export function runSummarizerWalker(
       });
     }
   }).catch((e: unknown) => {
+    inFlight = false;
     process.stderr.write(`ctx-tree summarizer error: ${e}\n`);
   });
 }

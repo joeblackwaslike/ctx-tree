@@ -9,7 +9,9 @@ export function cosineSimilarity(a: Float32Array, b: Float32Array): number {
     normA += a[i] * a[i];
     normB += b[i] * b[i];
   }
-  return dot / (Math.sqrt(normA) * Math.sqrt(normB));
+  const denom = Math.sqrt(normA) * Math.sqrt(normB);
+  if (denom === 0) return 0;
+  return dot / denom;
 }
 
 export async function runDedupeWalker(store: StoreBackend, _config: CtxTreeConfig): Promise<void> {

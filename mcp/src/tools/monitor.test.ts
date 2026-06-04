@@ -7,7 +7,7 @@ import { wrapDatabase } from '../store/backends/sqlite/index.js';
 import type { StoreBackend } from '../store/index.js';
 import type { CtxTreeConfig } from '../store/types';
 
-const config = {} as CtxTreeConfig;
+const config = { trustedExecution: true } as unknown as CtxTreeConfig;
 
 let db: Database;
 let store: StoreBackend;

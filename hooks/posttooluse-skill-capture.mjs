@@ -7,7 +7,7 @@
  * Content: full skill markdown as loaded by the Skill tool.
  */
 
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { Database } from 'bun:sqlite';
@@ -58,7 +58,7 @@ if (existing) {
 }
 
 function storeSkill() {
-  const nodeId = crypto.randomUUID();
+  const nodeId = randomUUID();
   const now    = Date.now();
   db.run(`
     INSERT OR IGNORE INTO nodes
