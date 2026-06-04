@@ -47,7 +47,8 @@ if (!existsSync(dbPath)) {
 let db;
 try {
   db = new Database(dbPath);
-} catch {
+} catch (err) {
+  process.stderr.write(`[ctx-tree] hook error: ${err}\n`);
   emitEnrichedPrompt(toolInput, taskText, sessionNodeId, []);
   process.exit(0);
 }
@@ -91,7 +92,8 @@ if (keywords.length > 0) {
       ORDER BY rank
       LIMIT 5
     `).all({ $q: ftsQuery });
-  } catch {
+  } catch (err) {
+    process.stderr.write(`[ctx-tree] hook error: ${err}\n`);
     relevantNodes = [];
   }
 }

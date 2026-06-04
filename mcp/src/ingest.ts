@@ -149,15 +149,12 @@ async function processPayloadAsync(store: StoreBackend, config: CtxTreeConfig, p
 
   // 1. Per-tool opt-out flags
   if (payload.tool === 'Read' && capture.read === false) {
-    process.stderr.write(`[ctx-tree/ingest] dropped: read capture disabled\n`);
     return;
   }
   if (payload.tool === 'Grep' && capture.grep === false) {
-    process.stderr.write(`[ctx-tree/ingest] dropped: grep capture disabled\n`);
     return;
   }
   if (payload.tool === 'Bash' && capture.bash === false) {
-    process.stderr.write(`[ctx-tree/ingest] dropped: bash capture disabled\n`);
     return;
   }
 
@@ -165,7 +162,6 @@ async function processPayloadAsync(store: StoreBackend, config: CtxTreeConfig, p
   if (payload.tool === 'Read' || payload.tool === 'Grep') {
     const filePath = payload.input['path'];
     if (typeof filePath === 'string' && shouldDropPath(filePath, capture.pathDenylistExtra)) {
-      process.stderr.write(`[ctx-tree/ingest] dropped: path on denylist: ${filePath}\n`);
       return;
     }
   }
@@ -174,7 +170,6 @@ async function processPayloadAsync(store: StoreBackend, config: CtxTreeConfig, p
   if (payload.tool === 'Bash') {
     const cmd = payload.input['command'] ?? payload.input['cmd'];
     if (typeof cmd === 'string' && shouldDropBashCommand(cmd)) {
-      process.stderr.write(`[ctx-tree/ingest] dropped: bash command blocked\n`);
       return;
     }
   }
@@ -188,14 +183,12 @@ async function processPayloadAsync(store: StoreBackend, config: CtxTreeConfig, p
   // 5. Minimum content size gate
   const minSize = capture.filterMinSize ?? 50;
   if (content.length < minSize) {
-    process.stderr.write(`[ctx-tree/ingest] dropped: content too small (${content.length} < ${minSize})\n`);
     return;
   }
 
   // 6. Dedup window check
   const key = dedupKey(payload);
   if (isDeduped(key)) {
-    process.stderr.write(`[ctx-tree/ingest] dropped: duplicate within dedup window\n`);
     return;
   }
 
