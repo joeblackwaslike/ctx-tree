@@ -20,13 +20,14 @@
     ]
   },
   "scripts": {
-    "copy-ui": "cp ../../mcp/src/visualize/ui.html media/ui.html",
+    "copy-ui": "cp ../../mcp/src/visualize/ui.html media/ui.html && cp node_modules/d3/dist/d3.min.js media/d3.min.js",
     "compile": "tsc -p tsconfig.json",
     "build": "npm run copy-ui && npm run compile",
     "package": "npm run build && vsce package",
     "publish": "npm run build && vsce publish"
   },
   "devDependencies": {
+    "d3": "^7",
     "@types/node": "^20.0.0",
     "@types/vscode": "^1.90.0",
     "@vscode/vsce": "^3.0.0",
