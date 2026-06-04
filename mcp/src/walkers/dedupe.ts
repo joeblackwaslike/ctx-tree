@@ -10,7 +10,7 @@ export function cosineSimilarity(a: Float32Array, b: Float32Array): number {
     normB += b[i] * b[i];
   }
   const denom = Math.sqrt(normA) * Math.sqrt(normB);
-  if (denom === 0) return 0;
+  if (!isFinite(denom) || denom === 0) return 0;
   return dot / denom;
 }
 

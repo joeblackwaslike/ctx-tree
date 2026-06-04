@@ -23,23 +23,20 @@ export function runSummarizerWalker(
   inFlight = true;
   store.getNodesNeedingSummarization(charThreshold, batchSize).then(rows => {
     if (rows.length === 0) {
-      inFlight = false;
-      return;
+      // Do NOT reset inFlight here — let .finally() handle it uniformly
+      return Promise.resolve();
     }
-    let pending = rows.length;
-
-    for (const row of rows) {
-      provider.summarize(row.content, row.source_uri ?? undefined).then(summary => {
-        return store.updateNodeSummary(row.id, summary);
-      }).catch((e: unknown) => {
-        process.stderr.write(`ctx-tree summarizer error: ${e}\n`);
-      }).finally(() => {
-        pending--;
-        if (pending === 0) inFlight = false;
-      });
-    }
+    const promises = rows.map(row =>
+      provider.summarize(row.content, row.source_uri ?? undefined)
+        .then(summary => store.updateNodeSummary(row.id, summary))
+        .catch((e: unknown) => {
+          process.stderr.write(`ctx-tree summarizer error: ${e}\n`);
+        })
+    );
+    return Promise.all(promises);
   }).catch((e: unknown) => {
-    inFlight = false;
     process.stderr.write(`ctx-tree summarizer error: ${e}\n`);
+  }).finally(() => {
+    inFlight = false;
   });
 }

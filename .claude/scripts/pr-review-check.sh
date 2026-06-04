@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-prs=$(gh pr list --repo joeblackwaslike/ctx-tree --state open --json number,title,reviews 2>/dev/null) || exit 0
+repo=$(gh repo view --json nameWithOwner -q '.nameWithOwner' 2>/dev/null) || exit 0
+prs=$(gh pr list --repo "$repo" --state open --json number,title,reviews 2>/dev/null) || exit 0
 count=$(echo "$prs" | jq 'length' 2>/dev/null) || exit 0
 if [ "${count:-0}" -gt 0 ]; then
   printf '\n\033[33m⚠️  Open PRs with review feedback:\033[0m\n'
