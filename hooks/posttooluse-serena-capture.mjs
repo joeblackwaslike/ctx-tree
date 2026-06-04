@@ -1,6 +1,6 @@
 /**
  * PostToolUse:mcp__plugin_serena_serena__* — stores Serena tool results in the
- * memtree graph so they surface via memtree_search / memtree_neighbors in
+ * ctx-tree graph so they surface via ctx_tree_search / ctx_tree_neighbors in
  * future sessions, just like native Read/Grep results.
  *
  * Runs fire-and-forget: emits no systemMessage and does not block the response.
@@ -54,7 +54,7 @@ switch (serenaTool) {
   }
 
   case 'get_symbols_overview': {
-    // Outline of a file — store as file_chunk so memtree_read dedup logic works
+    // Outline of a file — store as file_chunk so ctx_tree_read dedup logic works
     kind = 'file_chunk';
     const rel = String(toolInput.relative_path ?? toolInput.path ?? '');
     const abs = rel.startsWith('/') ? rel : join(cwd, rel);
@@ -102,7 +102,7 @@ switch (serenaTool) {
 
 // ── Open DB ───────────────────────────────────────────────────────────────────
 const projectHash = computeProjectHash(cwd);
-const dbPath      = join(process.env.HOME ?? '/tmp', '.memtree', projectHash, 'store.db');
+const dbPath      = join(process.env.HOME ?? '/tmp', '.ctx-tree', projectHash, 'store.db');
 if (!existsSync(dbPath)) process.exit(0);
 
 let db;

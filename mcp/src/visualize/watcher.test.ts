@@ -16,7 +16,7 @@ let db: Database;
 let watcher: DbWatcher;
 
 beforeEach(() => {
-  tmpDir = mkdtempSync(join(tmpdir(), 'memtree-watcher-test-'));
+  tmpDir = mkdtempSync(join(tmpdir(), 'ctx-tree-watcher-test-'));
   db = openDb(join(tmpDir, 'test.db'));
   watcher = new DbWatcher(db, 50); // 50ms poll for fast tests
 });

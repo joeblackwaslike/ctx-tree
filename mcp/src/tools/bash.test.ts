@@ -4,7 +4,7 @@ import { join } from 'path';
 import { tmpdir } from 'os';
 import { McpError } from '@modelcontextprotocol/sdk/types.js';
 import { openDb, closeDb } from '../store/db.js';
-import { memtreeBash } from './bash.js';
+import { ctxTreeBash } from './bash.js';
 import { DEFAULT_CONFIG } from '../config.js';
 import { redactBashOutput } from '../redaction/index.js';
 import { wrapDatabase } from '../store/backends/sqlite/index.js';
@@ -17,7 +17,7 @@ let db: Database;
 let store: StoreBackend;
 
 beforeEach(() => {
-  tmpDir = mkdtempSync(join(tmpdir(), 'memtree-bash-test-'));
+  tmpDir = mkdtempSync(join(tmpdir(), 'ctx-tree-bash-test-'));
   dbPath = join(tmpDir, 'test.db');
   db = openDb(dbPath);
   store = wrapDatabase(db);
@@ -34,14 +34,14 @@ const trustedConfig = {
   capture: { ...DEFAULT_CONFIG.capture, filterMinSize: 1 },
 };
 
-describe('memtreeBash', () => {
+describe('ctxTreeBash', () => {
   test('denylist rejects env command', async () => {
     await expect(
-      memtreeBash(store, trustedConfig, { command: 'env' })
+      ctxTreeBash(store, trustedConfig, { command: 'env' })
     ).rejects.toBeInstanceOf(McpError);
 
     try {
-      await memtreeBash(store, trustedConfig, { command: 'env' });
+      await ctxTreeBash(store, trustedConfig, { command: 'env' });
     } catch (err) {
       expect(err).toBeInstanceOf(McpError);
       expect((err as McpError).message).toContain('rejected by denylist');
@@ -50,11 +50,11 @@ describe('memtreeBash', () => {
 
   test('denylist rejects printenv HOME', async () => {
     await expect(
-      memtreeBash(store, trustedConfig, { command: 'printenv HOME' })
+      ctxTreeBash(store, trustedConfig, { command: 'printenv HOME' })
     ).rejects.toBeInstanceOf(McpError);
 
     try {
-      await memtreeBash(store, trustedConfig, { command: 'printenv HOME' });
+      await ctxTreeBash(store, trustedConfig, { command: 'printenv HOME' });
     } catch (err) {
       expect(err).toBeInstanceOf(McpError);
       expect((err as McpError).message).toContain('rejected by denylist');
@@ -65,7 +65,7 @@ describe('memtreeBash', () => {
     const untrustedConfig = { ...DEFAULT_CONFIG, trustedExecution: false };
 
     try {
-      await memtreeBash(store, untrustedConfig, { command: 'echo hello' });
+      await ctxTreeBash(store, untrustedConfig, { command: 'echo hello' });
       expect(true).toBe(false); // should not reach here
     } catch (err) {
       expect(err).toBeInstanceOf(McpError);
@@ -74,7 +74,7 @@ describe('memtreeBash', () => {
   });
 
   test('normal command with trustedExecution=true stores a DB row', async () => {
-    const result = await memtreeBash(store, trustedConfig, { command: 'echo hello world' });
+    const result = await ctxTreeBash(store, trustedConfig, { command: 'echo hello world' });
 
     expect(result.nodeId).toBeTruthy();
     expect(result.exit_code).toBe(0);
@@ -92,7 +92,7 @@ describe('memtreeBash', () => {
   test('output redaction removes secrets before storage', async () => {
     // Constructed to match the AWS key pattern without being a literal that triggers scanners
     const awsKey = 'AKIA' + '1234567890ABCDEF';
-    const result = await memtreeBash(store, trustedConfig, {
+    const result = await ctxTreeBash(store, trustedConfig, {
       command: `echo '${awsKey}'`,
     });
 
@@ -114,7 +114,7 @@ describe('memtreeBash', () => {
   });
 
   test('non-zero exit code is stored, not re-thrown', async () => {
-    const result = await memtreeBash(store, trustedConfig, {
+    const result = await ctxTreeBash(store, trustedConfig, {
       command: "bash -c 'exit 42'",
     });
 

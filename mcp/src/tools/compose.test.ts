@@ -3,13 +3,13 @@ import { unlinkSync, existsSync } from 'fs';
 import { openDb, closeDb } from '../store/db';
 import { insertNode } from '../store/nodes';
 import { insertEdge } from '../store/edges';
-import { memtreeCompose } from './compose';
+import { ctxTreeCompose } from './compose';
 import { wrapDatabase } from '../store/backends/sqlite/index.js';
 import { ulid } from 'ulid';
 import type { Database } from 'bun:sqlite';
 import type { StoreBackend } from '../store/index.js';
 
-const TEST_DB = '/tmp/memtree-compose-test.db';
+const TEST_DB = '/tmp/ctx-tree-compose-test.db';
 let db: Database;
 let store: StoreBackend;
 
@@ -30,12 +30,12 @@ function node(id: string, content: string, parentId: string | null = null) {
 
 const LONG = (n: number) => Array(n).fill('word').join(' ');
 
-describe('memtreeCompose', () => {
+describe('ctxTreeCompose', () => {
   test('returns content within budget_tokens', async () => {
     node('a', LONG(50));
     node('b', LONG(50), 'a');
     node('c', LONG(50), 'a');
-    const result = await memtreeCompose(store, { node_ids: ['a'], budget_tokens: 100 });
+    const result = await ctxTreeCompose(store, { node_ids: ['a'], budget_tokens: 100 });
     const approxTokens = Math.ceil(result.content.length / 4);
     expect(approxTokens).toBeLessThanOrEqual(110);
   });
@@ -43,14 +43,14 @@ describe('memtreeCompose', () => {
   test('manifest.included lists packed node IDs', async () => {
     node('x', LONG(10));
     node('y', LONG(10), 'x');
-    const result = await memtreeCompose(store, { node_ids: ['x'], budget_tokens: 500 });
+    const result = await ctxTreeCompose(store, { node_ids: ['x'], budget_tokens: 500 });
     expect(result.manifest.included.length).toBeGreaterThan(0);
   });
 
   test('manifest.dropped lists over-budget nodes with reason', async () => {
     node('big', LONG(200));
     node('also-big', LONG(200), 'big');
-    const result = await memtreeCompose(store, { node_ids: ['big'], budget_tokens: 50 });
+    const result = await ctxTreeCompose(store, { node_ids: ['big'], budget_tokens: 50 });
     expect(result.manifest.dropped.length).toBeGreaterThan(0);
     expect(result.manifest.dropped[0].reason).toBe('over_budget');
   });
@@ -58,7 +58,7 @@ describe('memtreeCompose', () => {
   test('format=outline returns titles+previews not full content', async () => {
     const fullContent = 'export function doStuff() { return 42; } // more content here padding';
     node('n1', fullContent);
-    const result = await memtreeCompose(store, {
+    const result = await ctxTreeCompose(store, {
       node_ids: ['n1'], budget_tokens: 500, format: 'outline',
     });
     // Outline must be shorter than the full body
@@ -85,7 +85,7 @@ describe('memtreeCompose', () => {
     db.run("UPDATE nodes SET summary = 'This is the summary of large.' WHERE id = 'large'");
 
     // Budget: enough for 'small' raw + 'large' summary, but not 'large' raw
-    const result = await memtreeCompose(store, {
+    const result = await ctxTreeCompose(store, {
       node_ids: ['small', 'large'], budget_tokens: 60, format: 'mixed',
     });
 
@@ -102,7 +102,7 @@ describe('memtreeCompose', () => {
     });
     // No summary set — summary column is NULL
 
-    const result = await memtreeCompose(store, {
+    const result = await ctxTreeCompose(store, {
       node_ids: ['big-nosummary'], budget_tokens: 10, format: 'mixed',
     });
 
@@ -116,7 +116,7 @@ describe('memtreeCompose', () => {
     node('fits1', LONG(10));
     node('fits2', LONG(10));
 
-    const result = await memtreeCompose(store, {
+    const result = await ctxTreeCompose(store, {
       node_ids: ['fits1', 'fits2'], budget_tokens: 500, format: 'mixed',
     });
 
@@ -129,7 +129,7 @@ describe('memtreeCompose', () => {
 
   test('format=raw drops over-budget nodes with reason over_budget', async () => {
     node('big', LONG(200));
-    const result = await memtreeCompose(store, {
+    const result = await ctxTreeCompose(store, {
       node_ids: ['big'], budget_tokens: 10, format: 'raw',
     });
     const drop = result.manifest.dropped.find(d => d.id === 'big');
@@ -141,7 +141,7 @@ describe('memtreeCompose', () => {
     for (let i = 0; i < 20; i++) {
       node(`ol${i}`, LONG(30));
     }
-    const result = await memtreeCompose(store, {
+    const result = await ctxTreeCompose(store, {
       node_ids: Array.from({ length: 20 }, (_, i) => `ol${i}`), budget_tokens: 5, format: 'outline',
     });
     expect(result.manifest.dropped.length).toBeGreaterThan(0);
@@ -154,7 +154,7 @@ describe('memtreeCompose', () => {
       content: LONG(30), content_hash: 'trunc', status: 'live',
       mtime: 0, truncated: 1, original_bytes: 99999, metadata: '{}',
     });
-    const result = await memtreeCompose(store, { node_ids: ['trunc'], budget_tokens: 500 });
+    const result = await ctxTreeCompose(store, { node_ids: ['trunc'], budget_tokens: 500 });
     expect(result.manifest.truncated).toContain('trunc');
   });
 });

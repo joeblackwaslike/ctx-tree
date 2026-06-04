@@ -7,7 +7,7 @@ import { insertEdge, getNeighbors } from './edges';
 import { ulid } from 'ulid';
 import type { Database } from 'bun:sqlite';
 
-const TEST_DB = '/tmp/memtree-nodes-test.db';
+const TEST_DB = '/tmp/ctx-tree-nodes-test.db';
 let db: Database;
 
 beforeEach(() => { db = openDb(TEST_DB); });

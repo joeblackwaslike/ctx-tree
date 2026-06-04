@@ -1,9 +1,9 @@
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import type { StoreBackend } from '../store/index.js';
-import type { MemtreeNode, Filters, EmbeddingProvider, MemtreeConfig } from '../store/types.js';
+import type { CtxTreeNode, Filters, EmbeddingProvider, CtxTreeConfig } from '../store/types.js';
 
 export interface SearchResult {
-  nodes: MemtreeNode[];
+  nodes: CtxTreeNode[];
 }
 
 export async function searchKeyword(
@@ -18,7 +18,7 @@ export async function searchKeyword(
 
 export async function searchSemantic(
   store: StoreBackend,
-  config: MemtreeConfig,
+  config: CtxTreeConfig,
   provider: EmbeddingProvider | null,
   query: string,
   limit = 20,
@@ -34,7 +34,7 @@ export async function searchSemantic(
 
 export async function searchHybrid(
   store: StoreBackend,
-  config: MemtreeConfig,
+  config: CtxTreeConfig,
   provider: EmbeddingProvider | null,
   query: string,
   limit = 20,
@@ -52,7 +52,7 @@ export async function searchHybrid(
   keywordResults.forEach((n, i) => scores.set(n.id, (scores.get(n.id) ?? 0) + 1 / (RRF_K + i + 1)));
   semanticResults.forEach((n, i) => scores.set(n.id, (scores.get(n.id) ?? 0) + 1 / (RRF_K + i + 1)));
 
-  const allNodes = new Map<string, MemtreeNode>();
+  const allNodes = new Map<string, CtxTreeNode>();
   for (const n of [...keywordResults, ...semanticResults]) allNodes.set(n.id, n);
 
   const sorted = [...allNodes.values()].sort(

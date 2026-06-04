@@ -10,7 +10,7 @@ import { DEFAULT_CONFIG } from '../config.js';
 import type { Database } from 'bun:sqlite';
 import type { StoreBackend } from '../store/index.js';
 
-const TEST_DB = '/tmp/memtree-dedupe-test.db';
+const TEST_DB = '/tmp/ctx-tree-dedupe-test.db';
 const cfg = DEFAULT_CONFIG;
 let db: Database;
 let store: StoreBackend;

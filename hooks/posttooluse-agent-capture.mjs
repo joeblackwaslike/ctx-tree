@@ -1,12 +1,12 @@
 /**
- * PostToolUse:Agent — wires subagent work into the Memtree graph.
+ * PostToolUse:Agent — wires subagent work into the CtxTree graph.
  *
  * Reads state written by pretooluse-agent-enrich.mjs, finds all nodes
  * created during the subagent run (by timestamp window), creates a summary
  * `note` node as a child of the session node, and emits `summarizes` edges
  * from the summary to each captured node.
  *
- * After this, memtree_neighbors(sessionNodeId) surfaces both the agent task
+ * After this, ctx_tree_neighbors(sessionNodeId) surfaces both the agent task
  * summary and everything the subagent captured, without the subagent ever
  * having to manage graph links explicitly.
  */
@@ -26,7 +26,7 @@ const sessionId = String(input.session_id ?? '');
 const cwd       = String(input.cwd ?? process.cwd());
 
 // ── Load + consume state file ─────────────────────────────────────────────────
-const hooksDir  = join(process.env.HOME ?? '/tmp', '.memtree', 'hooks');
+const hooksDir  = join(process.env.HOME ?? '/tmp', '.ctx-tree', 'hooks');
 const stateFile = join(hooksDir, `${sessionId}-agent.json`);
 if (!existsSync(stateFile)) process.exit(0);
 
@@ -42,7 +42,7 @@ const { sessionNodeId, ts, taskPreview } = state;
 
 // ── Open DB ───────────────────────────────────────────────────────────────────
 const projectHash = computeProjectHash(cwd);
-const dbPath      = join(process.env.HOME ?? '/tmp', '.memtree', projectHash, 'store.db');
+const dbPath      = join(process.env.HOME ?? '/tmp', '.ctx-tree', projectHash, 'store.db');
 if (!existsSync(dbPath)) process.exit(0);
 
 let db;

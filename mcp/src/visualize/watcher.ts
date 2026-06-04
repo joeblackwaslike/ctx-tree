@@ -1,11 +1,11 @@
 // mcp/src/visualize/watcher.ts
 import type { Database } from 'bun:sqlite';
-import type { MemtreeNode, MemtreeEdge } from '../store/types.js';
+import type { CtxTreeNode, CtxTreeEdge } from '../store/types.js';
 
 export type ChangeEvent =
-  | { op: 'insert' | 'update'; table: 'nodes'; id: string; data: MemtreeNode }
+  | { op: 'insert' | 'update'; table: 'nodes'; id: string; data: CtxTreeNode }
   | { op: 'delete'; table: 'nodes'; id: string }
-  | { op: 'insert'; table: 'edges'; id: string; data: MemtreeEdge }
+  | { op: 'insert'; table: 'edges'; id: string; data: CtxTreeEdge }
   | { op: 'delete'; table: 'edges'; id: string };
 
 export type ChangeListener = (event: ChangeEvent) => void;
@@ -21,10 +21,10 @@ export class DbWatcher {
   private readonly edgesSince: ReturnType<Database['query']>;
 
   constructor(private readonly db: Database, private readonly intervalMs = 200) {
-    this.nodesSince = db.query<MemtreeNode, [number]>(
+    this.nodesSince = db.query<CtxTreeNode, [number]>(
       'SELECT * FROM nodes WHERE updated_at >= ?'
     );
-    this.edgesSince = db.query<MemtreeEdge, [number]>(
+    this.edgesSince = db.query<CtxTreeEdge, [number]>(
       'SELECT * FROM edges WHERE created_at >= ?'
     );
   }
@@ -64,7 +64,7 @@ export class DbWatcher {
     this.lastMs = Date.now();
 
     // Nodes changed since last poll
-    const changedNodes = this.nodesSince.all(since) as MemtreeNode[];
+    const changedNodes = this.nodesSince.all(since) as CtxTreeNode[];
     for (const node of changedNodes) {
       const op = this.knownNodeIds.has(node.id) ? 'update' : 'insert';
       this.knownNodeIds.add(node.id);
@@ -72,7 +72,7 @@ export class DbWatcher {
     }
 
     // Edges created since last poll (edges are never updated, only inserted or cascade-deleted)
-    const newEdges = this.edgesSince.all(since) as MemtreeEdge[];
+    const newEdges = this.edgesSince.all(since) as CtxTreeEdge[];
     for (const edge of newEdges) {
       const compositeId = `${edge.src_id}:${edge.dst_id}:${edge.kind}`;
       if (!this.knownEdgeIds.has(compositeId)) {
@@ -82,7 +82,7 @@ export class DbWatcher {
     }
 
     // Deletions: nodes whose status is now 'pruned' or that are missing entirely
-    // In practice memtree rarely hard-deletes nodes — pruned nodes get status='pruned'
+    // In practice ctx-tree rarely hard-deletes nodes — pruned nodes get status='pruned'
     // Emit 'update' for status changes (covered above). True hard-deletes are rare
     // and will be caught on the next full snapshot (WebSocket reconnect).
   }

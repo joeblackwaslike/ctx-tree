@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { ulid } from 'ulid';
 import type { StoreBackend } from '../store/index.js';
-import type { MemtreeConfig } from '../store/types.js';
+import type { CtxTreeConfig } from '../store/types.js';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import { redactBashOutput } from '../redaction';
 
@@ -23,9 +23,9 @@ export interface MonitorResult {
 const DEFAULT_TIMEOUT_MS = 30_000;
 const PREVIEW_CHARS = 500;
 
-export async function memtreeMonitor(
+export async function ctxTreeMonitor(
   store: StoreBackend,
-  _config: MemtreeConfig,
+  _config: CtxTreeConfig,
   params: MonitorParams,
 ): Promise<MonitorResult> {
   const { command, timeout_ms = DEFAULT_TIMEOUT_MS, cwd } = params;

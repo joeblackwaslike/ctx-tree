@@ -6,13 +6,13 @@ import { searchSemantic, searchHybrid } from './search';
 import { wrapDatabase } from '../store/backends/sqlite/index.js';
 import type { Database } from 'bun:sqlite';
 import type { StoreBackend } from '../store/index.js';
-import type { EmbeddingProvider, MemtreeConfig, Filters } from '../store/types';
+import type { EmbeddingProvider, CtxTreeConfig, Filters } from '../store/types';
 
-const TEST_DB = '/tmp/memtree-search-semantic-test.db';
+const TEST_DB = '/tmp/ctx-tree-search-semantic-test.db';
 let db: Database;
 let store: StoreBackend;
 
-const config: MemtreeConfig = {
+const config: CtxTreeConfig = {
   embeddingModel: 'test-model',
   summarizerModel: 'test-model',
   retention: { staleHours: 24, supersededDays: 7 },

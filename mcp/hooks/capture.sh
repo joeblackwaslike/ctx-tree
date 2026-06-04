@@ -3,12 +3,12 @@ set -euo pipefail
 
 # TODO(v1.2): replace this shell pipeline with a compiled hook binary
 
-MEMTREE_HOME="${MEMTREE_HOME:-${HOME}/.memtree}"
+CTX_TREE_HOME="${CTX_TREE_HOME:-${HOME}/.ctx-tree}"
 
-# Walk up from $MEMTREE_CWD to find nearest registered project root
+# Walk up from $CTX_TREE_CWD to find nearest registered project root
 HASH=""
-DIR="${MEMTREE_CWD:-$PWD}"
-PROJECTS_TSV="${MEMTREE_HOME}/projects.tsv"
+DIR="${CTX_TREE_CWD:-$PWD}"
+PROJECTS_TSV="${CTX_TREE_HOME}/projects.tsv"
 while [[ "$DIR" != "/" ]]; do
   HASH=$(awk -F'\t' -v cwd="$DIR" '$1==cwd{print $2;exit}' \
     "$PROJECTS_TSV" 2>/dev/null || true)
@@ -18,7 +18,7 @@ done
 
 [[ -z "$HASH" ]] && exit 0
 
-SOCKET="${MEMTREE_HOME}/${HASH}/ingest.sock"
+SOCKET="${CTX_TREE_HOME}/${HASH}/ingest.sock"
 [[ ! -S "$SOCKET" ]] && exit 0
 
 jq -cn \

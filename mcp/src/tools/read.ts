@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { ulid } from 'ulid';
 import { extname } from 'node:path';
 import type { StoreBackend } from '../store/index.js';
-import type { MemtreeConfig } from '../store/types.js';
+import type { CtxTreeConfig } from '../store/types.js';
 import { shouldDropPath } from '../redaction';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 
@@ -144,9 +144,9 @@ async function treeSitterChunk(source: string, lang: TreeSitterLanguage): Promis
   }
 }
 
-export async function memtreeRead(
+export async function ctxTreeRead(
   store: StoreBackend,
-  config: MemtreeConfig,
+  config: CtxTreeConfig,
   params: ReadParams
 ): Promise<ReadResult> {
   const { path, lines, budget_tokens = 2000 } = params;

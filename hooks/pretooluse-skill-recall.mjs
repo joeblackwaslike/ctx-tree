@@ -1,10 +1,10 @@
 /**
  * PreToolUse:Skill — short-circuits repeated skill loads by checking the
- * memtree store first.
+ * ctx-tree store first.
  *
  * If the skill was loaded in a prior invocation (same or different session),
  * denies the Skill tool and injects a compact reference so the agent can
- * call memtree_compose([nodeId], budget) instead of reloading from disk.
+ * call ctx_tree_compose([nodeId], budget) instead of reloading from disk.
  *
  * First load still goes through normally; the PostToolUse hook stores it.
  */
@@ -27,7 +27,7 @@ if (!skillName) process.exit(0);
 
 // ── Open DB ───────────────────────────────────────────────────────────────────
 const projectHash = computeProjectHash(cwd);
-const dbPath      = join(process.env.HOME ?? '/tmp', '.memtree', projectHash, 'store.db');
+const dbPath      = join(process.env.HOME ?? '/tmp', '.ctx-tree', projectHash, 'store.db');
 if (!existsSync(dbPath)) process.exit(0);
 
 let db;
@@ -49,10 +49,10 @@ process.stdout.write(JSON.stringify({
   hookSpecificOutput: {
     hookEventName: 'PreToolUse',
     permissionDecision: 'deny',
-    permissionDecisionReason: `Skill "${skillName}" already in memtree store.`,
+    permissionDecisionReason: `Skill "${skillName}" already in ctx-tree store.`,
     additionalContext:
       `Skill "${skillName}" was previously loaded and is stored as node ${stored.id}.\n` +
-      `Call memtree_compose(["${stored.id}"], 4000) to retrieve its full content instead of reloading it.\n` +
+      `Call ctx_tree_compose(["${stored.id}"], 4000) to retrieve its full content instead of reloading it.\n` +
       `This saves context — the skill content is identical to the last loaded version.`,
   },
 }));

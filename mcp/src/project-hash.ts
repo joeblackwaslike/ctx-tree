@@ -25,8 +25,8 @@ import { join } from 'path';
 import { homedir } from 'os';
 
 function getProjectsTsvPath(): string {
-  const memtreeHome = process.env.MEMTREE_HOME ?? join(homedir(), '.memtree');
-  return join(memtreeHome, 'projects.tsv');
+  const ctxTreeHome = process.env.CTX_TREE_HOME ?? join(homedir(), '.ctx-tree');
+  return join(ctxTreeHome, 'projects.tsv');
 }
 
 /**
@@ -52,7 +52,7 @@ function readEntries(): Array<[string, string]> {
 
 /**
  * Write all entries to projects.tsv atomically via temp file + rename.
- * Ensures ~/.memtree/ directory exists beforehand.
+ * Ensures ~/.ctx-tree/ directory exists beforehand.
  *
  * Note: Not safe against concurrent read-modify-write across processes.
  * Multiple processes could both read, both modify, and both rename — last
@@ -62,9 +62,9 @@ function writeEntries(entries: Array<[string, string]>): void {
   const PROJECTS_TSV = getProjectsTsvPath();
   
   // Ensure the directory exists
-  const memtreeHome = process.env.MEMTREE_HOME ?? join(homedir(), '.memtree');
+  const ctxTreeHome = process.env.CTX_TREE_HOME ?? join(homedir(), '.ctx-tree');
   try {
-    mkdirSync(memtreeHome, { recursive: true, mode: 0o700 });
+    mkdirSync(ctxTreeHome, { recursive: true, mode: 0o700 });
   } catch {
     // Directory already exists
   }
@@ -80,7 +80,7 @@ function writeEntries(entries: Array<[string, string]>): void {
 }
 
 /**
- * Register a project in ~/.memtree/projects.tsv.
+ * Register a project in ~/.ctx-tree/projects.tsv.
  * If the cwd already exists, update its hash.
  * Otherwise, append a new line.
  * Writes atomically via a temp file + rename.
@@ -100,7 +100,7 @@ export function registerProject(cwd: string, hash: string): void {
 }
 
 /**
- * Deregister a project from ~/.memtree/projects.tsv by removing its hash entry.
+ * Deregister a project from ~/.ctx-tree/projects.tsv by removing its hash entry.
  */
 export function deregisterProject(hash: string): void {
   const entries = readEntries();
@@ -109,7 +109,7 @@ export function deregisterProject(hash: string): void {
 }
 
 /**
- * Resolve the hash for a given cwd from ~/.memtree/projects.tsv.
+ * Resolve the hash for a given cwd from ~/.ctx-tree/projects.tsv.
  * Returns the hash or null if not found.
  */
 export function resolveProjectHash(cwd: string): string | null {

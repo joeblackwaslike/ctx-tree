@@ -1,6 +1,6 @@
 import { ulid } from 'ulid';
 import type { Database } from 'bun:sqlite';
-import type { MemtreeConfig, IngestPayload, MemtreeNode } from '../../src/store/types';
+import type { CtxTreeConfig, IngestPayload, CtxTreeNode } from '../../src/store/types';
 import { _processIngestSyncForTests, _resetIngestState } from '../../src/ingest';
 
 export interface RoutingResult {
@@ -21,20 +21,20 @@ function makePayload(
   return { tool, input, response, session_id, cwd: '/tmp', ts: Date.now() };
 }
 
-function queryNodesBySourceUri(db: Database, sourceUri: string): MemtreeNode[] {
-  return db.query('SELECT * FROM nodes WHERE source_uri = ?').all(sourceUri) as MemtreeNode[];
+function queryNodesBySourceUri(db: Database, sourceUri: string): CtxTreeNode[] {
+  return db.query('SELECT * FROM nodes WHERE source_uri = ?').all(sourceUri) as CtxTreeNode[];
 }
 
-function queryNodesByTool(db: Database, tool: string, sessionId: string): MemtreeNode[] {
+function queryNodesByTool(db: Database, tool: string, sessionId: string): CtxTreeNode[] {
   return db.query(
     `SELECT * FROM nodes WHERE json_extract(metadata, '$.tool') = ?
      AND json_extract(metadata, '$.session_id') = ?`
-  ).all(tool, sessionId) as MemtreeNode[];
+  ).all(tool, sessionId) as CtxTreeNode[];
 }
 
 export async function runRoutingCases(
   db: Database,
-  config: MemtreeConfig
+  config: CtxTreeConfig
 ): Promise<RoutingResult[]> {
   _resetIngestState(); // clear any dedup state from prior suites
   const results: RoutingResult[] = [];

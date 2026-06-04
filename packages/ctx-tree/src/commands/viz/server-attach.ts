@@ -1,49 +1,46 @@
 import { parseArgs } from 'node:util';
-import { join } from 'node:path';
-import { homedir } from 'node:os';
 import { existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { Database } from 'bun:sqlite';
 import { VisualizeServer } from '../../../../../mcp/src/visualize/server.js';
-import { computeProjectHash } from '../../project-hash.js';
 
-export async function serverStart(args: string[]): Promise<void> {
+export async function serverAttach(args: string[]): Promise<void> {
   const { values } = parseArgs({
     args,
     options: {
-      cwd:  { type: 'string' },
+      db:   { type: 'string' },
       port: { type: 'string' },
-      open: { type: 'boolean', default: true },
+      open: { type: 'boolean', default: false },
       json: { type: 'boolean', default: false },
     },
     strict: true,
   });
 
-  const cwd = values.cwd ?? process.cwd();
-  const port = parseInt(process.env.MEMTREE_VIZ_PORT ?? values.port ?? '', 10) || 7777;
-
-  const hash = computeProjectHash(cwd);
-  const memtreeHome = process.env.MEMTREE_HOME ?? join(homedir(), '.memtree');
-  const dbPath = join(memtreeHome, hash, 'store.db');
-
-  if (!existsSync(dbPath)) {
-    console.error(`No memtree database found for this project.`);
-    console.error(`Expected: ${dbPath}`);
-    console.error(`Make sure the memtree MCP server has run in this project at least once.`);
+  if (!values.db) {
+    console.error('ctx-tree viz server attach requires --db <path>\n');
+    console.error('Usage: ctx-tree viz server attach --db <path> [--port <n>] [--json]');
     process.exit(1);
   }
 
-  const db = new Database(dbPath, { readonly: true });
+  if (!existsSync(values.db)) {
+    console.error(`Database not found: ${values.db}`);
+    process.exit(1);
+  }
+
+  const port = parseInt(process.env.CTX_TREE_VIZ_PORT ?? values.port ?? '', 10) || 7777;
+
+  const db = new Database(values.db, { readonly: true });
   const srv = new VisualizeServer(db, { port });
   const { url, port: boundPort } = await srv.start();
   const { nodeCount, edgeCount } = srv.stats();
 
   if (values.json) {
+    // Single JSON line to stdout then stay silent — VS Code extension reads this
     process.stdout.write(JSON.stringify({ url, port: boundPort, nodeCount, edgeCount }) + '\n');
   } else {
-    console.log(`memtree visualizer running at ${url}`);
-    console.log(`Watching: ${dbPath}`);
-    if (values.open !== false) {
+    console.log(`ctx-tree visualizer running at ${url}`);
+    console.log(`Database: ${values.db}`);
+    if (values.open) {
       const opener = process.platform === 'darwin' ? 'open' : 'xdg-open';
       spawnSync(opener, [url], { stdio: 'ignore' });
     }

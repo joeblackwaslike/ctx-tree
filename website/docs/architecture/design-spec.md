@@ -4,11 +4,11 @@ title: Design Spec
 sidebar_position: 2
 ---
 
-# memtree — Design Spec
+# ctx-tree — Design Spec
 
 **Date:** 2026-05-17  
 **Author:** Joe Black  
-**Repository:** github.com/joeblackwaslike/memtree
+**Repository:** github.com/joeblackwaslike/ctx-tree
 
 ---
 
@@ -16,9 +16,9 @@ sidebar_position: 2
 
 LLM context windows are a scarce, expensive, write-once resource. Tool outputs (Read, Grep, Bash) flood the window with low-signal data that compounds across turns; the model must then carry that ballast through every subsequent inference. Compaction helps but is lossy and not deterministic.
 
-**memtree** is an external, persistent, tree- and graph-shaped context store with surgical recall. In v1 there is one path into it:
+**ctx-tree** is an external, persistent, tree- and graph-shaped context store with surgical recall. In v1 there is one path into it:
 
-1. **Memtree-backed tools** (`memtree.read`, `memtree.grep` in v1; `memtree.bash` deferred to v1.1) — independent MCP tools that implement equivalent behavior on top of `fs` / ripgrep, store the full output, and return only a budget-bounded slice. These are *not* bridges to Claude's native tools; they're separate tools that the agent should reach for **whenever available**, with native `Read`/`Grep` as the fallback for cases where a memtree-backed tool isn't appropriate.
+1. **CtxTree-backed tools** (`ctx-tree.read`, `ctx-tree.grep` in v1; `ctx-tree.bash` deferred to v1.1) — independent MCP tools that implement equivalent behavior on top of `fs` / ripgrep, store the full output, and return only a budget-bounded slice. These are *not* bridges to Claude's native tools; they're separate tools that the agent should reach for **whenever available**, with native `Read`/`Grep` as the fallback for cases where a ctx-tree-backed tool isn't appropriate.
 
 Retrieval happens through MCP tools (`search`, `compose`, `neighbors`) and pulls only the bytes needed.
 
@@ -35,7 +35,7 @@ Retrieval happens through MCP tools (`search`, `compose`, `neighbors`) and pulls
 - **Passive capture via PostToolUse hook.** Hook fires on every native `Read`/`Grep`/`Bash`, writing to a Unix socket on the MCP server for background ingestion.
 - **Semantic and hybrid search.** sqlite-vec + configurable embedding provider (Ollama/OpenAI); Reciprocal Rank Fusion over FTS + semantic.
 - **Dedupe and summarization walkers.** Near-dup merge via cosine ≥ 0.97; Haiku 4.5 / GPT-4o-mini subtree summaries.
-- **`memtree.bash`.** Routes through Claude Code's native `Bash` via `mcp-exec`, inheriting its permission prompts and sandbox.
+- **`ctx-tree.bash`.** Routes through Claude Code's native `Bash` via `mcp-exec`, inheriting its permission prompts and sandbox.
 - **Bundled hook binary.** Replaces `jq`/`socat`/`awk` system deps.
 
 ### Non-goals (v1)
@@ -61,7 +61,7 @@ Single-file embedded DB with:
 
 ### Storage Location
 
-`~/.memtree/<project-hash>/store.db`
+`~/.ctx-tree/<project-hash>/store.db`
 
 `<project-hash>` is computed at MCP-server startup:
 
@@ -74,7 +74,7 @@ Rationale: path-dependent by design — moving or re-cloning the repo yields a n
 
 ### Configuration
 
-Global config at `~/.memtree/config.json`:
+Global config at `~/.ctx-tree/config.json`:
 
 ```json
 {
@@ -93,7 +93,7 @@ Global config at `~/.memtree/config.json`:
 }
 ```
 
-Per-project override at `<project_root>/.memtree/config.json`. Shallow-merged at server startup — top-level keys replace the corresponding global keys wholesale.
+Per-project override at `<project_root>/.ctx-tree/config.json`. Shallow-merged at server startup — top-level keys replace the corresponding global keys wholesale.
 
 Precedence: per-project override > global > built-in defaults.
 
@@ -101,7 +101,7 @@ Precedence: per-project override > global > built-in defaults.
 
 ## 3. Node Schema & Relationships
 
-memtree is a **tree-spined graph**: every node has exactly one `parent_id` (the spine), plus zero-or-more lateral edges in a separate `edges` table.
+ctx-tree is a **tree-spined graph**: every node has exactly one `parent_id` (the spine), plus zero-or-more lateral edges in a separate `edges` table.
 
 ### `nodes` table
 
@@ -157,17 +157,17 @@ pending → live → stale → superseded → pruned
 
 ---
 
-## 4. Memtree-backed Tool Contract
+## 4. CtxTree-backed Tool Contract
 
-The memtree-backed retrieval tools are the **primary** mechanism for keeping raw outputs out of the window in v1. They are independent MCP replacement tools that implement equivalent behavior on top of `fs` and ripgrep, storing the full output before returning a bounded slice.
+The ctx-tree-backed retrieval tools are the **primary** mechanism for keeping raw outputs out of the window in v1. They are independent MCP replacement tools that implement equivalent behavior on top of `fs` and ripgrep, storing the full output before returning a bounded slice.
 
-**Why memtree-backed tools rather than hook-based rewriting in v1.** The Claude Code hooks API does expose `PostToolUse.updatedToolOutput` — but v1 deliberately avoids it because:
+**Why ctx-tree-backed tools rather than hook-based rewriting in v1.** The Claude Code hooks API does expose `PostToolUse.updatedToolOutput` — but v1 deliberately avoids it because:
 
 1. Silently substituting a truncated result changes the contract mid-call with no signal to the agent.
 2. Hook-based rewriting pushes nontrivial budget-policy logic into the hook hot path.
-3. Explicit memtree-backed tools surface the budget decision in the schema (`budget_tokens` param), making the agent's plan legible.
+3. Explicit ctx-tree-backed tools surface the budget decision in the schema (`budget_tokens` param), making the agent's plan legible.
 
-### memtree_compose algorithm
+### ctx_tree_compose algorithm
 
 1. Start with seed node IDs
 2. BFS-expand via `parent_id` + `edges` (depth cap, default 2)
@@ -178,11 +178,11 @@ The memtree-backed retrieval tools are the **primary** mechanism for keeping raw
 
 ### Path denylist
 
-`memtree_read` and `memtree_grep` reject paths matching:
+`ctx_tree_read` and `ctx_tree_grep` reject paths matching:
 
 `.env*`, `.envrc`, `**/.ssh/**`, `**/.aws/credentials`, `**/.aws/config`, `**/.gnupg/**`, `**/.npmrc`, `**/.pypirc`, `**/.netrc`, `**/id_rsa*`, `**/id_ed25519*`, `**/*.pem`, `**/*.key`, `**/*.pfx`, `**/*.p12`, `**/service-account*.json`, `**/credentials.json`
 
-Extended (not replaced) by `<project_root>/.memtree/path.deny`.
+Extended (not replaced) by `<project_root>/.ctx-tree/path.deny`.
 
 ---
 
@@ -190,11 +190,11 @@ Extended (not replaced) by `<project_root>/.memtree/path.deny`.
 
 ### Retrieval tools
 
-- `memtree_search(query, mode?, limit?, filters?)` — v1: only `mode='keyword'`; `mode='hybrid'`/`mode='semantic'` rejected with documented error
-- `memtree_neighbors(node_id, depth?, edge_kinds?)` — graph walk; depth cap 5
-- `memtree_path_to_root(node_id)` — spine walk via `parent_id`
-- `memtree_recent(since?, kind?, limit?)` — time-series scan
-- `memtree_compose(...)` — see §4
+- `ctx_tree_search(query, mode?, limit?, filters?)` — v1: only `mode='keyword'`; `mode='hybrid'`/`mode='semantic'` rejected with documented error
+- `ctx_tree_neighbors(node_id, depth?, edge_kinds?)` — graph walk; depth cap 5
+- `ctx_tree_path_to_root(node_id)` — spine walk via `parent_id`
+- `ctx_tree_recent(since?, kind?, limit?)` — time-series scan
+- `ctx_tree_compose(...)` — see §4
 
 ### Filters schema
 
@@ -236,9 +236,9 @@ Everything runs in a **single Bun process**: MCP tool handlers and walker coordi
 
 ## 7. Capture Strategy (PostToolUse Hook) — v1.1
 
-> This entire section is v1.1. In v1, data enters the store only via memtree-backed tool handlers.
+> This entire section is v1.1. In v1, data enters the store only via ctx-tree-backed tool handlers.
 
-The `PostToolUse` hook is **passive indexing only** — it does not rewrite tool output. Its job is to make native tool outputs available for future `memtree_search` / `memtree_compose` calls.
+The `PostToolUse` hook is **passive indexing only** — it does not rewrite tool output. Its job is to make native tool outputs available for future `ctx_tree_search` / `ctx_tree_compose` calls.
 
 ### Security: capture-time redaction
 
@@ -247,7 +247,7 @@ The ingestion handler applies redaction **before** `INSERT`:
 - **Command denylist (Bash)**: drop the whole node for `env`, `printenv`, and per-project denylist
 - **Output-string redaction (Bash)**: replace in-place with `[REDACTED:<tag>]` — covers AWS keys, GitHub tokens, JWT bearer tokens, `OPENAI_API_KEY=`, `ANTHROPIC_API_KEY=`, and generic 32+ char hex/base64 blobs following secret-like context
 - **Path denylist (Read/Grep)**: drop the whole node before INSERT for secret-file paths
-- **Filesystem hardening**: `~/.memtree/<hash>/` at `0700`; `store.db` at `0600`
+- **Filesystem hardening**: `~/.ctx-tree/<hash>/` at `0700`; `store.db` at `0600`
 
 **Known-leaky surfaces (accepted v1 limitations):**
 
@@ -261,11 +261,11 @@ The ingestion handler applies redaction **before** `INSERT`:
 ### Repository layout
 
 ```
-memtree/
+ctx-tree/
 ├── .claude-plugin/
 │   └── plugin.json         # canonical manifest
 ├── skills/
-│   └── using-memtree/
+│   └── using-ctx-tree/
 │       └── SKILL.md
 ├── mcp/
 │   ├── package.json
@@ -275,14 +275,14 @@ memtree/
 │       ├── project-hash.ts
 │       ├── store/           # sqlite + fts5 + sqlite-vec
 │       ├── walkers/         # filter, staleness_marker, pruner
-│       └── tools/           # memtree-backed read/grep + query API
+│       └── tools/           # ctx-tree-backed read/grep + query API
 └── README.md
 ```
 
 ### Plugin manifest
 
 The plugin registers:
-- `memtree` MCP server
+- `ctx-tree` MCP server
 - `mcp-exec` MCP server (sandboxed execution)
 - 10 hooks (SessionStart, PreToolUse×4, PostToolUse×3, UserPromptSubmit, Stop)
 
@@ -292,7 +292,7 @@ All hook commands use `/usr/bin/env bun` (not hardcoded Homebrew paths) for cros
 
 ## 9. Future: VS Code Inspector
 
-Deferred to a separate companion repo, **`memtree-vscode`**, after v1 ships and schema stabilizes.
+Deferred to a separate companion repo, **`ctx-tree-vscode`**, after v1 ships and schema stabilizes.
 
 Scope (MVP):
 - Read-only VS Code extension
@@ -319,27 +319,27 @@ Scope (MVP):
 
 ### v1 ships
 
-- Memtree-backed tools: `memtree_read` (tree-sitter + fallback), `memtree_grep`, `memtree_compose`
-- Query API: `memtree_search` (keyword-only), `memtree_neighbors`, `memtree_path_to_root`, `memtree_recent`
+- CtxTree-backed tools: `ctx_tree_read` (tree-sitter + fallback), `ctx_tree_grep`, `ctx_tree_compose`
+- Query API: `ctx_tree_search` (keyword-only), `ctx_tree_neighbors`, `ctx_tree_path_to_root`, `ctx_tree_recent`
 - Walkers: `filter`, `staleness_marker`, `pruner`
 - Provider interfaces: `EmbeddingProvider` and `SummarizerProvider` typed (no implementations)
-- Bundled skill: `using-memtree`
+- Bundled skill: `using-ctx-tree`
 - Prebuilt native deps for macOS arm64 + Linux x64/arm64
 
 ### v1 is "done" when
 
 1. Plugin installs via marketplace; MCP server boots in &lt;500ms cold
-2. `memtree_search(mode='keyword')` returns FTS-ranked results; `mode='hybrid'`/`mode='semantic'` are rejected with documented error
-3. `memtree_compose` produces context within budget; manifest correctly reports included/dropped/truncated nodes
+2. `ctx_tree_search(mode='keyword')` returns FTS-ranked results; `mode='hybrid'`/`mode='semantic'` are rejected with documented error
+3. `ctx_tree_compose` produces context within budget; manifest correctly reports included/dropped/truncated nodes
 4. Three v1 walkers run on schedule; `pending → live → stale → pruned` transitions observable in DB
-5. Memtree-backed tool round-trip &lt;50ms median for cached chunks
-6. `memtree_read` rejects secret-file paths before any DB write
+5. CtxTree-backed tool round-trip &lt;50ms median for cached chunks
+6. `ctx_tree_read` rejects secret-file paths before any DB write
 
 ### Deferred to v1.1
 
 - `embedding_indexer`, `summarizer`, `dedupe` walkers
 - Semantic and hybrid search
-- `memtree.bash` execution tool
+- `ctx-tree.bash` execution tool
 - Bundled compiled hook binary
 
 ---
@@ -349,5 +349,5 @@ Scope (MVP):
 - Live subscriptions (`watch(query)`)
 - Multi-machine sync
 - Web/VS Code UI
-- Replacing every native tool — memtree augments
+- Replacing every native tool — ctx-tree augments
 - User-facing query language beyond the MCP tools listed

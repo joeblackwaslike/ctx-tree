@@ -6,14 +6,14 @@ sidebar_position: 4
 
 # Graph Schema
 
-The memtree store is a SQLite property graph. This page documents every node kind, edge kind, metadata schema, and store layout.
+The ctx-tree store is a SQLite property graph. This page documents every node kind, edge kind, metadata schema, and store layout.
 
 ---
 
 ## Store location
 
 ```
-~/.memtree/<project-hash>/store.db
+~/.ctx-tree/<project-hash>/store.db
 ```
 
 Project hash: `sha256(git_root + ":" + first_commit_sha).slice(0, 16)`  
@@ -60,7 +60,7 @@ Created on `SessionStart`. All nodes produced during a session have this as an a
 
 ### file_chunk
 
-A semantic chunk of a source file, created by `memtree_read`.
+A semantic chunk of a source file, created by `ctx_tree_read`.
 
 ```typescript
 // source_uri: file:///absolute/path/to/file.ts
@@ -78,7 +78,7 @@ A semantic chunk of a source file, created by `memtree_read`.
 
 ### tool_output
 
-Output from `memtree_grep` or `memtree_monitor`. A single grep run produces one `tool_output` node containing all matches.
+Output from `ctx_tree_grep` or `ctx_tree_monitor`. A single grep run produces one `tool_output` node containing all matches.
 
 ```typescript
 // source_uri: cmd://<sha256-prefix> (for monitor) or grep://<hash>
@@ -93,7 +93,7 @@ Output from `memtree_grep` or `memtree_monitor`. A single grep run produces one 
 
 ### web_chunk
 
-A fetched URL, created by `memtree_browse`. Content is the extracted accessibility tree.
+A fetched URL, created by `ctx_tree_browse`. Content is the extracted accessibility tree.
 
 ```typescript
 // source_uri: the URL
@@ -163,7 +163,7 @@ A summarized view of a subtree, created by `posttooluse-agent-capture.mjs` or th
 
 ### note
 
-A manually stored observation, created by `memtree_note`.
+A manually stored observation, created by `ctx_tree_note`.
 
 ```typescript
 // source_uri: note://<ulid>
@@ -219,7 +219,7 @@ Semantic derivation. `A → B` means A was produced using information from B.
 
 `new_node → old_node` when a fresher version of the same source replaces a stale node.
 
-- Triggers when `memtree_read` or `memtree_monitor` finds an existing node for the same source URI with a different content hash
+- Triggers when `ctx_tree_read` or `ctx_tree_monitor` finds an existing node for the same source URI with a different content hash
 
 ### references
 

@@ -1,10 +1,10 @@
 {
-  "name": "memtree-vscode",
-  "displayName": "memtree",
-  "description": "Real-time property graph visualizer for the memtree context store",
+  "name": "ctx-tree-vscode",
+  "displayName": "ctx-tree",
+  "description": "Real-time property graph visualizer for the ctx-tree context store",
   "version": "0.1.0",
   "publisher": "joeblackwaslike",
-  "repository": "https://github.com/joeblackwaslike/memtree",
+  "repository": "https://github.com/joeblackwaslike/ctx-tree",
   "license": "MIT",
   "engines": { "vscode": "^1.90.0" },
   "categories": ["Visualization", "Other"],
@@ -13,9 +13,9 @@
   "contributes": {
     "commands": [
       {
-        "command": "memtree.openVisualizer",
+        "command": "ctx-tree.openVisualizer",
         "title": "Open Visualizer",
-        "category": "memtree"
+        "category": "ctx-tree"
       }
     ]
   },

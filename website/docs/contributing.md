@@ -9,8 +9,8 @@ sidebar_position: 9
 ## Setup
 
 ```sh
-git clone https://github.com/joeblackwaslike/memtree
-cd memtree
+git clone https://github.com/joeblackwaslike/ctx-tree
+cd ctx-tree
 git config core.hooksPath .githooks   # auto-rebuilds dist on commit
 bun install
 ```
@@ -20,7 +20,7 @@ The pre-commit hook builds the MCP server dist before each commit so the plugin 
 ## Project structure
 
 ```
-memtree/
+ctx-tree/
 ├── .claude-plugin/
 │   └── plugin.json        # Claude Code plugin manifest
 ├── hooks/                 # Claude Code hooks (10 .mjs files)
@@ -56,7 +56,7 @@ Output lands in `mcp/dist/`.
 bun run mcp/dist/server.js
 
 # Test via the plugin (in a Claude Code session)
-/plugin reload memtree
+/plugin reload ctx-tree
 ```
 
 ## Adding a new MCP tool
@@ -82,6 +82,6 @@ bun run mcp/dist/server.js
 
 ## Issues and PRs
 
-Open issues at [github.com/joeblackwaslike/memtree/issues](https://github.com/joeblackwaslike/memtree/issues).
+Open issues at [github.com/joeblackwaslike/ctx-tree/issues](https://github.com/joeblackwaslike/ctx-tree/issues).
 
 PRs welcome. For significant changes, open an issue first to discuss the approach.

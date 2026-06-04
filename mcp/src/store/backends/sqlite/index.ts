@@ -23,7 +23,7 @@ import {
 } from '../../edges.js';
 import { buildFilterSQL } from '../../../tools/filters.js';
 import type { StoreBackend, InsertNodeParams } from '../../interface.js';
-import type { MemtreeNode, MemtreeEdge, NodeStatus, EdgeKind, Filters } from '../../types.js';
+import type { CtxTreeNode, CtxTreeEdge, NodeStatus, EdgeKind, Filters } from '../../types.js';
 
 // Cache verified embedding model per Database instance for searchSemantic.
 const embeddingModelCache = new WeakMap<Database, string>();
@@ -51,7 +51,7 @@ class SqliteBackend implements StoreBackend {
     sqlInsertNode(this.db, id, params);
   }
 
-  async getNode(id: string): Promise<MemtreeNode | null> {
+  async getNode(id: string): Promise<CtxTreeNode | null> {
     return sqlGetNode(this.db, id);
   }
 
@@ -59,19 +59,19 @@ class SqliteBackend implements StoreBackend {
     sqlUpdateNodeStatus(this.db, id, status);
   }
 
-  async getNodeBySourceUri(uri: string): Promise<MemtreeNode | null> {
+  async getNodeBySourceUri(uri: string): Promise<CtxTreeNode | null> {
     return sqlGetNodeBySourceUri(this.db, uri);
   }
 
-  async getNodeByContentHash(hash: string): Promise<MemtreeNode | null> {
+  async getNodeByContentHash(hash: string): Promise<CtxTreeNode | null> {
     return sqlGetNodeByContentHash(this.db, hash);
   }
 
-  async listChildren(parentId: string, status: NodeStatus = 'live'): Promise<MemtreeNode[]> {
+  async listChildren(parentId: string, status: NodeStatus = 'live'): Promise<CtxTreeNode[]> {
     return sqlListChildren(this.db, parentId, status);
   }
 
-  async getOrCreateSessionNode(sessionId: string): Promise<MemtreeNode> {
+  async getOrCreateSessionNode(sessionId: string): Promise<CtxTreeNode> {
     return sqlGetOrCreateSessionNode(this.db, sessionId);
   }
 
@@ -83,19 +83,19 @@ class SqliteBackend implements StoreBackend {
     return sqlCountPendingNodes(this.db);
   }
 
-  async getPendingNodes(limit = 100): Promise<MemtreeNode[]> {
+  async getPendingNodes(limit = 100): Promise<CtxTreeNode[]> {
     return sqlGetPendingNodes(this.db, limit);
   }
 
-  async getLiveFileChunks(cutoffMs: number): Promise<MemtreeNode[]> {
+  async getLiveFileChunks(cutoffMs: number): Promise<CtxTreeNode[]> {
     return sqlGetLiveFileChunks(this.db, cutoffMs);
   }
 
-  async getStaleNodes(olderThanMs: number): Promise<MemtreeNode[]> {
+  async getStaleNodes(olderThanMs: number): Promise<CtxTreeNode[]> {
     return sqlGetStaleNodes(this.db, olderThanMs);
   }
 
-  async getSupersededNodes(olderThanMs: number): Promise<MemtreeNode[]> {
+  async getSupersededNodes(olderThanMs: number): Promise<CtxTreeNode[]> {
     return sqlGetSupersededNodes(this.db, olderThanMs);
   }
 
@@ -109,21 +109,21 @@ class SqliteBackend implements StoreBackend {
 
   // ── Edge CRUD ──────────────────────────────────────────────────────────────
 
-  async insertEdge(edge: Omit<MemtreeEdge, 'created_at'>): Promise<void> {
+  async insertEdge(edge: Omit<CtxTreeEdge, 'created_at'>): Promise<void> {
     sqlInsertEdge(this.db, edge);
   }
 
-  async getNeighbors(nodeId: string, edgeKinds?: EdgeKind[]): Promise<MemtreeNode[]> {
+  async getNeighbors(nodeId: string, edgeKinds?: EdgeKind[]): Promise<CtxTreeNode[]> {
     return sqlGetNeighbors(this.db, nodeId, edgeKinds);
   }
 
-  async getEdgesFrom(srcId: string): Promise<MemtreeEdge[]> {
+  async getEdgesFrom(srcId: string): Promise<CtxTreeEdge[]> {
     return sqlGetEdgesFrom(this.db, srcId);
   }
 
   // ── Search ─────────────────────────────────────────────────────────────────
 
-  async searchKeyword(query: string, filters: Filters = {}, limit = 20): Promise<MemtreeNode[]> {
+  async searchKeyword(query: string, filters: Filters = {}, limit = 20): Promise<CtxTreeNode[]> {
     if (!query.trim()) return [];
     const { where, params } = buildFilterSQL(filters);
     try {
@@ -133,7 +133,7 @@ class SqliteBackend implements StoreBackend {
         WHERE nodes_fts MATCH ? AND ${where}
         ORDER BY bm25(nodes_fts)
         LIMIT ?
-      `).all(query, ...params, limit) as MemtreeNode[];
+      `).all(query, ...params, limit) as CtxTreeNode[];
     } catch {
       return [];
     }
@@ -144,7 +144,7 @@ class SqliteBackend implements StoreBackend {
     embeddingModel: string,
     filters: Filters = {},
     limit = 20,
-  ): Promise<MemtreeNode[]> {
+  ): Promise<CtxTreeNode[]> {
     const normalizedModel = embeddingModel.replace(/^[^/]+\//, '');
     const cached = embeddingModelCache.get(this.db);
     if (cached !== normalizedModel) {
@@ -189,44 +189,44 @@ class SqliteBackend implements StoreBackend {
     const placeholders = topIds.map(() => '?').join(',');
     const nodes = this.db.query(
       `SELECT * FROM nodes WHERE id IN (${placeholders})`
-    ).all(...topIds) as MemtreeNode[];
+    ).all(...topIds) as CtxTreeNode[];
 
     const nodeMap = new Map(nodes.map(n => [n.id, n]));
-    return topIds.map(id => nodeMap.get(id)).filter((n): n is MemtreeNode => n !== undefined);
+    return topIds.map(id => nodeMap.get(id)).filter((n): n is CtxTreeNode => n !== undefined);
   }
 
   // ── Complex graph / tool queries ───────────────────────────────────────────
 
-  async getNodesByIds(ids: string[]): Promise<MemtreeNode[]> {
+  async getNodesByIds(ids: string[]): Promise<CtxTreeNode[]> {
     if (ids.length === 0) return [];
     const CHUNK = 999;
-    const result: MemtreeNode[] = [];
+    const result: CtxTreeNode[] = [];
     for (let i = 0; i < ids.length; i += CHUNK) {
       const chunk = ids.slice(i, i + CHUNK);
       const placeholders = chunk.map(() => '?').join(',');
       const rows = this.db.query(
         `SELECT * FROM nodes WHERE id IN (${placeholders}) AND status = 'live'`
-      ).all(...chunk) as MemtreeNode[];
+      ).all(...chunk) as CtxTreeNode[];
       result.push(...rows);
     }
     return result;
   }
 
-  async getRecentNodes(since?: number, limit = 50, filters: Filters = {}): Promise<MemtreeNode[]> {
+  async getRecentNodes(since?: number, limit = 50, filters: Filters = {}): Promise<CtxTreeNode[]> {
     const effectiveFilters: Filters = { ...filters, ...(since ? { since } : {}) };
     const { where, params } = buildFilterSQL(effectiveFilters);
     return this.db.query(
       `SELECT * FROM nodes WHERE ${where} ORDER BY created_at DESC LIMIT ?`
-    ).all(...params, limit) as MemtreeNode[];
+    ).all(...params, limit) as CtxTreeNode[];
   }
 
-  async getPathToRoot(nodeId: string): Promise<MemtreeNode[]> {
-    const path: MemtreeNode[] = [];
-    let current = this.db.query('SELECT * FROM nodes WHERE id = ?').get(nodeId) as MemtreeNode | undefined;
+  async getPathToRoot(nodeId: string): Promise<CtxTreeNode[]> {
+    const path: CtxTreeNode[] = [];
+    let current = this.db.query('SELECT * FROM nodes WHERE id = ?').get(nodeId) as CtxTreeNode | undefined;
     while (current) {
       path.push(current);
       if (!current.parent_id) break;
-      current = this.db.query('SELECT * FROM nodes WHERE id = ?').get(current.parent_id) as MemtreeNode | undefined;
+      current = this.db.query('SELECT * FROM nodes WHERE id = ?').get(current.parent_id) as CtxTreeNode | undefined;
     }
     return path;
   }
@@ -236,7 +236,7 @@ class SqliteBackend implements StoreBackend {
     depth = 1,
     edgeKinds?: EdgeKind[],
     filters: Filters = {},
-  ): Promise<MemtreeNode[]> {
+  ): Promise<CtxTreeNode[]> {
     const cap = Math.min(depth, 5);
     const { where, params } = buildFilterSQL(filters, 'n');
     const kindFilter = edgeKinds?.length
@@ -245,7 +245,7 @@ class SqliteBackend implements StoreBackend {
     const kindParams = edgeKinds ?? [];
 
     const visited = new Set<string>([nodeId]);
-    const result: MemtreeNode[] = [];
+    const result: CtxTreeNode[] = [];
     let frontier = [nodeId];
 
     for (let d = 0; d < cap; d++) {
@@ -256,7 +256,7 @@ class SqliteBackend implements StoreBackend {
         JOIN edges e ON (e.src_id IN (${placeholders}) AND e.dst_id = n.id)
                      OR (e.dst_id IN (${placeholders}) AND e.src_id = n.id)
         WHERE ${where} ${kindFilter}
-      `).all(...frontier, ...frontier, ...params, ...kindParams) as MemtreeNode[];
+      `).all(...frontier, ...frontier, ...params, ...kindParams) as CtxTreeNode[];
 
       const newNodes = next.filter(n => !visited.has(n.id));
       for (const n of newNodes) { visited.add(n.id); result.push(n); }

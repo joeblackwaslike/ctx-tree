@@ -3,7 +3,7 @@ import { execFileSync } from 'child_process';
 import { ulid } from 'ulid';
 import type { StoreBackend } from './store/index.js';
 import { shouldDropPath, redactBashOutput, shouldDropBashCommand } from './redaction/index.js';
-import type { IngestPayload, MemtreeConfig } from './store/types.js';
+import type { IngestPayload, CtxTreeConfig } from './store/types.js';
 
 // ── Dedup window (in-memory, hash → last-seen epoch ms) ───────────────────────
 const dedupWindow = new Map<string, number>();
@@ -104,15 +104,15 @@ function extractSourceUri(payload: IngestPayload): string {
 
 // ── Ring buffer (bounded ingestion queue) ─────────────────────────────────────
 const RING_SIZE = 1_000;
-const ring: Array<{ store: StoreBackend; config: MemtreeConfig; payload: IngestPayload }> = [];
+const ring: Array<{ store: StoreBackend; config: CtxTreeConfig; payload: IngestPayload }> = [];
 let ringHead = 0;
 let ringCount = 0;
 let drainScheduled = false;
 
-function enqueuePayload(store: StoreBackend, config: MemtreeConfig, payload: IngestPayload): void {
+function enqueuePayload(store: StoreBackend, config: CtxTreeConfig, payload: IngestPayload): void {
   if (ringCount >= RING_SIZE) {
     process.stderr.write(
-      `[memtree/ingest] ring buffer full (${RING_SIZE}), dropping payload tool=${payload.tool}\n`,
+      `[ctx-tree/ingest] ring buffer full (${RING_SIZE}), dropping payload tool=${payload.tool}\n`,
     );
     return;
   }
@@ -135,7 +135,7 @@ function drainRing(): void {
     const item = ring[idx];
     if (item) {
       processPayloadAsync(item.store, item.config, item.payload).catch(err => {
-        process.stderr.write(`[memtree/ingest] async processing error: ${err}\n`);
+        process.stderr.write(`[ctx-tree/ingest] async processing error: ${err}\n`);
       });
       ring[idx] = undefined as any;
     }
@@ -144,20 +144,20 @@ function drainRing(): void {
 }
 
 // ── Core processing ───────────────────────────────────────────────────────────
-async function processPayloadAsync(store: StoreBackend, config: MemtreeConfig, payload: IngestPayload): Promise<void> {
+async function processPayloadAsync(store: StoreBackend, config: CtxTreeConfig, payload: IngestPayload): Promise<void> {
   const capture = config.capture;
 
   // 1. Per-tool opt-out flags
   if (payload.tool === 'Read' && capture.read === false) {
-    process.stderr.write(`[memtree/ingest] dropped: read capture disabled\n`);
+    process.stderr.write(`[ctx-tree/ingest] dropped: read capture disabled\n`);
     return;
   }
   if (payload.tool === 'Grep' && capture.grep === false) {
-    process.stderr.write(`[memtree/ingest] dropped: grep capture disabled\n`);
+    process.stderr.write(`[ctx-tree/ingest] dropped: grep capture disabled\n`);
     return;
   }
   if (payload.tool === 'Bash' && capture.bash === false) {
-    process.stderr.write(`[memtree/ingest] dropped: bash capture disabled\n`);
+    process.stderr.write(`[ctx-tree/ingest] dropped: bash capture disabled\n`);
     return;
   }
 
@@ -165,7 +165,7 @@ async function processPayloadAsync(store: StoreBackend, config: MemtreeConfig, p
   if (payload.tool === 'Read' || payload.tool === 'Grep') {
     const filePath = payload.input['path'];
     if (typeof filePath === 'string' && shouldDropPath(filePath, capture.pathDenylistExtra)) {
-      process.stderr.write(`[memtree/ingest] dropped: path on denylist: ${filePath}\n`);
+      process.stderr.write(`[ctx-tree/ingest] dropped: path on denylist: ${filePath}\n`);
       return;
     }
   }
@@ -174,7 +174,7 @@ async function processPayloadAsync(store: StoreBackend, config: MemtreeConfig, p
   if (payload.tool === 'Bash') {
     const cmd = payload.input['command'] ?? payload.input['cmd'];
     if (typeof cmd === 'string' && shouldDropBashCommand(cmd)) {
-      process.stderr.write(`[memtree/ingest] dropped: bash command blocked\n`);
+      process.stderr.write(`[ctx-tree/ingest] dropped: bash command blocked\n`);
       return;
     }
   }
@@ -188,14 +188,14 @@ async function processPayloadAsync(store: StoreBackend, config: MemtreeConfig, p
   // 5. Minimum content size gate
   const minSize = capture.filterMinSize ?? 50;
   if (content.length < minSize) {
-    process.stderr.write(`[memtree/ingest] dropped: content too small (${content.length} < ${minSize})\n`);
+    process.stderr.write(`[ctx-tree/ingest] dropped: content too small (${content.length} < ${minSize})\n`);
     return;
   }
 
   // 6. Dedup window check
   const key = dedupKey(payload);
   if (isDeduped(key)) {
-    process.stderr.write(`[memtree/ingest] dropped: duplicate within dedup window\n`);
+    process.stderr.write(`[ctx-tree/ingest] dropped: duplicate within dedup window\n`);
     return;
   }
 
@@ -261,7 +261,7 @@ async function processPayloadAsync(store: StoreBackend, config: MemtreeConfig, p
     });
     recordDedup(key);
   } catch (err) {
-    process.stderr.write(`[memtree/ingest] insert failed: ${err}\n`);
+    process.stderr.write(`[ctx-tree/ingest] insert failed: ${err}\n`);
   }
 }
 
@@ -284,21 +284,21 @@ export function _resetIngestState(): void {
  * Main entry point for ingesting a captured tool payload.
  * Fire-and-forget — never throws, logs drops to stderr.
  */
-export async function processIngest(store: StoreBackend, config: MemtreeConfig, payload: IngestPayload): Promise<void> {
+export async function processIngest(store: StoreBackend, config: CtxTreeConfig, payload: IngestPayload): Promise<void> {
   try {
     enqueuePayload(store, config, payload);
   } catch (err) {
-    process.stderr.write(`[memtree/ingest] unexpected error in processIngest: ${err}\n`);
+    process.stderr.write(`[ctx-tree/ingest] unexpected error in processIngest: ${err}\n`);
   }
 }
 
 /**
  * Exported for testing — async processing that bypasses the ring buffer.
  */
-export async function _processIngestSyncForTests(store: StoreBackend, config: MemtreeConfig, payload: IngestPayload): Promise<void> {
+export async function _processIngestSyncForTests(store: StoreBackend, config: CtxTreeConfig, payload: IngestPayload): Promise<void> {
   try {
     await processPayloadAsync(store, config, payload);
   } catch (err) {
-    process.stderr.write(`[memtree/ingest] unexpected error in processIngestSync: ${err}\n`);
+    process.stderr.write(`[ctx-tree/ingest] unexpected error in processIngestSync: ${err}\n`);
   }
 }

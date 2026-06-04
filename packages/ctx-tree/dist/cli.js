@@ -281,20 +281,20 @@ async function serverStart(args) {
     strict: true
   });
   const cwd = values.cwd ?? process.cwd();
-  const port = parseInt(process.env.MEMTREE_VIZ_PORT ?? values.port ?? "", 10) || 7777;
+  const port = parseInt(process.env.CTX_TREE_VIZ_PORT ?? values.port ?? "", 10) || 7777;
   const hash = computeProjectHash(cwd);
-  const memtreeHome = process.env.MEMTREE_HOME ?? join2(homedir(), ".memtree");
-  const dbPath = join2(memtreeHome, hash, "store.db");
+  const ctxTreeHome = process.env.CTX_TREE_HOME ?? join2(homedir(), ".ctx-tree");
+  const dbPath = join2(ctxTreeHome, hash, "store.db");
   if (!existsSync(dbPath)) {
-    console.error(`No memtree database found for this project.`);
+    console.error(`No ctx-tree database found for this project.`);
     console.error(`Expected: ${dbPath}`);
-    console.error(`Make sure the memtree MCP server has run in this project at least once.`);
+    console.error(`Make sure the ctx-tree MCP server has run in this project at least once.`);
     process.exit(1);
   }
   const db = new Database(dbPath, { readonly: true });
   const srv = new VisualizeServer(db, { port });
   const { url } = await srv.start();
-  console.log(`memtree visualizer running at ${url}`);
+  console.log(`ctx-tree visualizer running at ${url}`);
   console.log(`Watching: ${dbPath}`);
   console.log(`Press Ctrl+C to stop.`);
   if (values.open !== false) {
@@ -334,16 +334,16 @@ async function serverAttach(args) {
     strict: true
   });
   if (!values.db) {
-    console.error(`memtree viz server attach requires --db <path>
+    console.error(`ctx-tree viz server attach requires --db <path>
 `);
-    console.error("Usage: memtree viz server attach --db <path> [--port <n>] [--json]");
+    console.error("Usage: ctx-tree viz server attach --db <path> [--port <n>] [--json]");
     process.exit(1);
   }
   if (!existsSync2(values.db)) {
     console.error(`Database not found: ${values.db}`);
     process.exit(1);
   }
-  const port = parseInt(process.env.MEMTREE_VIZ_PORT ?? values.port ?? "", 10) || 7777;
+  const port = parseInt(process.env.CTX_TREE_VIZ_PORT ?? values.port ?? "", 10) || 7777;
   const db = new Database2(values.db, { readonly: true });
   const srv = new VisualizeServer(db, { port });
   const { url, port: boundPort } = await srv.start();
@@ -352,7 +352,7 @@ async function serverAttach(args) {
     process.stdout.write(JSON.stringify({ url, port: boundPort, nodeCount, edgeCount }) + `
 `);
   } else {
-    console.log(`memtree visualizer running at ${url}`);
+    console.log(`ctx-tree visualizer running at ${url}`);
     console.log(`Database: ${values.db}`);
     if (values.open) {
       const opener = process.platform === "darwin" ? "open" : "xdg-open";
@@ -373,18 +373,18 @@ var init_server_attach = __esm(() => {
 
 // src/cli.ts
 var HELP = `
-memtree \u2014 CLI for the memtree context store
+ctx-tree \u2014 CLI for the ctx-tree context store
 
 USAGE
-  memtree <command> [subcommand] [options]
+  ctx-tree <command> [subcommand] [options]
 
 COMMANDS
-  viz server start    Find the memtree DB for the current project,
+  viz server start    Find the ctx-tree DB for the current project,
                       start the visualizer, and open the browser.
   viz server attach   Start the visualizer against an explicit DB path.
                       Designed for the VS Code extension (--json mode).
 
-Run memtree <command> --help for details.
+Run ctx-tree <command> --help for details.
 `.trim();
 var [, , group, ...rest] = process.argv;
 if (!group || group === "--help" || group === "-h") {
@@ -401,14 +401,14 @@ ${HELP}`);
 }
 async function runViz(args) {
   const VIZ_HELP = `
-memtree viz \u2014 real-time graph visualizer for the memtree context store
+ctx-tree viz \u2014 real-time graph visualizer for the ctx-tree context store
 
 USAGE
-  memtree viz server start   [--cwd <dir>] [--port <n>] [--no-open]
-  memtree viz server attach  --db <path>   [--port <n>] [--no-open] [--json]
+  ctx-tree viz server start   [--cwd <dir>] [--port <n>] [--no-open]
+  ctx-tree viz server attach  --db <path>   [--port <n>] [--no-open] [--json]
 
 COMMANDS
-  server start    Find the memtree DB for the current project, start the
+  server start    Find the ctx-tree DB for the current project, start the
                   HTTP+WebSocket server, and open the browser.
 
   server attach   Start the server against an explicit database path.
@@ -417,12 +417,12 @@ COMMANDS
 
 OPTIONS (server start)
   --cwd <dir>     Project root to resolve the DB from (default: cwd)
-  --port <n>      Port to bind (default: 7777 or $MEMTREE_VIZ_PORT)
+  --port <n>      Port to bind (default: 7777 or $CTX_TREE_VIZ_PORT)
   --no-open       Don't open the browser
 
 OPTIONS (server attach)
   --db <path>     Path to the SQLite database file (required)
-  --port <n>      Port to bind (default: 7777 or $MEMTREE_VIZ_PORT)
+  --port <n>      Port to bind (default: 7777 or $CTX_TREE_VIZ_PORT)
   --no-open       Don't open the browser
   --json          Output JSON to stdout then stay running silently
 `.trim();

@@ -26,7 +26,7 @@ if (!userPrompt) process.exit(0);
 
 // ── Locate DB ─────────────────────────────────────────────────────────────────
 const projectHash = computeProjectHash(cwd);
-const dbPath      = join(process.env.HOME ?? '/tmp', '.memtree', projectHash, 'store.db');
+const dbPath      = join(process.env.HOME ?? '/tmp', '.ctx-tree', projectHash, 'store.db');
 if (!existsSync(dbPath)) process.exit(0);
 
 let db;
@@ -47,7 +47,7 @@ const existing = db.query(
 if (existing) {
   process.stdout.write(JSON.stringify({
     hookSpecificOutput: {
-      additionalContext: `[memtree] Prompt already stored → node ${existing.id}. Pass to subagents: memtree_compose(["${existing.id}"], budget).`,
+      additionalContext: `[ctx-tree] Prompt already stored → node ${existing.id}. Pass to subagents: ctx_tree_compose(["${existing.id}"], budget).`,
     },
   }));
   process.exit(0);
@@ -78,7 +78,7 @@ if (prevResponse) insertEdge(db, nodeId, prevResponse.id, 'follows', now);
 
 process.stdout.write(JSON.stringify({
   hookSpecificOutput: {
-    additionalContext: `[memtree] Prompt stored → node ${nodeId} ("${title.slice(0, 60)}…"). Pass full context to subagents: memtree_compose(["${nodeId}"], budget).`,
+    additionalContext: `[ctx-tree] Prompt stored → node ${nodeId} ("${title.slice(0, 60)}…"). Pass full context to subagents: ctx_tree_compose(["${nodeId}"], budget).`,
   },
 }));
 process.exit(0);

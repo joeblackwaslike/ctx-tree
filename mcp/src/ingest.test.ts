@@ -4,15 +4,15 @@ import * as childProcess from 'child_process';
 import { openDb, closeDb } from './store/db';
 import { createSqliteBackend } from './store/backends/sqlite/index.js';
 import { _processIngestSyncForTests, _resetIngestState } from './ingest';
-import type { IngestPayload, MemtreeConfig } from './store/types';
+import type { IngestPayload, CtxTreeConfig } from './store/types';
 import type { Database } from 'bun:sqlite';
 import type { StoreBackend } from './store/index.js';
 
-const TEST_DB = '/tmp/memtree-ingest-test.db';
+const TEST_DB = '/tmp/ctx-tree-ingest-test.db';
 let db: Database;
 let store: StoreBackend;
 
-const BASE_CONFIG: MemtreeConfig = {
+const BASE_CONFIG: CtxTreeConfig = {
   embeddingModel: 'nomic-embed-text',
   summarizerModel: 'llama3.2',
   retention: { staleHours: 24, supersededDays: 7 },

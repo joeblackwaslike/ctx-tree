@@ -2,7 +2,7 @@ import { openDb } from 'edgelite';
 import type { Db } from 'edgelite';
 import e from '../../../../dbschema/edgelite.js';
 import type { StoreBackend, InsertNodeParams } from '../../interface.js';
-import type { MemtreeNode, MemtreeEdge, NodeStatus, EdgeKind, Filters } from '../../types.js';
+import type { CtxTreeNode, CtxTreeEdge, NodeStatus, EdgeKind, Filters } from '../../types.js';
 import { ulid } from 'ulid';
 
 // Local interface for accessing the underlying PGlite instance.
@@ -47,11 +47,11 @@ interface EdgeRow {
   created_at: number;
 }
 
-function toMemtreeNode(row: NodeRow): MemtreeNode {
+function toCtxTreeNode(row: NodeRow): CtxTreeNode {
   return {
     id: row.id,
     parent_id: row.parent_id ?? null,
-    kind: row.kind as MemtreeNode['kind'],
+    kind: row.kind as CtxTreeNode['kind'],
     source_uri: row.source_uri ?? null,
     content: row.content,
     content_hash: row.content_hash,
@@ -69,7 +69,7 @@ function toMemtreeNode(row: NodeRow): MemtreeNode {
   };
 }
 
-function toMemtreeEdge(row: EdgeRow): MemtreeEdge {
+function toCtxTreeEdge(row: EdgeRow): CtxTreeEdge {
   return {
     src_id: row.src_id,
     dst_id: row.dst_id,
@@ -117,7 +117,7 @@ class EdgeliteBackend implements StoreBackend {
     );
   }
 
-  async getNode(id: string): Promise<MemtreeNode | null> {
+  async getNode(id: string): Promise<CtxTreeNode | null> {
     const rows = await this.db.run<NodeRow[]>(
       e.select(e.Node, (n) => ({
         id: true,
@@ -138,7 +138,7 @@ class EdgeliteBackend implements StoreBackend {
         limit: 1,
       })),
     );
-    return rows.length > 0 ? toMemtreeNode(rows[0]) : null;
+    return rows.length > 0 ? toCtxTreeNode(rows[0]) : null;
   }
 
   async updateNodeStatus(id: string, status: NodeStatus): Promise<void> {
@@ -150,7 +150,7 @@ class EdgeliteBackend implements StoreBackend {
     );
   }
 
-  async getNodeBySourceUri(uri: string): Promise<MemtreeNode | null> {
+  async getNodeBySourceUri(uri: string): Promise<CtxTreeNode | null> {
     const rows = await this.db.run<NodeRow[]>(
       e.select(e.Node, (n) => ({
         id: true,
@@ -175,10 +175,10 @@ class EdgeliteBackend implements StoreBackend {
         limit: 1,
       })),
     );
-    return rows.length > 0 ? toMemtreeNode(rows[0]) : null;
+    return rows.length > 0 ? toCtxTreeNode(rows[0]) : null;
   }
 
-  async getNodeByContentHash(hash: string): Promise<MemtreeNode | null> {
+  async getNodeByContentHash(hash: string): Promise<CtxTreeNode | null> {
     const rows = await this.db.run<NodeRow[]>(
       e.select(e.Node, (n) => ({
         id: true,
@@ -202,10 +202,10 @@ class EdgeliteBackend implements StoreBackend {
         limit: 1,
       })),
     );
-    return rows.length > 0 ? toMemtreeNode(rows[0]) : null;
+    return rows.length > 0 ? toCtxTreeNode(rows[0]) : null;
   }
 
-  async listChildren(parentId: string, status: NodeStatus = 'live'): Promise<MemtreeNode[]> {
+  async listChildren(parentId: string, status: NodeStatus = 'live'): Promise<CtxTreeNode[]> {
     const rows = await this.db.run<NodeRow[]>(
       e.select(e.Node, (n) => ({
         id: true,
@@ -229,10 +229,10 @@ class EdgeliteBackend implements StoreBackend {
         orderBy: { expr: n.created_at, dir: 'ASC' },
       })),
     );
-    return rows.map(toMemtreeNode);
+    return rows.map(toCtxTreeNode);
   }
 
-  async getOrCreateSessionNode(sessionId: string): Promise<MemtreeNode> {
+  async getOrCreateSessionNode(sessionId: string): Promise<CtxTreeNode> {
     // session_id is stored inside the metadata JSON — not a direct column.
     // Fetch all session nodes and filter in JS.
     const rows = await this.db.run<NodeRow[]>(
@@ -267,7 +267,7 @@ class EdgeliteBackend implements StoreBackend {
         /* ignore parse errors */
       }
       if (meta.session_id === sessionId) {
-        return toMemtreeNode(row);
+        return toCtxTreeNode(row);
       }
     }
 
@@ -334,7 +334,7 @@ class EdgeliteBackend implements StoreBackend {
     );
   }
 
-  async getPendingNodes(limit = 100): Promise<MemtreeNode[]> {
+  async getPendingNodes(limit = 100): Promise<CtxTreeNode[]> {
     const rows = await this.db.run<NodeRow[]>(
       e.select(e.Node, (n) => ({
         id: true,
@@ -356,10 +356,10 @@ class EdgeliteBackend implements StoreBackend {
         limit,
       })),
     );
-    return rows.map(toMemtreeNode);
+    return rows.map(toCtxTreeNode);
   }
 
-  async getLiveFileChunks(cutoffMs: number): Promise<MemtreeNode[]> {
+  async getLiveFileChunks(cutoffMs: number): Promise<CtxTreeNode[]> {
     // Filter: kind='file_chunk' AND status='live' AND mtime>0 AND updated_at < cutoffMs
     // The e.op builder only supports a fixed set of operators including '<'.
     // Use raw SQL to handle the composite filter cleanly.
@@ -371,23 +371,23 @@ class EdgeliteBackend implements StoreBackend {
          AND updated_at < $1`,
       [cutoffMs],
     );
-    return result.rows.map(toMemtreeNode);
+    return result.rows.map(toCtxTreeNode);
   }
 
-  async getStaleNodes(olderThanMs: number): Promise<MemtreeNode[]> {
+  async getStaleNodes(olderThanMs: number): Promise<CtxTreeNode[]> {
     const result = await this.db.pglite.query<NodeRow>(
       `SELECT * FROM nodes WHERE status = 'stale' AND updated_at < $1`,
       [olderThanMs],
     );
-    return result.rows.map(toMemtreeNode);
+    return result.rows.map(toCtxTreeNode);
   }
 
-  async getSupersededNodes(olderThanMs: number): Promise<MemtreeNode[]> {
+  async getSupersededNodes(olderThanMs: number): Promise<CtxTreeNode[]> {
     const result = await this.db.pglite.query<NodeRow>(
       `SELECT * FROM nodes WHERE status = 'superseded' AND updated_at < $1`,
       [olderThanMs],
     );
-    return result.rows.map(toMemtreeNode);
+    return result.rows.map(toCtxTreeNode);
   }
 
   async pruneNode(id: string): Promise<void> {
@@ -410,7 +410,7 @@ class EdgeliteBackend implements StoreBackend {
 
   // ── Edge CRUD ───────────────────────────────────────────────────────────────
 
-  async insertEdge(edge: Omit<MemtreeEdge, 'created_at'>): Promise<void> {
+  async insertEdge(edge: Omit<CtxTreeEdge, 'created_at'>): Promise<void> {
     await this.db.run(
       e.insert(e.Edge, {
         src_id: edge.src_id,
@@ -421,13 +421,13 @@ class EdgeliteBackend implements StoreBackend {
     );
   }
 
-  async getNeighbors(nodeId: string, edgeKinds?: EdgeKind[]): Promise<MemtreeNode[]> {
+  async getNeighbors(nodeId: string, edgeKinds?: EdgeKind[]): Promise<CtxTreeNode[]> {
     if (edgeKinds && edgeKinds.length > 0) {
       // Use the typed neighbors builder — it filters by edge kind via ANY($2::text[]).
       const rows = await this.db.run<NodeRow[]>(
         e.neighbors(nodeId, { edgeKinds }),
       );
-      return rows.map(toMemtreeNode);
+      return rows.map(toCtxTreeNode);
     }
 
     // No edge-kind filter: return all live neighbors regardless of edge kind.
@@ -439,10 +439,10 @@ class EdgeliteBackend implements StoreBackend {
        WHERE n.status = 'live'`,
       [nodeId],
     );
-    return result.rows.map(toMemtreeNode);
+    return result.rows.map(toCtxTreeNode);
   }
 
-  async getEdgesFrom(srcId: string): Promise<MemtreeEdge[]> {
+  async getEdgesFrom(srcId: string): Promise<CtxTreeEdge[]> {
     const rows = await this.db.run<EdgeRow[]>(
       e.select(e.Edge, (edge) => ({
         src_id: true,
@@ -452,20 +452,20 @@ class EdgeliteBackend implements StoreBackend {
         filter: e.op(edge.src_id, '=', srcId),
       })),
     );
-    return rows.map(toMemtreeEdge);
+    return rows.map(toCtxTreeEdge);
   }
 
   // ── Visualization helpers ────────────────────────────────────────────────────
 
-  async getNodesSince(since: number): Promise<MemtreeNode[]> {
+  async getNodesSince(since: number): Promise<CtxTreeNode[]> {
     const rows = await this.db.pglite.query<NodeRow>(
       'SELECT * FROM nodes WHERE updated_at >= $1',
       [since],
     );
-    return rows.rows.map(toMemtreeNode);
+    return rows.rows.map(toCtxTreeNode);
   }
 
-  async getAllEdges(): Promise<MemtreeEdge[]> {
+  async getAllEdges(): Promise<CtxTreeEdge[]> {
     const rows = await this.db.run<EdgeRow[]>(
       e.select(e.Edge, (edge) => ({
         src_id: true,
@@ -474,7 +474,7 @@ class EdgeliteBackend implements StoreBackend {
         created_at: true,
       })),
     );
-    return rows.map(toMemtreeEdge);
+    return rows.map(toCtxTreeEdge);
   }
 
   // ── Search ──────────────────────────────────────────────────────────────────
@@ -483,13 +483,13 @@ class EdgeliteBackend implements StoreBackend {
     query: string,
     _filters: Filters = {},
     limit = 20,
-  ): Promise<MemtreeNode[]> {
+  ): Promise<CtxTreeNode[]> {
     if (!query.trim()) return [];
     try {
       const rows = await this.db.run<NodeRow[]>(
         e.fts(e.Node, query),
       );
-      return rows.slice(0, limit).map(toMemtreeNode);
+      return rows.slice(0, limit).map(toCtxTreeNode);
     } catch {
       return [];
     }
@@ -500,7 +500,7 @@ class EdgeliteBackend implements StoreBackend {
     embeddingModel: string,
     filters: Filters = {},
     limit = 20,
-  ): Promise<MemtreeNode[]> {
+  ): Promise<CtxTreeNode[]> {
     const vecStr = '[' + vector.join(',') + ']';
     const normalizedModel = embeddingModel.replace(/^[^/]+\//, '');
 
@@ -550,22 +550,22 @@ class EdgeliteBackend implements StoreBackend {
        LIMIT $${idx}`,
       params,
     );
-    return result.rows.map(toMemtreeNode);
+    return result.rows.map(toCtxTreeNode);
   }
 
   // ── Complex graph / tool queries ───────────────────────────────────────────
 
-  async getNodesByIds(ids: string[]): Promise<MemtreeNode[]> {
+  async getNodesByIds(ids: string[]): Promise<CtxTreeNode[]> {
     if (ids.length === 0) return [];
     const CHUNK = 500;
-    const result: MemtreeNode[] = [];
+    const result: CtxTreeNode[] = [];
     for (let i = 0; i < ids.length; i += CHUNK) {
       const chunk = ids.slice(i, i + CHUNK);
       const rows = await this.db.pglite.query<NodeRow>(
         `SELECT * FROM nodes WHERE id = ANY($1::text[]) AND status = 'live'`,
         [chunk],
       );
-      result.push(...rows.rows.map(toMemtreeNode));
+      result.push(...rows.rows.map(toCtxTreeNode));
     }
     return result;
   }
@@ -574,7 +574,7 @@ class EdgeliteBackend implements StoreBackend {
     since?: number,
     limit = 50,
     filters: Filters = {},
-  ): Promise<MemtreeNode[]> {
+  ): Promise<CtxTreeNode[]> {
     const conditions: string[] = [];
     const params: unknown[] = [];
     let idx = 1;
@@ -607,11 +607,11 @@ class EdgeliteBackend implements StoreBackend {
       `SELECT * FROM nodes WHERE ${where} ORDER BY created_at DESC LIMIT $${idx}`,
       params,
     );
-    return rows.rows.map(toMemtreeNode);
+    return rows.rows.map(toCtxTreeNode);
   }
 
-  async getPathToRoot(nodeId: string): Promise<MemtreeNode[]> {
-    const path: MemtreeNode[] = [];
+  async getPathToRoot(nodeId: string): Promise<CtxTreeNode[]> {
+    const path: CtxTreeNode[] = [];
     let currentId: string | null = nodeId;
     while (currentId != null) {
       const result = await this.db.pglite.query<NodeRow>(
@@ -620,7 +620,7 @@ class EdgeliteBackend implements StoreBackend {
       );
       if (result.rows.length === 0) break;
       const row = result.rows[0];
-      path.push(toMemtreeNode(row));
+      path.push(toCtxTreeNode(row));
       currentId = row.parent_id ?? null;
     }
     return path;
@@ -631,15 +631,15 @@ class EdgeliteBackend implements StoreBackend {
     depth = 1,
     edgeKinds?: EdgeKind[],
     filters: Filters = {},
-  ): Promise<MemtreeNode[]> {
+  ): Promise<CtxTreeNode[]> {
     const cap = Math.min(depth, 5);
     const visited = new Set<string>([nodeId]);
-    const result: MemtreeNode[] = [];
+    const result: CtxTreeNode[] = [];
     let frontier = [nodeId];
 
     for (let d = 0; d < cap; d++) {
       if (frontier.length === 0) break;
-      const nextNodes: MemtreeNode[] = [];
+      const nextNodes: CtxTreeNode[] = [];
 
       for (const fId of frontier) {
         let rows: NodeRow[];
@@ -656,7 +656,7 @@ class EdgeliteBackend implements StoreBackend {
           rows = res.rows;
         }
         for (const row of rows) {
-          if (!visited.has(row.id)) nextNodes.push(toMemtreeNode(row));
+          if (!visited.has(row.id)) nextNodes.push(toCtxTreeNode(row));
         }
       }
 

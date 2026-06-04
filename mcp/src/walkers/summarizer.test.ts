@@ -10,7 +10,7 @@ import type { Database } from 'bun:sqlite';
 import type { StoreBackend } from '../store/index.js';
 import type { SummarizerProvider } from '../store/types.js';
 
-const TEST_DB = '/tmp/memtree-summarizer-test.db';
+const TEST_DB = '/tmp/ctx-tree-summarizer-test.db';
 const cfg = DEFAULT_CONFIG;
 let store: StoreBackend;
 
@@ -117,7 +117,7 @@ describe('summarizer walker', () => {
       expect(() => runSummarizerWalker(store, cfg, errorProvider)).not.toThrow();
       await new Promise(r => setTimeout(r, 50));
       const logged = stderrChunks.join('');
-      expect(logged).toMatch(/memtree summarizer error/);
+      expect(logged).toMatch(/ctx-tree summarizer error/);
     } finally {
       (process.stderr as any).write = originalWrite;
     }

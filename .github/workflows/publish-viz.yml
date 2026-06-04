@@ -1,4 +1,4 @@
-name: Publish memtree to npm
+name: Publish ctx-tree to npm
 
 on:
   push:
@@ -18,7 +18,7 @@ jobs:
           bun-version: latest
 
       - name: Build
-        working-directory: packages/memtree
+        working-directory: packages/ctx-tree
         run: bun run build
 
       - uses: actions/setup-node@v4
@@ -27,7 +27,7 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
 
       - name: Publish
-        working-directory: packages/memtree
+        working-directory: packages/ctx-tree
         run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

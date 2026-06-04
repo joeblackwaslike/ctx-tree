@@ -4,7 +4,7 @@ import { createHash } from 'crypto';
 import { ulid } from 'ulid';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import type { StoreBackend } from '../store/index.js';
-import type { MemtreeConfig } from '../store/types.js';
+import type { CtxTreeConfig } from '../store/types.js';
 import { shouldDropBashCommand, redactBashOutput } from '../redaction/index.js';
 
 const execAsync = promisify(exec);
@@ -22,9 +22,9 @@ export interface BashResult {
   truncated: boolean;
 }
 
-export async function memtreeBash(
+export async function ctxTreeBash(
   store: StoreBackend,
-  config: MemtreeConfig,
+  config: CtxTreeConfig,
   params: BashParams
 ): Promise<BashResult> {
   const { command, budget_tokens = 2000 } = params;
@@ -38,7 +38,7 @@ export async function memtreeBash(
   if (!config.trustedExecution) {
     throw new McpError(
       ErrorCode.InvalidParams,
-      'memtree.bash requires trustedExecution: true in config. Set this only in trusted local environments.'
+      'ctx-tree.bash requires trustedExecution: true in config. Set this only in trusted local environments.'
     );
   }
 

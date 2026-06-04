@@ -6,7 +6,7 @@ sidebar_position: 3
 
 # Data Model
 
-Annotated schema for the memtree SQLite store, with rationale for key design decisions.
+Annotated schema for the ctx-tree SQLite store, with rationale for key design decisions.
 
 ---
 
@@ -18,7 +18,7 @@ The store is a **tree-spined property graph**:
 - Lateral semantic relationships live in a separate `edges` table
 - All retrieval queries (search, compose, neighbors) walk the spine first, then fan out via edges
 
-This dual structure lets `memtree_compose` do efficient BFS expansion while keeping the parent-child hierarchy queryable with simple B-tree lookups.
+This dual structure lets `ctx_tree_compose` do efficient BFS expansion while keeping the parent-child hierarchy queryable with simple B-tree lookups.
 
 ---
 
@@ -121,7 +121,7 @@ All nodes produced during a session are descendants of this root. This gives you
 
 ### file_chunk
 
-**Created by:** `memtree_read`  
+**Created by:** `ctx_tree_read`  
 **parent_id:** File's root chunk node (the `file_chunk` with `metadata.is_file_root=true`)  
 **source_uri:** `file:///absolute/path/to/file.ts` (root), `file:///path/to/file.ts#FunctionName` (symbol)
 
@@ -149,7 +149,7 @@ All nodes produced during a session are descendants of this root. This gives you
 
 ### tool_output
 
-**Created by:** `memtree_grep`, `memtree_monitor`  
+**Created by:** `ctx_tree_grep`, `ctx_tree_monitor`  
 **parent_id:** Current session node  
 **source_uri:** `grep://<hash>` or `cmd://<hash>`
 
@@ -173,7 +173,7 @@ All nodes produced during a session are descendants of this root. This gives you
 
 ### web_chunk
 
-**Created by:** `memtree_browse`, `posttooluse-websearch-capture.mjs`  
+**Created by:** `ctx_tree_browse`, `posttooluse-websearch-capture.mjs`  
 **parent_id:** Current session node  
 **source_uri:** The URL
 
@@ -220,7 +220,7 @@ All nodes produced during a session are descendants of this root. This gives you
 
 ### note
 
-**Created by:** `memtree_note`  
+**Created by:** `ctx_tree_note`  
 **parent_id:** Current session node (or explicit `parent_id` from caller)  
 **source_uri:** `note://<ulid>`
 
@@ -286,7 +286,7 @@ Generic cross-reference for weaker semantic links that don't fit the above.
 ## Configuration reference
 
 ```typescript
-interface MemtreeConfig {
+interface CtxTreeConfig {
   embeddingModel: string;        // default: "nomic-embed-text"
   summarizerModel: string;       // default: "claude-haiku-4-5"
   retention: {

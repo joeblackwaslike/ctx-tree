@@ -1,10 +1,10 @@
 import type { Database } from 'bun:sqlite';
-import type { MemtreeNode, NodeStatus } from './types';
+import type { CtxTreeNode, NodeStatus } from './types';
 import { ulid } from 'ulid';
 
 interface InsertNodeParams {
   parent_id: string | null;
-  kind: MemtreeNode['kind'];
+  kind: CtxTreeNode['kind'];
   source_uri: string | null;
   content: string;
   content_hash: string;
@@ -26,43 +26,43 @@ export function insertNode(db: Database, id: string, p: InsertNodeParams): void 
   );
 }
 
-export function getNode(db: Database, id: string): MemtreeNode | null {
-  return (db.query('SELECT * FROM nodes WHERE id = ?').get(id) as MemtreeNode | undefined) ?? null;
+export function getNode(db: Database, id: string): CtxTreeNode | null {
+  return (db.query('SELECT * FROM nodes WHERE id = ?').get(id) as CtxTreeNode | undefined) ?? null;
 }
 
 export function updateNodeStatus(db: Database, id: string, status: NodeStatus): void {
   db.run('UPDATE nodes SET status = ?, updated_at = ? WHERE id = ?', status, Date.now(), id);
 }
 
-export function getNodeBySourceUri(db: Database, sourceUri: string): MemtreeNode | null {
+export function getNodeBySourceUri(db: Database, sourceUri: string): CtxTreeNode | null {
   return (db.query(
     "SELECT * FROM nodes WHERE source_uri = ? AND status = 'live' ORDER BY created_at DESC LIMIT 1"
-  ).get(sourceUri) as MemtreeNode | undefined) ?? null;
+  ).get(sourceUri) as CtxTreeNode | undefined) ?? null;
 }
 
-export function getNodeByContentHash(db: Database, hash: string): MemtreeNode | null {
+export function getNodeByContentHash(db: Database, hash: string): CtxTreeNode | null {
   return (db.query(
     "SELECT * FROM nodes WHERE content_hash = ? AND status = 'live' LIMIT 1"
-  ).get(hash) as MemtreeNode | undefined) ?? null;
+  ).get(hash) as CtxTreeNode | undefined) ?? null;
 }
 
 export function listChildren(
   db: Database,
   parentId: string,
   status: NodeStatus = 'live'
-): MemtreeNode[] {
+): CtxTreeNode[] {
   return db.query(
     'SELECT * FROM nodes WHERE parent_id = ? AND status = ? ORDER BY created_at'
-  ).all(parentId, status) as MemtreeNode[];
+  ).all(parentId, status) as CtxTreeNode[];
 }
 
 export function getOrCreateSessionNode(
   db: Database,
   sessionId: string
-): MemtreeNode {
+): CtxTreeNode {
   const existing = db.query(
     "SELECT * FROM nodes WHERE kind = 'session' AND json_extract(metadata,'$.session_id') = ?"
-  ).get(sessionId) as MemtreeNode | undefined;
+  ).get(sessionId) as CtxTreeNode | undefined;
   if (existing) return existing;
 
   const id = ulid();
@@ -89,37 +89,37 @@ export function countPendingNodes(db: Database): number {
   return (db.query("SELECT COUNT(*) as n FROM nodes WHERE status = 'pending'").get() as { n: number }).n;
 }
 
-export function getPendingNodes(db: Database, limit = 100): MemtreeNode[] {
+export function getPendingNodes(db: Database, limit = 100): CtxTreeNode[] {
   return db.query(
     "SELECT * FROM nodes WHERE status = 'pending' ORDER BY created_at LIMIT ?"
-  ).all(limit) as MemtreeNode[];
+  ).all(limit) as CtxTreeNode[];
 }
 
 export function getLiveFileChunks(
   db: Database,
   cutoffMs: number
-): MemtreeNode[] {
+): CtxTreeNode[] {
   return db.query(
     "SELECT * FROM nodes WHERE kind = 'file_chunk' AND status = 'live' AND mtime > 0 AND updated_at < ?"
-  ).all(cutoffMs) as MemtreeNode[];
+  ).all(cutoffMs) as CtxTreeNode[];
 }
 
 export function getStaleNodes(
   db: Database,
   olderThanMs: number
-): MemtreeNode[] {
+): CtxTreeNode[] {
   return db.query(
     "SELECT * FROM nodes WHERE status = 'stale' AND updated_at < ?"
-  ).all(olderThanMs) as MemtreeNode[];
+  ).all(olderThanMs) as CtxTreeNode[];
 }
 
 export function getSupersededNodes(
   db: Database,
   olderThanMs: number
-): MemtreeNode[] {
+): CtxTreeNode[] {
   return db.query(
     "SELECT * FROM nodes WHERE status = 'superseded' AND updated_at < ?"
-  ).all(olderThanMs) as MemtreeNode[];
+  ).all(olderThanMs) as CtxTreeNode[];
 }
 
 export function pruneNode(db: Database, id: string): void {

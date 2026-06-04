@@ -3,7 +3,7 @@ import { mkdirSync, writeFileSync, rmSync } from 'fs';
 import { join } from 'path';
 import { loadConfig, DEFAULT_CONFIG } from './config';
 
-const TMP = '/tmp/memtree-config-test';
+const TMP = '/tmp/ctx-tree-config-test';
 
 beforeEach(() => mkdirSync(TMP, { recursive: true }));
 afterEach(() => rmSync(TMP, { recursive: true, force: true }));
@@ -17,9 +17,9 @@ describe('loadConfig', () => {
 
   test('partial nested override preserves sibling defaults', () => {
     const projectRoot = TMP;
-    mkdirSync(join(projectRoot, '.memtree'), { recursive: true });
+    mkdirSync(join(projectRoot, '.ctx-tree'), { recursive: true });
     writeFileSync(
-      join(projectRoot, '.memtree', 'config.json'),
+      join(projectRoot, '.ctx-tree', 'config.json'),
       JSON.stringify({ capture: { maxBytes: 50000 } })
     );
     const cfg = loadConfig(projectRoot);
@@ -30,9 +30,9 @@ describe('loadConfig', () => {
   });
 
   test('per-project capture.bash=false is preserved', () => {
-    mkdirSync(join(TMP, '.memtree'), { recursive: true });
+    mkdirSync(join(TMP, '.ctx-tree'), { recursive: true });
     writeFileSync(
-      join(TMP, '.memtree', 'config.json'),
+      join(TMP, '.ctx-tree', 'config.json'),
       JSON.stringify({ capture: { maxBytes: 100000, filterMinSize: 50, bash: false } })
     );
     const cfg = loadConfig(TMP);

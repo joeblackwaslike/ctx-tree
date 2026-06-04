@@ -8,7 +8,7 @@ import { insertNode } from '../store/nodes.js';
 import { ulid } from 'ulid';
 import type { Database } from 'bun:sqlite';
 
-const CLI = join(import.meta.dir, '../../../packages/memtree/src/cli.ts');
+const CLI = join(import.meta.dir, '../../../packages/ctx-tree/src/cli.ts');
 
 let tmpDir: string;
 let db: Database;
@@ -16,7 +16,7 @@ let dbPath: string;
 const procs: ReturnType<typeof Bun.spawn>[] = [];
 
 beforeEach(() => {
-  tmpDir = mkdtempSync(join(tmpdir(), 'memtree-cli-e2e-'));
+  tmpDir = mkdtempSync(join(tmpdir(), 'ctx-tree-cli-e2e-'));
   dbPath = join(tmpDir, 'test.db');
   db = openDb(dbPath);
 });
@@ -80,7 +80,7 @@ function spawnAttach(extraArgs: string[] = []) {
   return proc;
 }
 
-describe('memtree CLI E2E — viz server attach', () => {
+describe('ctx-tree CLI E2E — viz server attach', () => {
   test('--json outputs a valid JSON line with url, port, nodeCount, edgeCount', async () => {
     makeNode();
     const proc = spawnAttach();
@@ -158,7 +158,7 @@ describe('memtree CLI E2E — viz server attach', () => {
     expect(code).not.toBe(0);
   });
 
-  test('memtree viz --help exits zero and prints usage', async () => {
+  test('ctx-tree viz --help exits zero and prints usage', async () => {
     const proc = Bun.spawn(['bun', 'run', CLI, 'viz', '--help'], {
       stdout: 'pipe',
       stderr: 'pipe',
@@ -169,6 +169,6 @@ describe('memtree CLI E2E — viz server attach', () => {
       new Response(proc.stdout).text(),
     ]);
     expect(code).toBe(0);
-    expect(text).toContain('memtree viz');
+    expect(text).toContain('ctx-tree viz');
   });
 });

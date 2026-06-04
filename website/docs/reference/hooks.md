@@ -6,7 +6,7 @@ sidebar_position: 3
 
 # Hooks Reference
 
-Complete reference for all 10 memtree hooks. All hooks are installed automatically by the marketplace installer.
+Complete reference for all 10 ctx-tree hooks. All hooks are installed automatically by the marketplace installer.
 
 ---
 
@@ -55,7 +55,7 @@ Hooks write JSON to stdout. Relevant fields:
 
 **Trigger:** Session startup and resume
 
-Writes a compact tool guide to `hookSpecificOutput.additionalContext` reminding Claude to use memtree tools instead of native ones. Includes the full redirect map and example calls.
+Writes a compact tool guide to `hookSpecificOutput.additionalContext` reminding Claude to use ctx-tree tools instead of native ones. Includes the full redirect map and example calls.
 
 No DB writes. Fires on every session start.
 
@@ -104,12 +104,12 @@ For each matched tool:
 
 | Native tool | Condition | Redirects to |
 | ----------- | --------- | ------------ |
-| `Read` | any | `memtree_read({ path, lines })` |
-| `Grep` | any | `memtree_grep({ pattern, path, ... })` |
-| `Bash` | command contains grep/rg/cat | `memtree_grep` or `memtree_read` |
-| `WebFetch` | any | `memtree_browse({ url })` |
-| `Monitor` | any | `memtree_monitor({ command })` |
-| `PowerShell` | command contains grep/cat | `memtree_grep` or `memtree_read` |
+| `Read` | any | `ctx_tree_read({ path, lines })` |
+| `Grep` | any | `ctx_tree_grep({ pattern, path, ... })` |
+| `Bash` | command contains grep/rg/cat | `ctx_tree_grep` or `ctx_tree_read` |
+| `WebFetch` | any | `ctx_tree_browse({ url })` |
+| `Monitor` | any | `ctx_tree_monitor({ command })` |
+| `PowerShell` | command contains grep/cat | `ctx_tree_grep` or `ctx_tree_read` |
 
 Returns `{ decision: "block" }` + `hookSpecificOutput.additionalContext` with the redirect instruction.
 
@@ -118,10 +118,10 @@ Returns `{ decision: "block" }` + `hookSpecificOutput.additionalContext` with th
 **Trigger:** `Agent`
 
 1. Extracts keywords from the agent prompt
-2. Queries `memtree_search` for relevant stored nodes
+2. Queries `ctx_tree_search` for relevant stored nodes
 3. Appends to the agent's prompt:
    - Top 5 matching node IDs with excerpts
-   - A compact tool map of available memtree tools
+   - A compact tool map of available ctx-tree tools
 
 Passes through (does not block the Agent call).
 
@@ -133,9 +133,9 @@ Checks for a stored `skill://name` node matching the skill being invoked. On cac
 
 ### pretooluse-proxy.mjs
 
-**Trigger:** `Read | Grep | Bash | WebFetch` (only when `~/.memtree/proxy-mode` file exists)
+**Trigger:** `Read | Grep | Bash | WebFetch` (only when `~/.ctx-tree/proxy-mode` file exists)
 
-Soft advisory mode. Does **not** block the native tool. Injects a suggestion to use the memtree equivalent. Remove `~/.memtree/proxy-mode` to disable.
+Soft advisory mode. Does **not** block the native tool. Injects a suggestion to use the ctx-tree equivalent. Remove `~/.ctx-tree/proxy-mode` to disable.
 
 ---
 
@@ -157,13 +157,13 @@ Stores the Skill output content as a `skill://name` node for instant recall on t
 
 **Trigger:** `WebSearch` (after completion)
 
-Queues all result URLs for background browsing via `memtree_browse`. URLs are processed asynchronously — the hook returns immediately without waiting. Results are available for recall in subsequent turns or future sessions.
+Queues all result URLs for background browsing via `ctx_tree_browse`. URLs are processed asynchronously — the hook returns immediately without waiting. Results are available for recall in subsequent turns or future sessions.
 
 ---
 
 ## Project hash algorithm
 
-All hooks and the MCP server must agree on the same `~/.memtree/<project-hash>/` path. The hash is computed as:
+All hooks and the MCP server must agree on the same `~/.ctx-tree/<project-hash>/` path. The hash is computed as:
 
 ```javascript
 const gitRoot = execSync('git rev-parse --show-toplevel', { cwd }).toString().trim();

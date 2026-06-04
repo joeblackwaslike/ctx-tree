@@ -4,7 +4,7 @@ import path from 'path';
 import { createEdgeliteBackend } from './index.js';
 import type { StoreBackend } from '../../interface.js';
 
-const TEST_DB = '/tmp/memtree-edgelite-test';
+const TEST_DB = '/tmp/ctx-tree-edgelite-test';
 const SCHEMA_PATH = path.join(import.meta.dir, '../../../../dbschema/schema.esdl');
 
 let store: StoreBackend;

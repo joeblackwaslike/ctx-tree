@@ -1,5 +1,5 @@
 import type { StoreBackend } from '../store/index.js';
-import type { MemtreeConfig, SummarizerProvider } from '../store/types.js';
+import type { CtxTreeConfig, SummarizerProvider } from '../store/types.js';
 
 const CHAR_THRESHOLD_MULTIPLIER = 20;
 
@@ -7,7 +7,7 @@ let inFlight = false;
 
 export function runSummarizerWalker(
   store: StoreBackend,
-  config: MemtreeConfig,
+  config: CtxTreeConfig,
   provider: SummarizerProvider | null
 ): void {
   if (!provider) return;
@@ -28,13 +28,13 @@ export function runSummarizerWalker(
       provider.summarize(row.content, row.source_uri ?? undefined).then(summary => {
         return store.updateNodeSummary(row.id, summary);
       }).catch((e: unknown) => {
-        process.stderr.write(`memtree summarizer error: ${e}\n`);
+        process.stderr.write(`ctx-tree summarizer error: ${e}\n`);
       }).finally(() => {
         pending--;
         if (pending === 0) inFlight = false;
       });
     }
   }).catch((e: unknown) => {
-    process.stderr.write(`memtree summarizer error: ${e}\n`);
+    process.stderr.write(`ctx-tree summarizer error: ${e}\n`);
   });
 }

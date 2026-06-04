@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>memtree · Quick Overview</title>
+<title>ctx-tree · Quick Overview</title>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -98,10 +98,10 @@ footer a:hover{color:var(--text)}
 <div class="hero">
   <div class="badge">🌳 SQLite property graph · hook-intercepted · persistent across sessions</div>
   <h1>Context rot, eliminated.</h1>
-  <p class="hero-sub">memtree intercepts every Claude Code tool call — native <em>and</em> MCP — and routes content through a persistent SQLite graph. Claude gets compact node references instead of raw data. 95–99% context reduction.</p>
+  <p class="hero-sub">ctx-tree intercepts every Claude Code tool call — native <em>and</em> MCP — and routes content through a persistent SQLite graph. Claude gets compact node references instead of raw data. 95–99% context reduction.</p>
   <div class="cta-row">
     <a href="how-it-works.html" class="cta-primary">📊 Full interactive visualization →</a>
-    <a href="https://github.com/joeblackwaslike/memtree" class="cta-secondary" target="_blank" rel="noopener">
+    <a href="https://github.com/joeblackwaslike/ctx-tree" class="cta-secondary" target="_blank" rel="noopener">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/></svg>
       GitHub
     </a>
@@ -110,17 +110,17 @@ footer a:hover{color:var(--text)}
 
 <!-- TOKEN COMPARE -->
 <div class="section">
-  <div class="sect-title">Context savings — without vs. with memtree</div>
+  <div class="sect-title">Context savings — without vs. with ctx-tree</div>
   <div class="tok-grid">
     <div class="tok-card">
-      <h3>❌ Without memtree</h3>
+      <h3>❌ Without ctx-tree</h3>
       <div class="tok-row"><span class="tok-lbl">Read file</span><div class="tok-bg"><div class="tok-bar" style="width:100%;background:#f87171;opacity:.7"></div></div><span class="tok-val">~4,200 tok</span></div>
       <div class="tok-row"><span class="tok-lbl">Grep (8 files)</span><div class="tok-bg"><div class="tok-bar" style="width:100%;background:#fb923c;opacity:.7"></div></div><span class="tok-val">~8,400 tok</span></div>
       <div class="tok-row"><span class="tok-lbl">WebFetch</span><div class="tok-bg"><div class="tok-bar" style="width:100%;background:#f97316;opacity:.7"></div></div><span class="tok-val">~11,000 tok</span></div>
       <div class="tok-row"><span class="tok-lbl">MCP tool</span><div class="tok-bg"><div class="tok-bar" style="width:100%;background:#ea580c;opacity:.7"></div></div><span class="tok-val">~3,600 tok</span></div>
     </div>
     <div class="tok-card">
-      <h3>✅ With memtree</h3>
+      <h3>✅ With ctx-tree</h3>
       <div class="tok-row"><span class="tok-lbl">Read file</span><div class="tok-bg"><div class="tok-bar" style="width:1.5%;background:#4ade80"></div></div><span class="tok-val">~60 tok</span></div>
       <div class="tok-row"><span class="tok-lbl">Grep (8 files)</span><div class="tok-bg"><div class="tok-bar" style="width:2%;background:#4ade80"></div></div><span class="tok-val">~160 tok</span></div>
       <div class="tok-row"><span class="tok-lbl">WebFetch</span><div class="tok-bg"><div class="tok-bar" style="width:1%;background:#4ade80"></div></div><span class="tok-val">~110 tok</span></div>
@@ -138,7 +138,7 @@ footer a:hover{color:var(--text)}
     <div class="flow-arr">→</div>
     <div class="flow-box"><div class="ico">🚫</div><div class="lbl">Native blocked</div><div class="sub">deny emitted</div></div>
     <div class="flow-arr">→</div>
-    <div class="flow-box accent"><div class="ico">🌳</div><div class="lbl">memtree_*</div><div class="sub">MCP tool runs</div></div>
+    <div class="flow-box accent"><div class="ico">🌳</div><div class="lbl">ctx_tree_*</div><div class="sub">MCP tool runs</div></div>
     <div class="flow-arr">→</div>
     <div class="flow-box"><div class="ico">💾</div><div class="lbl">Node stored</div><div class="sub">SQLite graph</div></div>
     <div class="flow-arr">→</div>
@@ -153,15 +153,15 @@ footer a:hover{color:var(--text)}
 <div class="section">
   <div class="sect-title">MCP tools</div>
   <div class="tool-grid">
-    <div class="tool-item"><div class="tool-name">memtree_read</div><div class="tool-desc">Read file with tree-sitter semantic chunking. Returns nodeId + symbol index; chunks stored for future compose() calls.</div></div>
-    <div class="tool-item"><div class="tool-name">memtree_grep</div><div class="tool-desc">Ripgrep search with results stored as graph nodes. Each matching file links to its semantic chunk stream.</div></div>
-    <div class="tool-item"><div class="tool-name">memtree_browse</div><div class="tool-desc">Fetch a URL and store it as a web_content node with accessibility tree representation. Returns compact reference.</div></div>
-    <div class="tool-item"><div class="tool-name">memtree_search</div><div class="tool-desc">FTS5 keyword search across all stored nodes — current session and all prior sessions for this project.</div></div>
-    <div class="tool-item"><div class="tool-name">memtree_compose</div><div class="tool-desc">Budget-bounded context bundle from seed nodeIds. Assembles a focused context slice without re-reading anything.</div></div>
-    <div class="tool-item"><div class="tool-name">memtree_neighbors</div><div class="tool-desc">Graph walk from a node — find callers, imports, same-module siblings, derived nodes, and summarized subgraphs.</div></div>
-    <div class="tool-item"><div class="tool-name">memtree_path_to_root</div><div class="tool-desc">Walk the parent chain from any node to the session root. Understand how a chunk fits into the larger picture.</div></div>
-    <div class="tool-item"><div class="tool-name">memtree_recent</div><div class="tool-desc">Surface nodes captured in prior sessions. Instant orientation without re-reading anything from last time.</div></div>
-    <div class="tool-item"><div class="tool-name">memtree_monitor</div><div class="tool-desc">Run a command and stream output as chunk nodes. Read-write mode supports stdin sends in the same graph.</div></div>
+    <div class="tool-item"><div class="tool-name">ctx_tree_read</div><div class="tool-desc">Read file with tree-sitter semantic chunking. Returns nodeId + symbol index; chunks stored for future compose() calls.</div></div>
+    <div class="tool-item"><div class="tool-name">ctx_tree_grep</div><div class="tool-desc">Ripgrep search with results stored as graph nodes. Each matching file links to its semantic chunk stream.</div></div>
+    <div class="tool-item"><div class="tool-name">ctx_tree_browse</div><div class="tool-desc">Fetch a URL and store it as a web_content node with accessibility tree representation. Returns compact reference.</div></div>
+    <div class="tool-item"><div class="tool-name">ctx_tree_search</div><div class="tool-desc">FTS5 keyword search across all stored nodes — current session and all prior sessions for this project.</div></div>
+    <div class="tool-item"><div class="tool-name">ctx_tree_compose</div><div class="tool-desc">Budget-bounded context bundle from seed nodeIds. Assembles a focused context slice without re-reading anything.</div></div>
+    <div class="tool-item"><div class="tool-name">ctx_tree_neighbors</div><div class="tool-desc">Graph walk from a node — find callers, imports, same-module siblings, derived nodes, and summarized subgraphs.</div></div>
+    <div class="tool-item"><div class="tool-name">ctx_tree_path_to_root</div><div class="tool-desc">Walk the parent chain from any node to the session root. Understand how a chunk fits into the larger picture.</div></div>
+    <div class="tool-item"><div class="tool-name">ctx_tree_recent</div><div class="tool-desc">Surface nodes captured in prior sessions. Instant orientation without re-reading anything from last time.</div></div>
+    <div class="tool-item"><div class="tool-name">ctx_tree_monitor</div><div class="tool-desc">Run a command and stream output as chunk nodes. Read-write mode supports stdin sends in the same graph.</div></div>
   </div>
 </div>
 
@@ -171,27 +171,27 @@ footer a:hover{color:var(--text)}
   <div class="hook-list">
     <div class="hook-item">
       <span class="hook-badge hb-start">SessionStart</span>
-      <div class="hook-body"><div class="hook-trigger">On every session startup or resume</div><div class="hook-what">Injects the memtree tool guide and redirect reminders into context.</div></div>
+      <div class="hook-body"><div class="hook-trigger">On every session startup or resume</div><div class="hook-what">Injects the ctx-tree tool guide and redirect reminders into context.</div></div>
     </div>
     <div class="hook-item">
       <span class="hook-badge hb-prompt">UserPromptSubmit</span>
-      <div class="hook-body"><div class="hook-trigger">User submits a prompt ≥ 100 chars</div><div class="hook-what">Stores prompt as <code>observation</code> node. Injects nodeId so subagents reference it without re-reading. Surfaces in future sessions via <code>memtree_search</code>.</div></div>
+      <div class="hook-body"><div class="hook-trigger">User submits a prompt ≥ 100 chars</div><div class="hook-what">Stores prompt as <code>observation</code> node. Injects nodeId so subagents reference it without re-reading. Surfaces in future sessions via <code>ctx_tree_search</code>.</div></div>
     </div>
     <div class="hook-item">
       <span class="hook-badge hb-pre">PreToolUse</span>
-      <div class="hook-body"><div class="hook-trigger">Read (code files) · Grep · Bash grep/cat · WebFetch · Monitor</div><div class="hook-what">Hard-denies native tool. Emits exact <code>memtree_*</code> replacement call as additionalContext — Claude retries immediately with the correct tool.</div></div>
+      <div class="hook-body"><div class="hook-trigger">Read (code files) · Grep · Bash grep/cat · WebFetch · Monitor</div><div class="hook-what">Hard-denies native tool. Emits exact <code>ctx_tree_*</code> replacement call as additionalContext — Claude retries immediately with the correct tool.</div></div>
     </div>
     <div class="hook-item">
       <span class="hook-badge hb-pre">PreToolUse</span>
-      <div class="hook-body"><div class="hook-trigger">Agent tool</div><div class="hook-what">Injects memtree tool map + FTS context hits from prior work into subagent prompt. Creates session node. Writes state file for capture hook.</div></div>
+      <div class="hook-body"><div class="hook-trigger">Agent tool</div><div class="hook-what">Injects ctx-tree tool map + FTS context hits from prior work into subagent prompt. Creates session node. Writes state file for capture hook.</div></div>
     </div>
     <div class="hook-item">
       <span class="hook-badge hb-pre">PreToolUse</span>
-      <div class="hook-body"><div class="hook-trigger">Skill tool</div><div class="hook-what">Cache hit: denies and injects <code>memtree_compose</code> reference — zero disk I/O. Cache miss: passthrough, first load stores the skill for next time.</div></div>
+      <div class="hook-body"><div class="hook-trigger">Skill tool</div><div class="hook-what">Cache hit: denies and injects <code>ctx_tree_compose</code> reference — zero disk I/O. Cache miss: passthrough, first load stores the skill for next time.</div></div>
     </div>
     <div class="hook-item">
       <span class="hook-badge hb-post">PostToolUse</span>
-      <div class="hook-body"><div class="hook-trigger">Agent tool completes</div><div class="hook-what">Creates summary <code>note</code> node linking all subagent work. <code>memtree_neighbors(sessionId)</code> surfaces the full subagent graph from the parent session.</div></div>
+      <div class="hook-body"><div class="hook-trigger">Agent tool completes</div><div class="hook-what">Creates summary <code>note</code> node linking all subagent work. <code>ctx_tree_neighbors(sessionId)</code> surfaces the full subagent graph from the parent session.</div></div>
     </div>
     <div class="hook-item">
       <span class="hook-badge hb-post">PostToolUse</span>
@@ -214,9 +214,9 @@ footer a:hover{color:var(--text)}
     <div class="install-step">
       <div class="step-num">2</div>
       <div class="step-body">
-        <div class="step-title">Install memtree</div>
+        <div class="step-title">Install ctx-tree</div>
         <div class="step-desc">MCP server, all hooks, and skills — configured automatically.</div>
-        <div class="step-cmd">/plugin install memtree@agent-marketplace</div>
+        <div class="step-cmd">/plugin install ctx-tree@agent-marketplace</div>
       </div>
     </div>
     <div class="install-step">
@@ -231,7 +231,7 @@ footer a:hover{color:var(--text)}
   <p style="margin-top:20px;font-size:12px;color:var(--muted)">
     Built on <a href="https://github.com/joeblackwaslike/mcp-exec" target="_blank" rel="noopener">mcp-exec</a> — context-efficient MCP workflow execution. ·
     <a href="how-it-works.html">Full interactive visualization</a> ·
-    <a href="https://github.com/joeblackwaslike/memtree/blob/main/docs/superpowers/specs/2026-05-17-memtree-design.md" target="_blank" rel="noopener">Design spec</a>
+    <a href="https://github.com/joeblackwaslike/ctx-tree/blob/main/docs/superpowers/specs/2026-05-17-ctx-tree-design.md" target="_blank" rel="noopener">Design spec</a>
   </p>
 </div>
 
@@ -239,8 +239,8 @@ footer a:hover{color:var(--text)}
 
 <footer>
   <div class="wrap">
-    memtree · SQLite property graph for Claude Code ·
-    <a href="https://github.com/joeblackwaslike/memtree" target="_blank" rel="noopener">github.com/joeblackwaslike/memtree</a> ·
+    ctx-tree · SQLite property graph for Claude Code ·
+    <a href="https://github.com/joeblackwaslike/ctx-tree" target="_blank" rel="noopener">github.com/joeblackwaslike/ctx-tree</a> ·
     <a href="how-it-works.html">Full visualization</a>
   </div>
 </footer>

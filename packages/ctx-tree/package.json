@@ -1,10 +1,10 @@
 {
-  "name": "memtree",
+  "name": "ctx-tree",
   "version": "0.1.0",
-  "description": "CLI for the memtree context store — visualize, inspect, and manage your AI session graph",
+  "description": "CLI for the ctx-tree context store — visualize, inspect, and manage your AI session graph",
   "type": "module",
   "bin": {
-    "memtree": "./dist/cli.js"
+    "ctx-tree": "./dist/cli.js"
   },
   "files": [
     "dist"
@@ -16,11 +16,11 @@
   "engines": {
     "bun": ">=1.0.0"
   },
-  "keywords": ["memtree", "visualizer", "graph", "sqlite", "claude", "mcp", "context"],
+  "keywords": ["ctx-tree", "visualizer", "graph", "sqlite", "claude", "mcp", "context"],
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/joeblackwaslike/memtree"
+    "url": "https://github.com/joeblackwaslike/ctx-tree"
   },
   "devDependencies": {
     "@types/bun": "^1.1.0"

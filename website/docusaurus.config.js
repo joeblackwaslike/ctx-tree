@@ -4,15 +4,15 @@ const { themes: prismThemes } = require('prism-react-renderer');
 
 /** @type {import('@docusaurus/types').Config} */
 const config = {
-  title: 'memtree',
+  title: 'ctx-tree',
   tagline: 'Claude Code with a photographic memory',
   favicon: 'img/logo.svg',
 
   url: 'https://joeblackwaslike.github.io',
-  baseUrl: '/memtree/',
+  baseUrl: '/ctx-tree/',
 
   organizationName: 'joeblackwaslike',
-  projectName: 'memtree',
+  projectName: 'ctx-tree',
   trailingSlash: false,
 
   onBrokenLinks: 'warn',
@@ -38,7 +38,7 @@ const config = {
       ({
         docs: {
           sidebarPath: require.resolve('./sidebars.js'),
-          editUrl: 'https://github.com/joeblackwaslike/memtree/edit/main/website/',
+          editUrl: 'https://github.com/joeblackwaslike/ctx-tree/edit/main/website/',
         },
         blog: false,
         theme: {
@@ -58,9 +58,9 @@ const config = {
       },
       image: 'img/logo.svg',
       navbar: {
-        title: 'memtree',
+        title: 'ctx-tree',
         logo: {
-          alt: 'memtree logo',
+          alt: 'ctx-tree logo',
           src: 'img/logo.svg',
         },
         items: [
@@ -83,7 +83,7 @@ const config = {
             prependBaseUrlToHref: true,
           },
           {
-            href: 'https://github.com/joeblackwaslike/memtree',
+            href: 'https://github.com/joeblackwaslike/ctx-tree',
             label: 'GitHub',
             position: 'right',
           },
@@ -112,7 +112,7 @@ const config = {
             items: [
               {
                 label: 'GitHub',
-                href: 'https://github.com/joeblackwaslike/memtree',
+                href: 'https://github.com/joeblackwaslike/ctx-tree',
               },
               {
                 label: 'mcp-exec',

@@ -11,7 +11,7 @@ import { wrapDatabase } from '../store/backends/sqlite/index.js';
 import type { Database } from 'bun:sqlite';
 import type { StoreBackend } from '../store/index.js';
 
-const TEST_DB = '/tmp/memtree-query-test.db';
+const TEST_DB = '/tmp/ctx-tree-query-test.db';
 let db: Database;
 let store: StoreBackend;
 

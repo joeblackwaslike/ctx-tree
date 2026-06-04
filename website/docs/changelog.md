@@ -12,16 +12,16 @@ Initial release.
 
 ### MCP Tools
 
-- `memtree_read` — file reading with tree-sitter semantic chunking and mtime caching
-- `memtree_grep` — ripgrep integration with result nodes stored in graph
-- `memtree_browse` — URL fetching with accessibility tree extraction and caching
-- `memtree_compose` — BFS graph expansion + relevance scoring + budget-bounded context assembly
-- `memtree_search` — FTS5 keyword search across all stored nodes
-- `memtree_neighbors` — graph walk from a node up to depth 5
-- `memtree_path_to_root` — spine walk from any node to session root
-- `memtree_recent` — surface nodes from prior sessions by recency
-- `memtree_monitor` — shell command execution with output stored as node
-- `memtree_note` — manual note/observation storage
+- `ctx_tree_read` — file reading with tree-sitter semantic chunking and mtime caching
+- `ctx_tree_grep` — ripgrep integration with result nodes stored in graph
+- `ctx_tree_browse` — URL fetching with accessibility tree extraction and caching
+- `ctx_tree_compose` — BFS graph expansion + relevance scoring + budget-bounded context assembly
+- `ctx_tree_search` — FTS5 keyword search across all stored nodes
+- `ctx_tree_neighbors` — graph walk from a node up to depth 5
+- `ctx_tree_path_to_root` — spine walk from any node to session root
+- `ctx_tree_recent` — surface nodes from prior sessions by recency
+- `ctx_tree_monitor` — shell command execution with output stored as node
+- `ctx_tree_note` — manual note/observation storage
 
 ### Hooks (10 total)
 
@@ -38,12 +38,12 @@ Initial release.
 
 ### Infrastructure
 
-- SQLite property graph store at `~/.memtree/<project-hash>/store.db`
+- SQLite property graph store at `~/.ctx-tree/<project-hash>/store.db`
 - Git-based project hash (`sha256(gitRoot:firstCommit).slice(0, 16)`)
 - Background walkers: staleness marker, pruner
 - `mcp-exec` integration for sandboxed execution
 - Plugin manifest with `/usr/bin/env bun` for cross-platform hook commands
-- Sensitive value redaction in `memtree_monitor` output before storage
+- Sensitive value redaction in `ctx_tree_monitor` output before storage
 
 ---
 
@@ -59,7 +59,7 @@ Initial release.
 
 ### v0.2.0 (planned)
 
-- `memtree_bash` — Bash equivalent routed through mcp-exec for sandboxing
+- `ctx_tree_bash` — Bash equivalent routed through mcp-exec for sandboxing
 - Bundled hook binary (eliminates `jq`/`socat` system deps)
 - EdgeLight backend option (embedded property graph DB)
 

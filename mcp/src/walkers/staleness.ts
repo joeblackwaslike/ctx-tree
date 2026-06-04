@@ -1,8 +1,8 @@
 import { statSync } from 'fs';
 import type { StoreBackend } from '../store/index.js';
-import type { MemtreeConfig } from '../store/types.js';
+import type { CtxTreeConfig } from '../store/types.js';
 
-export async function runStalenessWalker(store: StoreBackend, _config: MemtreeConfig): Promise<void> {
+export async function runStalenessWalker(store: StoreBackend, _config: CtxTreeConfig): Promise<void> {
   const checkBefore = Date.now() - 5000;
   const chunks = await store.getLiveFileChunks(checkBefore);
 

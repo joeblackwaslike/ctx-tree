@@ -14,7 +14,7 @@ let db: Database;
 let srv: VisualizeServer;
 
 beforeEach(() => {
-  tmpDir = mkdtempSync(join(tmpdir(), 'memtree-viz-test-'));
+  tmpDir = mkdtempSync(join(tmpdir(), 'ctx-tree-viz-test-'));
   db = openDb(join(tmpDir, 'test.db'));
   srv = new VisualizeServer(db, { port: 0 });
 });

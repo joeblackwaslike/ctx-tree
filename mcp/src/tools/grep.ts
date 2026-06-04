@@ -2,7 +2,7 @@ import { spawnSync } from 'child_process';
 import { createHash } from 'crypto';
 import { ulid } from 'ulid';
 import type { StoreBackend } from '../store/index.js';
-import type { MemtreeConfig } from '../store/types.js';
+import type { CtxTreeConfig } from '../store/types.js';
 import { shouldDropPath } from '../redaction';
 import { DEFAULT_PATH_DENY_GLOBS } from '../redaction/paths';
 
@@ -19,9 +19,9 @@ export interface GrepResult {
   matches: string[];
 }
 
-export async function memtreeGrep(
+export async function ctxTreeGrep(
   store: StoreBackend,
-  config: MemtreeConfig,
+  config: CtxTreeConfig,
   params: GrepParams
 ): Promise<GrepResult> {
   const { pattern, path = '.', caseInsensitive, fileGlob, maxCount = 500 } = params;

@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { ulid } from 'ulid';
 import type { StoreBackend } from '../store/index.js';
-import type { MemtreeConfig } from '../store/types.js';
+import type { CtxTreeConfig } from '../store/types.js';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 
 export interface BrowseParams {
@@ -96,9 +96,9 @@ const CACHE_TTL_MS = 60 * 60 * 1000;
 
 // ── Main function ─────────────────────────────────────────────────────────────
 
-export async function memtreeBrowse(
+export async function ctxTreeBrowse(
   store: StoreBackend,
-  _config: MemtreeConfig,
+  _config: CtxTreeConfig,
   params: BrowseParams
 ): Promise<BrowseResult> {
   const { url, budget_tokens = 2000, force = false } = params;
@@ -144,7 +144,7 @@ export async function memtreeBrowse(
   let fetchedBytes: number;
   try {
     const res = await fetch(url, {
-      headers: { 'User-Agent': 'memtree/1.0 (https://github.com/joeblackwaslike/memtree)' },
+      headers: { 'User-Agent': 'ctx-tree/1.0 (https://github.com/joeblackwaslike/ctx-tree)' },
       signal: AbortSignal.timeout(15_000),
     });
     if (!res.ok) {

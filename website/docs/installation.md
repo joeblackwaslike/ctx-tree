@@ -6,7 +6,7 @@ sidebar_position: 2
 
 # Installation
 
-memtree installs as a Claude Code plugin via the [agent marketplace](https://github.com/joeblackwaslike/agent-marketplace). One command installs the MCP server, all 10 hooks, and pre-configures skills.
+ctx-tree installs as a Claude Code plugin via the [agent marketplace](https://github.com/joeblackwaslike/agent-marketplace). One command installs the MCP server, all 10 hooks, and pre-configures skills.
 
 ---
 
@@ -35,12 +35,12 @@ apt install ripgrep
 # Step 1 — Add the marketplace (one-time global setup)
 /plugin marketplace add joeblackwaslike/agent-marketplace
 
-# Step 2 — Install memtree
-/plugin install memtree@agent-marketplace
+# Step 2 — Install ctx-tree
+/plugin install ctx-tree@agent-marketplace
 ```
 
 The installer:
-- Registers the `memtree` MCP server
+- Registers the `ctx-tree` MCP server
 - Registers the `mcp-exec` MCP server (sandboxed execution)
 - Installs all 10 hooks (SessionStart, PreToolUse, PostToolUse, UserPromptSubmit, Stop)
 - Configures skills for tool redirect guidance
@@ -57,12 +57,12 @@ In a new session, run:
 > Tell me what MCP tools you have available
 ```
 
-You should see `memtree_read`, `memtree_grep`, `memtree_compose`, and the other memtree tools listed. The SessionStart hook will also inject a tool guide into Claude's context automatically.
+You should see `ctx_tree_read`, `ctx_tree_grep`, `ctx_tree_compose`, and the other ctx-tree tools listed. The SessionStart hook will also inject a tool guide into Claude's context automatically.
 
 To verify the graph is working:
 
 ```
-> Use memtree_read to read the README.md file
+> Use ctx_tree_read to read the README.md file
 ```
 
 The response should return a compact `nodeId` reference, not the raw file contents.
@@ -76,9 +76,9 @@ If you prefer not to use the marketplace, add the following to your Claude Code 
 ```json
 {
   "mcpServers": {
-    "memtree": {
+    "ctx-tree": {
       "command": "/usr/bin/env",
-      "args": ["bun", "run", "/path/to/memtree/mcp/dist/server.js"]
+      "args": ["bun", "run", "/path/to/ctx-tree/mcp/dist/server.js"]
     }
   }
 }
@@ -91,7 +91,7 @@ And add the hooks from `.claude-plugin/hooks/` to your Claude Code hooks config.
 ## Uninstall
 
 ```sh
-/plugin uninstall memtree@agent-marketplace
+/plugin uninstall ctx-tree@agent-marketplace
 ```
 
-This removes all hooks and MCP server registrations. The graph data at `~/.memtree/` is left intact — delete it manually if you want to wipe the store.
+This removes all hooks and MCP server registrations. The graph data at `~/.ctx-tree/` is left intact — delete it manually if you want to wipe the store.

@@ -1,9 +1,9 @@
 /**
  * PostToolUse:WebSearch — extracts URLs from search results and stores each
- * as a compact web_chunk node via memtree_browse.
+ * as a compact web_chunk node via ctx_tree_browse.
  *
  * Runs fire-and-forget: emits no systemMessage and does not block the response.
- * The stored nodes surface in future sessions via memtree_search and are
+ * The stored nodes surface in future sessions via ctx_tree_search and are
  * available to the Agent enrichment hook's FTS pass.
  *
  * Only processes results that contain recognisable URL fields.
@@ -55,7 +55,7 @@ if (urls.length === 0) process.exit(0);
 
 // ── Open DB ───────────────────────────────────────────────────────────────────
 const projectHash = computeProjectHash(cwd);
-const dbPath      = join(process.env.HOME ?? '/tmp', '.memtree', projectHash, 'store.db');
+const dbPath      = join(process.env.HOME ?? '/tmp', '.ctx-tree', projectHash, 'store.db');
 if (!existsSync(dbPath)) process.exit(0);
 
 let db;
@@ -71,7 +71,7 @@ for (const url of urls) {
   if (existing) continue; // already stored from a prior session
 
   // Record a lightweight stub — the actual page content is fetched on demand
-  // via memtree_browse. We store the URL itself so FTS picks it up.
+  // via ctx_tree_browse. We store the URL itself so FTS picks it up.
   const nodeId      = crypto.randomUUID();
   const now         = Date.now();
   const contentHash = createHash('sha256').update(url).digest('hex');

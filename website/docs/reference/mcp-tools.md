@@ -6,16 +6,16 @@ sidebar_position: 2
 
 # MCP Tools Reference
 
-Complete parameter reference for all 10 memtree MCP tools.
+Complete parameter reference for all 10 ctx-tree MCP tools.
 
 ---
 
-## memtree_read
+## ctx_tree_read
 
 Read a file with tree-sitter semantic chunking and mtime caching.
 
 ```typescript
-memtree_read({
+ctx_tree_read({
   path: string;           // required — absolute or relative file path
   lines?: [number, number]; // optional — [start, end] line range (0-based)
   budget_tokens?: number; // optional — token budget for chunking
@@ -29,18 +29,18 @@ memtree_read({
   path: string;
   cached: boolean;
   chunks: number;
-  hint: string; // how to retrieve content via memtree_compose
+  hint: string; // how to retrieve content via ctx_tree_compose
 }
 ```
 
 ---
 
-## memtree_grep
+## ctx_tree_grep
 
 Ripgrep search — results stored as typed graph nodes.
 
 ```typescript
-memtree_grep({
+ctx_tree_grep({
   pattern: string;          // required — regex pattern to search
   path?: string;            // optional — path to search within (default: cwd)
   case_insensitive?: boolean; // optional — case-insensitive search
@@ -59,12 +59,12 @@ memtree_grep({
 
 ---
 
-## memtree_browse
+## ctx_tree_browse
 
 Fetch a URL, extract structured text, store as a `web_chunk` node.
 
 ```typescript
-memtree_browse({
+ctx_tree_browse({
   url: string;             // required — HTTP/HTTPS URL to fetch
   budget_tokens?: number;  // optional — token budget for body content
   force?: boolean;         // optional — bypass cache and re-fetch
@@ -87,12 +87,12 @@ memtree_browse({
 
 ---
 
-## memtree_compose
+## ctx_tree_compose
 
 BFS graph expansion + relevance scoring + budget-packing into a single context block.
 
 ```typescript
-memtree_compose({
+ctx_tree_compose({
   node_ids: string[];       // required — seed node IDs
   budget_tokens: number;    // required — token budget for output
   format?: 'raw' | 'outline'; // optional — output format (default: 'raw')
@@ -115,12 +115,12 @@ memtree_compose({
 
 ---
 
-## memtree_search
+## ctx_tree_search
 
 FTS5 keyword search across all stored nodes.
 
 ```typescript
-memtree_search({
+ctx_tree_search({
   query: string;           // required — search query
   mode?: 'keyword';        // optional — search mode (only 'keyword' supported)
   limit?: number;          // optional — max results (default: 20)
@@ -137,12 +137,12 @@ memtree_search({
 
 ---
 
-## memtree_neighbors
+## ctx_tree_neighbors
 
 Graph walk from a node — returns neighbors up to depth 5.
 
 ```typescript
-memtree_neighbors({
+ctx_tree_neighbors({
   node_id: string;         // required — starting node ID
   depth?: number;          // optional — walk depth, max 5 (default: 1)
   edge_kinds?: EdgeKind[]; // optional — edge kinds to traverse
@@ -154,12 +154,12 @@ memtree_neighbors({
 
 ---
 
-## memtree_path_to_root
+## ctx_tree_path_to_root
 
 Walk the parent chain from any node to the session root.
 
 ```typescript
-memtree_path_to_root({
+ctx_tree_path_to_root({
   node_id: string; // required — node ID to trace
 })
 ```
@@ -168,12 +168,12 @@ memtree_path_to_root({
 
 ---
 
-## memtree_recent
+## ctx_tree_recent
 
 Return the most recently created nodes, newest first.
 
 ```typescript
-memtree_recent({
+ctx_tree_recent({
   since?: number;    // optional — Unix timestamp lower bound (epoch ms)
   limit?: number;    // optional — max results (default: 20)
   filters?: Filters; // optional
@@ -184,12 +184,12 @@ memtree_recent({
 
 ---
 
-## memtree_note
+## ctx_tree_note
 
 Store a note or observation in the graph.
 
 ```typescript
-memtree_note({
+ctx_tree_note({
   content: string; // required — note content
   title?: string;  // optional — short title (derived from first line if omitted)
 })
@@ -199,7 +199,7 @@ memtree_note({
 
 ---
 
-## memtree_monitor
+## ctx_tree_monitor
 
 Run a shell command via `sh -c`, capture output as a stored node.
 
@@ -208,7 +208,7 @@ This tool executes directly — it does **not** go through Claude Code's permiss
 :::
 
 ```typescript
-memtree_monitor({
+ctx_tree_monitor({
   command: string;      // required — shell command to run
   timeout_ms?: number;  // optional — timeout in ms (default: 30000)
   cwd?: string;         // optional — working directory (default: process cwd)
@@ -224,7 +224,7 @@ memtree_monitor({
   lines_captured: number;
   cached: boolean;
   preview: string; // last ~500 chars of output
-  hint: string;    // how to retrieve full output via memtree_compose
+  hint: string;    // how to retrieve full output via ctx_tree_compose
 }
 ```
 

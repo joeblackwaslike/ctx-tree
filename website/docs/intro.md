@@ -4,11 +4,11 @@ title: Introduction
 sidebar_position: 1
 ---
 
-# memtree
+# ctx-tree
 
 **Claude Code with a photographic memory.**
 
-memtree is a persistent SQLite property graph that sits between Claude Code and every tool call. When Claude reads a file, runs a grep, fetches a URL, or calls any MCP tool, a hook intercepts the result, stores it in the graph, and returns a compact `nodeId` reference (~60 tokens) instead of dumping raw data into the context window.
+ctx-tree is a persistent SQLite property graph that sits between Claude Code and every tool call. When Claude reads a file, runs a grep, fetches a URL, or calls any MCP tool, a hook intercepts the result, stores it in the graph, and returns a compact `nodeId` reference (~60 tokens) instead of dumping raw data into the context window.
 
 The same operation next week costs zero tokens. It's already in the graph.
 
@@ -30,13 +30,13 @@ This is **context rot**.
 
 ## The solution
 
-memtree intercepts every tool call via Claude Code hooks:
+ctx-tree intercepts every tool call via Claude Code hooks:
 
 1. The native tool is **blocked** — no raw data enters the context window
-2. The equivalent **memtree MCP tool** runs instead
+2. The equivalent **ctx-tree MCP tool** runs instead
 3. The result is **stored in the graph** — chunked, indexed, linked
 4. Claude gets back a **compact nodeId** (~60 tokens)
-5. Any future session can **recall it for free** via `memtree_compose`
+5. Any future session can **recall it for free** via `ctx_tree_compose`
 
 The graph persists across sessions. Knowledge accumulates. Context stays lean.
 
@@ -44,6 +44,6 @@ The graph persists across sessions. Knowledge accumulates. Context stays lean.
 
 ## Next steps
 
-- [Install memtree](./installation) — one-line install via agent marketplace
+- [Install ctx-tree](./installation) — one-line install via agent marketplace
 - [Getting Started](./getting-started) — first session walkthrough
 - [How it works](./user-guide/how-it-works) — deep dive into the architecture

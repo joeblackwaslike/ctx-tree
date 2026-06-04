@@ -10,7 +10,7 @@ import { DEFAULT_CONFIG } from '../config';
 import type { Database } from 'bun:sqlite';
 import type { StoreBackend } from '../store/index.js';
 
-const TEST_DB = '/tmp/memtree-walkers-test.db';
+const TEST_DB = '/tmp/ctx-tree-walkers-test.db';
 let db: Database;
 let store: StoreBackend;
 const cfg = DEFAULT_CONFIG;

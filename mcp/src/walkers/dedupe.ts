@@ -1,5 +1,5 @@
 import type { StoreBackend } from '../store/index.js';
-import type { MemtreeConfig } from '../store/types.js';
+import type { CtxTreeConfig } from '../store/types.js';
 
 export function cosineSimilarity(a: Float32Array, b: Float32Array): number {
   let dot = 0, normA = 0, normB = 0;
@@ -11,7 +11,7 @@ export function cosineSimilarity(a: Float32Array, b: Float32Array): number {
   return dot / (Math.sqrt(normA) * Math.sqrt(normB));
 }
 
-export async function runDedupeWalker(store: StoreBackend, _config: MemtreeConfig): Promise<void> {
+export async function runDedupeWalker(store: StoreBackend, _config: CtxTreeConfig): Promise<void> {
   const pairs = await store.getDedupeCandidatePairs();
   if (pairs.length === 0) return;
 

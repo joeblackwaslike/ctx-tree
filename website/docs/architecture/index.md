@@ -6,7 +6,7 @@ sidebar_position: 1
 
 # Architecture
 
-Technical architecture documents for memtree.
+Technical architecture documents for ctx-tree.
 
 ## Contents
 

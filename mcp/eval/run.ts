@@ -7,7 +7,7 @@ import { runLatencyCases } from './cases/latency';
 import { runSearchCases, runGracefulDegradationCases } from './cases/search';
 import { runRoutingCases } from './cases/routing';
 
-const DB_PATH = '/tmp/memtree-eval.db';
+const DB_PATH = '/tmp/ctx-tree-eval.db';
 const FIXTURE_DIR = join(import.meta.dir, 'fixtures', 'src');
 const FIXTURE_FILE = join(FIXTURE_DIR, 'math.ts');
 

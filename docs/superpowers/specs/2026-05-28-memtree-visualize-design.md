@@ -1,11 +1,11 @@
-# memtree Visualizer — Design Spec
+# ctx-tree Visualizer — Design Spec
 
 **Date:** 2026-05-28
 **Status:** Approved
 
 ## Overview
 
-A real-time web-based graph visualizer for the memtree SQLite store. A lazy-start HTTP + WebSocket server embedded in the MCP server process exposes the live property graph to a browser (or VS Code webview). Changes appear in the browser within a single event loop tick of the write — no polling.
+A real-time web-based graph visualizer for the ctx-tree SQLite store. A lazy-start HTTP + WebSocket server embedded in the MCP server process exposes the live property graph to a browser (or VS Code webview). Changes appear in the browser within a single event loop tick of the write — no polling.
 
 ---
 
@@ -39,9 +39,9 @@ Wraps `db.onUpdate(callback)` from `bun:sqlite`. The callback fires synchronousl
 
 ```ts
 type ChangeEvent =
-  | { op: 'insert' | 'update', table: 'nodes', id: string, data: MemtreeNode }
+  | { op: 'insert' | 'update', table: 'nodes', id: string, data: CtxTreeNode }
   | { op: 'delete', table: 'nodes', id: string }
-  | { op: 'insert', table: 'edges', id: string, data: MemtreeEdge }
+  | { op: 'insert', table: 'edges', id: string, data: CtxTreeEdge }
   | { op: 'delete', table: 'edges', id: string };
 ```
 
@@ -62,7 +62,7 @@ All endpoints served by a Bun `Bun.serve()` HTTP server.
 | Endpoint | Method | Purpose |
 |---|---|---|
 | `/` | GET | Serves `ui.html` |
-| `/api/state` | GET | Full snapshot — `{ nodes: MemtreeNode[], edges: MemtreeEdge[] }`. Query params: `session_id`, `kind`, `status` (comma-separated for multi). |
+| `/api/state` | GET | Full snapshot — `{ nodes: CtxTreeNode[], edges: CtxTreeEdge[] }`. Query params: `session_id`, `kind`, `status` (comma-separated for multi). |
 | `/api/node/:id` | GET | Single node with full content. Used by right panel on click. |
 | `/api/events` | WS upgrade | WebSocket stream of change events. |
 | `/health` | GET | `{ status: 'ok', nodeCount: number, edgeCount: number }` |
@@ -73,17 +73,17 @@ All endpoints served by a Bun `Bun.serve()` HTTP server.
 
 ```ts
 // snapshot (sent once on connect)
-{ op: 'snapshot', nodes: MemtreeNode[], edges: MemtreeEdge[] }
+{ op: 'snapshot', nodes: CtxTreeNode[], edges: CtxTreeEdge[] }
 
 // delta (sent on every db change)
-{ op: 'insert' | 'update' | 'delete', table: 'nodes' | 'edges', id: string, data?: MemtreeNode | MemtreeEdge }
+{ op: 'insert' | 'update' | 'delete', table: 'nodes' | 'edges', id: string, data?: CtxTreeNode | CtxTreeEdge }
 ```
 
 Snapshot applies the current `status: live` filter by default. Browser builds its graph from the snapshot and patches it on each delta — no polling, no full re-renders.
 
 ---
 
-## MCP Tool (`memtree_visualize`)
+## MCP Tool (`ctx_tree_visualize`)
 
 Registered alongside the existing tools in `server.ts`.
 
@@ -97,7 +97,7 @@ Registered alongside the existing tools in `server.ts`.
 
 - Module-level singleton `vizServer: VisualizeServer | null = null`
 - If `vizServer` is null, construct and start it
-- Port resolution: `MEMTREE_VIZ_PORT` env → `port` arg → `7777`; if taken, increment until a free port is found (max 10 attempts)
+- Port resolution: `CTX_TREE_VIZ_PORT` env → `port` arg → `7777`; if taken, increment until a free port is found (max 10 attempts)
 - If `open` is `true` (default): call `open <url>` (macOS) / `xdg-open <url>` (Linux) to launch the browser
 - If server is already running, skip construction and just return the URL (idempotent)
 
@@ -178,8 +178,8 @@ Always visible regardless of active view tab. Sections:
 
 The VS Code extension will:
 
-1. Import `VisualizeServer` from the compiled MCP package (or a shared `@memtree/visualize` sub-package extracted later)
-2. Resolve `dbPath` from `~/.memtree/<projectHash>/store.db` using `computeProjectHash(workspaceRoot)`
+1. Import `VisualizeServer` from the compiled MCP package (or a shared `@ctx-tree/visualize` sub-package extracted later)
+2. Resolve `dbPath` from `~/.ctx-tree/<projectHash>/store.db` using `computeProjectHash(workspaceRoot)`
 3. Open the DB directly: `new Database(dbPath, { readonly: true })` from `bun:sqlite` (bypasses `openDb` to avoid schema migrations on a read-only connection)
 4. Construct `new VisualizeServer(db, { port })` and call `.start()`
 5. Either (a) load the returned URL in a webview, or (b) serve `ui.html` directly from the extension
@@ -196,4 +196,4 @@ No protocol changes are needed — the webview speaks the same WebSocket API.
 | `mcp/src/visualize/server.ts` | Create — VisualizeServer class (HTTP + WebSocket) |
 | `mcp/src/visualize/ui.html` | Create — self-contained D3 frontend |
 | `mcp/src/tools/visualize.ts` | Create — MCP tool handler |
-| `mcp/src/server.ts` | Modify — import and register `memtree_visualize` tool |
+| `mcp/src/server.ts` | Modify — import and register `ctx_tree_visualize` tool |

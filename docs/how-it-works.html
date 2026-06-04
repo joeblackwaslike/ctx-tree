@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>memtree · How It Works</title>
+<title>ctx-tree · How It Works</title>
 <script src="https://d3js.org/d3.v7.min.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -290,7 +290,7 @@ footer{padding:36px 0;border-top:1px solid var(--border);text-align:center;color
 
 <nav>
   <div class="nav-inner">
-    <a class="nav-logo" href="#top">memtree <span>/ how it works</span></a>
+    <a class="nav-logo" href="#top">ctx-tree <span>/ how it works</span></a>
     <a class="nav-link" href="#arch">🗄 Graph</a>
     <span class="nav-sep">·</span>
     <a class="nav-link" href="#read">📄 Read</a>
@@ -320,7 +320,7 @@ footer{padding:36px 0;border-top:1px solid var(--border);text-align:center;color
 <div class="container">
   <div class="hero-badge">🌳 SQLite property graph · FTS5 · Semantic chunks · Hook-intercepted tools</div>
   <h1>Every tool call builds a graph.<br>Claude gets references, not raw data.</h1>
-  <p class="hero-sub">memtree intercepts all Claude Code native tools <em>and</em> all MCP tool calls — reads, searches, web fetches, commands, agent invocations, skills — and routes them through a persistent SQLite property graph. Context shrinks 95–99%. Knowledge accumulates across sessions.</p>
+  <p class="hero-sub">ctx-tree intercepts all Claude Code native tools <em>and</em> all MCP tool calls — reads, searches, web fetches, commands, agent invocations, skills — and routes them through a persistent SQLite property graph. Context shrinks 95–99%. Knowledge accumulates across sessions.</p>
   <div class="why-grid">
     <div class="why-card">
       <div class="why-ico">🔥</div>
@@ -330,27 +330,27 @@ footer{padding:36px 0;border-top:1px solid var(--border);text-align:center;color
     <div class="why-card">
       <div class="why-ico">🌳</div>
       <h3 class="why-ttl">The Solution: Hook Everything</h3>
-      <p class="why-body">memtree intercepts every tool call via Claude Code hooks — native <em>and</em> MCP. Content lands in a persistent SQLite property graph, chunked by symbol and indexed. Claude gets back a compact <code>nodeId</code> reference, not raw bytes. The same file read next week costs zero tokens — it's already in the graph.</p>
+      <p class="why-body">ctx-tree intercepts every tool call via Claude Code hooks — native <em>and</em> MCP. Content lands in a persistent SQLite property graph, chunked by symbol and indexed. Claude gets back a compact <code>nodeId</code> reference, not raw bytes. The same file read next week costs zero tokens — it's already in the graph.</p>
     </div>
     <div class="why-card">
       <div class="why-ico">🚀</div>
       <h3 class="why-ttl">The Payoff: 10× Sessions</h3>
-      <p class="why-body">Sessions that previously stalled at 40k tokens now run to completion. Knowledge accumulates across sessions — prior reads surface instantly via <code>memtree_compose</code>. You can explore an entire codebase, debug a production incident, and ship a feature all in one session. Context rot disappears.</p>
+      <p class="why-body">Sessions that previously stalled at 40k tokens now run to completion. Knowledge accumulates across sessions — prior reads surface instantly via <code>ctx_tree_compose</code>. You can explore an entire codebase, debug a production incident, and ship a feature all in one session. Context rot disappears.</p>
     </div>
   </div>
   <div style="text-align:center;margin-top:28px;margin-bottom:36px">
-    <a href="https://github.com/joeblackwaslike/memtree/blob/main/docs/superpowers/specs/2026-05-17-memtree-design.md" class="spec-link" target="_blank" rel="noopener">📄 Read the spec →</a>
+    <a href="https://github.com/joeblackwaslike/ctx-tree/blob/main/docs/superpowers/specs/2026-05-17-ctx-tree-design.md" class="spec-link" target="_blank" rel="noopener">📄 Read the spec →</a>
   </div>
   <div class="ctx-compare">
     <div class="ctx-card">
-      <h3>❌ Without memtree</h3>
+      <h3>❌ Without ctx-tree</h3>
       <div class="ctx-row"><span class="ctx-lbl">Read file</span><div class="ctx-bg"><div class="ctx-bar" style="width:100%;background:#f87171;opacity:.7"></div></div><span class="ctx-val">~4,200 tok</span></div>
       <div class="ctx-row"><span class="ctx-lbl">Grep (8 files)</span><div class="ctx-bg"><div class="ctx-bar" style="width:100%;background:#fb923c;opacity:.7"></div></div><span class="ctx-val">~8,400 tok</span></div>
       <div class="ctx-row"><span class="ctx-lbl">WebFetch</span><div class="ctx-bg"><div class="ctx-bar" style="width:100%;background:#f97316;opacity:.7"></div></div><span class="ctx-val">~11,000 tok</span></div>
       <div class="ctx-row"><span class="ctx-lbl">MCP tool</span><div class="ctx-bg"><div class="ctx-bar" style="width:100%;background:#ea580c;opacity:.7"></div></div><span class="ctx-val">~3,600 tok</span></div>
     </div>
     <div class="ctx-card">
-      <h3>✅ With memtree</h3>
+      <h3>✅ With ctx-tree</h3>
       <div class="ctx-row"><span class="ctx-lbl">Read file</span><div class="ctx-bg"><div class="ctx-bar" style="width:1.5%;background:#4ade80"></div></div><span class="ctx-val">~60 tok</span></div>
       <div class="ctx-row"><span class="ctx-lbl">Grep (8 files)</span><div class="ctx-bg"><div class="ctx-bar" style="width:2%;background:#4ade80"></div></div><span class="ctx-val">~160 tok</span></div>
       <div class="ctx-row"><span class="ctx-lbl">WebFetch</span><div class="ctx-bg"><div class="ctx-bar" style="width:1%;background:#4ade80"></div></div><span class="ctx-val">~110 tok</span></div>
@@ -372,13 +372,13 @@ footer{padding:36px 0;border-top:1px solid var(--border);text-align:center;color
     <div class="flow-arr">→</div>
     <div class="flow-step" style="cursor:pointer" onclick="openPropPanel({kind:'tool_call',uri:'flow://deny-native',props:{action:'Native tool call denied',result:'Raw output never enters context window',mechanism:'Hook returns {action:&quot;deny&quot;} to Claude Code runtime',benefit:'Prevents thousands of tokens of raw data'}})"><div class="flow-step-ico">🚫</div><div class="flow-step-t">Deny native</div><div class="flow-step-s">tool blocked</div></div>
     <div class="flow-arr">→</div>
-    <div class="flow-step accent" style="cursor:pointer" onclick="openPropPanel({kind:'mcp_tool',uri:'flow://memtree-mcp',props:{tools:'memtree_read · memtree_grep · memtree_browse · memtree_search · memtree_compose · memtree_neighbors · memtree_monitor · memtree_note · memtree_recent · memtree_path_to_root',server:'memtree MCP server (Bun)',transport:'stdio'}})"><div class="flow-step-ico">🌳</div><div class="flow-step-t">memtree_*</div><div class="flow-step-s">MCP tool runs</div></div>
+    <div class="flow-step accent" style="cursor:pointer" onclick="openPropPanel({kind:'mcp_tool',uri:'flow://ctx-tree-mcp',props:{tools:'ctx_tree_read · ctx_tree_grep · ctx_tree_browse · ctx_tree_search · ctx_tree_compose · ctx_tree_neighbors · ctx_tree_monitor · ctx_tree_note · ctx_tree_recent · ctx_tree_path_to_root',server:'ctx-tree MCP server (Bun)',transport:'stdio'}})"><div class="flow-step-ico">🌳</div><div class="flow-step-t">ctx_tree_*</div><div class="flow-step-s">MCP tool runs</div></div>
     <div class="flow-arr">→</div>
-    <div class="flow-step" style="cursor:pointer" onclick="openPropPanel({kind:'file_chunk',uri:'flow://node-stored',props:{storage:'SQLite property graph (~/.memtree/<project-hash>/store.db)',indexed:'FTS5 full-text search',chunking:'tree-sitter semantic chunking for code',dedup:'content_hash deduplication — same file costs 0 tokens on re-read',edges:'parent → child, references, derived_from, follows, summarizes'}})"><div class="flow-step-ico">💾</div><div class="flow-step-t">Node stored</div><div class="flow-step-s">SQLite graph</div></div>
+    <div class="flow-step" style="cursor:pointer" onclick="openPropPanel({kind:'file_chunk',uri:'flow://node-stored',props:{storage:'SQLite property graph (~/.ctx-tree/<project-hash>/store.db)',indexed:'FTS5 full-text search',chunking:'tree-sitter semantic chunking for code',dedup:'content_hash deduplication — same file costs 0 tokens on re-read',edges:'parent → child, references, derived_from, follows, summarizes'}})"><div class="flow-step-ico">💾</div><div class="flow-step-t">Node stored</div><div class="flow-step-s">SQLite graph</div></div>
     <div class="flow-arr">→</div>
-    <div class="flow-step accent" style="cursor:pointer" onclick="openPropPanel({kind:'file_chunk',uri:'flow://node-ref',props:{format:'nodeId (ULID — 26 chars)',example:'01HZQX9F4C2B7T8N3M5K6J0P1A',token_cost:'~60 tokens vs ~4200 for raw file',usage:'pass to memtree_compose() for budget-bounded recall',recall:'free on repeat — already in graph'}})"><div class="flow-step-ico">📎</div><div class="flow-step-t">Reference</div><div class="flow-step-s">returned to Claude</div></div>
+    <div class="flow-step accent" style="cursor:pointer" onclick="openPropPanel({kind:'file_chunk',uri:'flow://node-ref',props:{format:'nodeId (ULID — 26 chars)',example:'01HZQX9F4C2B7T8N3M5K6J0P1A',token_cost:'~60 tokens vs ~4200 for raw file',usage:'pass to ctx_tree_compose() for budget-bounded recall',recall:'free on repeat — already in graph'}})"><div class="flow-step-ico">📎</div><div class="flow-step-t">Reference</div><div class="flow-step-s">returned to Claude</div></div>
     <div class="flow-arr">→</div>
-    <div class="flow-step" style="cursor:pointer" onclick="openPropPanel({kind:'summary',uri:'flow://compose',props:{tool:'memtree_compose(nodeIds, budget)',budget:'token limit — compose stops when budget exhausted',traversal:'BFS from seed nodes, prioritises high-relevance neighbors',returns:'full content of each node up to budget',cross_session:'works across sessions — graph is persistent'}})"><div class="flow-step-ico">🎯</div><div class="flow-step-t">compose()</div><div class="flow-step-s">budget-bounded recall</div></div>
+    <div class="flow-step" style="cursor:pointer" onclick="openPropPanel({kind:'summary',uri:'flow://compose',props:{tool:'ctx_tree_compose(nodeIds, budget)',budget:'token limit — compose stops when budget exhausted',traversal:'BFS from seed nodes, prioritises high-relevance neighbors',returns:'full content of each node up to budget',cross_session:'works across sessions — graph is persistent'}})"><div class="flow-step-ico">🎯</div><div class="flow-step-t">compose()</div><div class="flow-step-s">budget-bounded recall</div></div>
   </div>
   <h3 style="margin:20px 0 4px;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.07em">Node types — click any to inspect</h3>
   <div class="node-legend" id="legend-nodes"></div>
@@ -391,13 +391,13 @@ footer{padding:36px 0;border-top:1px solid var(--border);text-align:center;color
 <div id="read" class="tool-section">
 <div class="container">
   <div class="tool-hdr">
-    <div class="tool-title"><span class="tool-name">Read</span><span class="tool-arrow">→</span><span class="tool-target">memtree_read</span></div>
+    <div class="tool-title"><span class="tool-name">Read</span><span class="tool-arrow">→</span><span class="tool-target">ctx_tree_read</span></div>
     <div class="badges"><span class="badge b-pre">PreToolUse</span><span class="badge b-deny">deny</span></div>
   </div>
   <p class="tool-tag">File content is semantically chunked (functions, classes, modules) into <tt>file_chunk</tt> nodes linked by <tt>next</tt> edges. Each chunk carries <tt>source_uri</tt>, <tt>content</tt>, <tt>size</tt>, and <tt>embedding</tt>. Claude gets compact references instead of raw source. <strong>Click any node to explore its properties.</strong></p>
   <div class="ba">
     <div class="ba-panel">
-      <div class="ba-hdr before">Without memtree<span class="tok hi">~4,200 tokens</span></div>
+      <div class="ba-hdr before">Without ctx-tree<span class="tok hi">~4,200 tokens</span></div>
       <div class="ba-body">
         <div class="lbl">Claude calls</div>
         <div class="cb"><span class="k">Read</span>({ <span class="p">file_path</span>: <span class="s">"/src/auth/login.ts"</span> })</div>
@@ -411,12 +411,12 @@ footer{padding:36px 0;border-top:1px solid var(--border);text-align:center;color
       </div>
     </div>
     <div class="ba-panel">
-      <div class="ba-hdr after">With memtree<span class="tok lo">~62 tokens</span></div>
+      <div class="ba-hdr after">With ctx-tree<span class="tok lo">~62 tokens</span></div>
       <div class="ba-body">
         <div class="lbl">Hook denies Read → calls</div>
-        <div class="cb"><span class="k">memtree_read</span>({ <span class="p">path</span>: <span class="s">"/src/auth/login.ts"</span> })</div>
+        <div class="cb"><span class="k">ctx_tree_read</span>({ <span class="p">path</span>: <span class="s">"/src/auth/login.ts"</span> })</div>
         <div class="lbl">Returned to Claude</div>
-        <div class="ob compact"><span class="p">memtree_read</span> stored <span class="n">4</span> chunks:
+        <div class="ob compact"><span class="p">ctx_tree_read</span> stored <span class="n">4</span> chunks:
   <span class="k">fc-a1b2</span>  <span class="s">login.ts#imports</span>  <span class="c">152B</span>
   <span class="k">fc-c3d4</span>  <span class="s">login.ts#login</span>    <span class="c">487B</span>
   <span class="k">fc-e5f6</span>  <span class="s">login.ts#validateToken</span> <span class="c">312B</span>
@@ -449,13 +449,13 @@ footer{padding:36px 0;border-top:1px solid var(--border);text-align:center;color
 <div id="grep" class="tool-section">
 <div class="container">
   <div class="tool-hdr">
-    <div class="tool-title"><span class="tool-name">Grep</span><span class="tool-arrow">→</span><span class="tool-target">memtree_grep</span></div>
+    <div class="tool-title"><span class="tool-name">Grep</span><span class="tool-arrow">→</span><span class="tool-target">ctx_tree_grep</span></div>
     <div class="badges"><span class="badge b-pre">PreToolUse</span><span class="badge b-deny">deny</span></div>
   </div>
   <p class="tool-tag">FTS5 full-text search stores matched files as <tt>file_chunk</tt> nodes linked via <tt>result</tt> edges. <strong>Click any file node to expand its semantic chunk stream inline.</strong> Re-runs return cached node IDs instantly.</p>
   <div class="ba">
     <div class="ba-panel">
-      <div class="ba-hdr before">Without memtree<span class="tok hi">~8,400 tokens</span></div>
+      <div class="ba-hdr before">Without ctx-tree<span class="tok hi">~8,400 tokens</span></div>
       <div class="ba-body">
         <div class="lbl">Claude calls</div>
         <div class="cb"><span class="k">Grep</span>({ <span class="p">pattern</span>: <span class="s">"useAuthContext"</span>, <span class="p">glob</span>: <span class="s">"**/*.tsx"</span> })</div>
@@ -465,10 +465,10 @@ footer{padding:36px 0;border-top:1px solid var(--border);text-align:center;color
       </div>
     </div>
     <div class="ba-panel">
-      <div class="ba-hdr after">With memtree<span class="tok lo">~160 tokens</span></div>
+      <div class="ba-hdr after">With ctx-tree<span class="tok lo">~160 tokens</span></div>
       <div class="ba-body">
         <div class="lbl">Hook denies Grep → calls</div>
-        <div class="cb"><span class="k">memtree_grep</span>({ <span class="p">pattern</span>: <span class="s">"useAuthContext"</span> })</div>
+        <div class="cb"><span class="k">ctx_tree_grep</span>({ <span class="p">pattern</span>: <span class="s">"useAuthContext"</span> })</div>
         <div class="ob compact">Found <span class="n">4</span> matches — stored as nodes:
   <span class="k">fc-h1i2</span>  Header.tsx#useAuthContext
   <span class="k">fc-j3k4</span>  Sidebar.tsx#useAuthContext
@@ -500,7 +500,7 @@ footer{padding:36px 0;border-top:1px solid var(--border);text-align:center;color
 <div id="webfetch" class="tool-section">
 <div class="container">
   <div class="tool-hdr">
-    <div class="tool-title"><span class="tool-name">WebFetch</span><span class="tool-arrow">→</span><span class="tool-target">memtree_browse</span></div>
+    <div class="tool-title"><span class="tool-name">WebFetch</span><span class="tool-arrow">→</span><span class="tool-target">ctx_tree_browse</span></div>
     <div class="badges"><span class="badge b-pre">PreToolUse</span><span class="badge b-deny">deny</span></div>
   </div>
   <p class="tool-tag">Fetched pages are stored as <tt>web_content</tt> nodes with an accessibility tree, ref numbers, and content chunks. <strong>Click the web_content node</strong> to see the full accessibility tree — each element has a ref you can use with Bash tools.</p>
@@ -525,7 +525,7 @@ footer{padding:36px 0;border-top:1px solid var(--border);text-align:center;color
 <div id="monitor" class="tool-section">
 <div class="container">
   <div class="tool-hdr">
-    <div class="tool-title"><span class="tool-name">Bash / Monitor</span><span class="tool-arrow">→</span><span class="tool-target">memtree_monitor</span></div>
+    <div class="tool-title"><span class="tool-name">Bash / Monitor</span><span class="tool-arrow">→</span><span class="tool-target">ctx_tree_monitor</span></div>
     <div class="badges"><span class="badge b-pre">PreToolUse</span><span class="badge b-post">PostToolUse</span><span class="badge b-capture">capture</span></div>
   </div>
   <p class="tool-tag">Long-running commands stream output as <tt>output_chunk</tt> nodes via <tt>next</tt> edges — like a Python generator. Read-only mode captures stdout. Read-write mode also allows sending stdin to the process.</p>
@@ -571,10 +571,10 @@ footer{padding:36px 0;border-top:1px solid var(--border);text-align:center;color
 <div id="websearch" class="tool-section">
 <div class="container">
   <div class="tool-hdr">
-    <div class="tool-title"><span class="tool-name">WebSearch</span><span class="tool-arrow">→</span><span class="tool-target">memtree_search</span></div>
+    <div class="tool-title"><span class="tool-name">WebSearch</span><span class="tool-arrow">→</span><span class="tool-target">ctx_tree_search</span></div>
     <div class="badges"><span class="badge b-pre">PreToolUse</span><span class="badge b-deny">deny</span></div>
   </div>
-  <p class="tool-tag">Search results are stored as <tt>web_result</tt> stub nodes with URL, status, title, etag, and last-updated. Failed fetches are marked red. Any result can be expanded via <tt>memtree_browse</tt>.</p>
+  <p class="tool-tag">Search results are stored as <tt>web_result</tt> stub nodes with URL, status, title, etag, and last-updated. Failed fetches are marked red. Any result can be expanded via <tt>ctx_tree_browse</tt>.</p>
   <div class="graph-wrap" id="g-websearch">
     <div class="graph-top">
       <span class="graph-lbl">📡 WebSearch · result nodes with status — red = failed</span>
@@ -648,7 +648,7 @@ footer{padding:36px 0;border-top:1px solid var(--border);text-align:center;color
     <div class="tool-title"><span class="tool-name">MCP Tools</span><span class="tool-arrow">→</span><span class="tool-target">mcp_tool nodes</span></div>
     <div class="badges"><span class="badge b-mcp">MCP</span><span class="badge b-pre">PreToolUse</span><span class="badge b-post">PostToolUse</span></div>
   </div>
-  <p class="tool-tag">memtree intercepts <em>all</em> MCP tool calls, not just native Claude Code tools. Every MCP server invocation creates a <tt>mcp_tool</tt> node linked to the <tt>mcp_server</tt> and tool call result, storing arguments, output, and timing metadata.</p>
+  <p class="tool-tag">ctx-tree intercepts <em>all</em> MCP tool calls, not just native Claude Code tools. Every MCP server invocation creates a <tt>mcp_tool</tt> node linked to the <tt>mcp_server</tt> and tool call result, storing arguments, output, and timing metadata.</p>
   <div class="graph-wrap" id="g-mcp">
     <div class="graph-top">
       <span class="graph-lbl">⚙ MCP · session → turn → tool_call → mcp_server → result</span>
@@ -756,7 +756,7 @@ footer{padding:36px 0;border-top:1px solid var(--border);text-align:center;color
         </div>
         <div class="hook-col">
           <div class="hook-col-lbl">What it does</div>
-          <div class="hook-col-body">Injects the full memtree tool usage guide into context — always-on redirects, graph navigation commands (<code>memtree_neighbors</code>, <code>memtree_search</code>, <code>memtree_compose</code>, <code>memtree_recent</code>), and the read→nodeId→compose workflow pattern.<br><span class="hook-result-badge hr-inject">✦ additionalContext injected</span></div>
+          <div class="hook-col-body">Injects the full ctx-tree tool usage guide into context — always-on redirects, graph navigation commands (<code>ctx_tree_neighbors</code>, <code>ctx_tree_search</code>, <code>ctx_tree_compose</code>, <code>ctx_tree_recent</code>), and the read→nodeId→compose workflow pattern.<br><span class="hook-result-badge hr-inject">✦ additionalContext injected</span></div>
         </div>
       </div>
     </div>
@@ -771,11 +771,11 @@ footer{padding:36px 0;border-top:1px solid var(--border);text-align:center;color
       <div class="hook-card-body">
         <div class="hook-col">
           <div class="hook-col-lbl">When it fires</div>
-          <div class="hook-col-body">Every time the user submits a non-empty prompt. Requires memtree store to be initialized for the project.</div>
+          <div class="hook-col-body">Every time the user submits a non-empty prompt. Requires ctx-tree store to be initialized for the project.</div>
         </div>
         <div class="hook-col">
           <div class="hook-col-lbl">What it does</div>
-          <div class="hook-col-body">Stores the prompt as a <code>prompt</code> node in the graph with a content-hash URI. Injects the resulting <code>nodeId</code> into context so subagents can reference the prompt without re-reading it. Prior prompts surface in future sessions via <code>memtree_search</code>.<br><span class="hook-result-badge hr-inject">✦ nodeId injected</span></div>
+          <div class="hook-col-body">Stores the prompt as a <code>prompt</code> node in the graph with a content-hash URI. Injects the resulting <code>nodeId</code> into context so subagents can reference the prompt without re-reading it. Prior prompts surface in future sessions via <code>ctx_tree_search</code>.<br><span class="hook-result-badge hr-inject">✦ nodeId injected</span></div>
         </div>
       </div>
     </div>
@@ -794,7 +794,7 @@ footer{padding:36px 0;border-top:1px solid var(--border);text-align:center;color
         </div>
         <div class="hook-col">
           <div class="hook-col-lbl">What it does</div>
-          <div class="hook-col-body">Hard-denies the native tool call and emits the exact memtree replacement (<code>memtree_read</code>, <code>memtree_grep</code>, <code>memtree_browse</code>, <code>memtree_monitor</code>) as <code>additionalContext</code>. Claude sees the denial as a tool error and immediately retries with the correct memtree tool — no round-trip wasted.<br><span class="hook-result-badge hr-deny">✕ permissionDecision: deny</span><span class="hook-result-badge hr-inject" style="margin-left:4px">✦ replacement injected</span></div>
+          <div class="hook-col-body">Hard-denies the native tool call and emits the exact ctx-tree replacement (<code>ctx_tree_read</code>, <code>ctx_tree_grep</code>, <code>ctx_tree_browse</code>, <code>ctx_tree_monitor</code>) as <code>additionalContext</code>. Claude sees the denial as a tool error and immediately retries with the correct ctx-tree tool — no round-trip wasted.<br><span class="hook-result-badge hr-deny">✕ permissionDecision: deny</span><span class="hook-result-badge hr-inject" style="margin-left:4px">✦ replacement injected</span></div>
         </div>
       </div>
     </div>
@@ -813,7 +813,7 @@ footer{padding:36px 0;border-top:1px solid var(--border);text-align:center;color
         </div>
         <div class="hook-col">
           <div class="hook-col-lbl">What it does</div>
-          <div class="hook-col-body">Lazily creates a <code>session</code> node. Injects the memtree tool map into the subagent prompt. If the store is populated, runs an FTS keyword search on the task text and prepends the top hits so the subagent starts with relevant context. Writes a state file timestamped for the PostToolUse capture hook to collect after the subagent finishes.<br><span class="hook-result-badge hr-inject">✦ additionalContext in subagent prompt</span></div>
+          <div class="hook-col-body">Lazily creates a <code>session</code> node. Injects the ctx-tree tool map into the subagent prompt. If the store is populated, runs an FTS keyword search on the task text and prepends the top hits so the subagent starts with relevant context. Writes a state file timestamped for the PostToolUse capture hook to collect after the subagent finishes.<br><span class="hook-result-badge hr-inject">✦ additionalContext in subagent prompt</span></div>
         </div>
       </div>
     </div>
@@ -832,7 +832,7 @@ footer{padding:36px 0;border-top:1px solid var(--border);text-align:center;color
         </div>
         <div class="hook-col">
           <div class="hook-col-lbl">What it does</div>
-          <div class="hook-col-body">Looks up <code>skill://&lt;name&gt;</code> in the graph store. If found, denies the Skill tool and injects a compact reference pointing to the cached node — Claude calls <code>memtree_compose([nodeId], budget)</code> instead of reloading from disk. Cache miss: passthrough, skill loads normally.<br><span class="hook-result-badge hr-deny">✕ deny (cache hit)</span><span class="hook-result-badge hr-pass" style="margin-left:4px">→ passthrough (miss)</span></div>
+          <div class="hook-col-body">Looks up <code>skill://&lt;name&gt;</code> in the graph store. If found, denies the Skill tool and injects a compact reference pointing to the cached node — Claude calls <code>ctx_tree_compose([nodeId], budget)</code> instead of reloading from disk. Cache miss: passthrough, skill loads normally.<br><span class="hook-result-badge hr-deny">✕ deny (cache hit)</span><span class="hook-result-badge hr-pass" style="margin-left:4px">→ passthrough (miss)</span></div>
         </div>
       </div>
     </div>
@@ -847,11 +847,11 @@ footer{padding:36px 0;border-top:1px solid var(--border);text-align:center;color
       <div class="hook-card-body">
         <div class="hook-col">
           <div class="hook-col-lbl">When it fires</div>
-          <div class="hook-col-body">Only active when <code>~/.memtree/proxy-mode</code> flag file exists. Provides a lighter alternative to the hard-redirect hook — advises rather than denies.</div>
+          <div class="hook-col-body">Only active when <code>~/.ctx-tree/proxy-mode</code> flag file exists. Provides a lighter alternative to the hard-redirect hook — advises rather than denies.</div>
         </div>
         <div class="hook-col">
           <div class="hook-col-lbl">What it does</div>
-          <div class="hook-col-body">Rewrites the native tool call into the memtree equivalent and injects it as a soft advisory: "do not call <code>Read</code> directly — call this instead: <code>memtree_read({file_path: …})</code>". Does not deny; Claude is nudged but not blocked. Useful for gradual adoption or debugging.<br><span class="hook-result-badge hr-inject">✦ soft advisory injected</span></div>
+          <div class="hook-col-body">Rewrites the native tool call into the ctx-tree equivalent and injects it as a soft advisory: "do not call <code>Read</code> directly — call this instead: <code>ctx_tree_read({file_path: …})</code>". Does not deny; Claude is nudged but not blocked. Useful for gradual adoption or debugging.<br><span class="hook-result-badge hr-inject">✦ soft advisory injected</span></div>
         </div>
       </div>
     </div>
@@ -870,7 +870,7 @@ footer{padding:36px 0;border-top:1px solid var(--border);text-align:center;color
         </div>
         <div class="hook-col">
           <div class="hook-col-lbl">What it does</div>
-          <div class="hook-col-body">Queries all nodes created during the subagent's time window. Creates a <code>note</code> summary node as a child of the parent session. Emits <code>summarizes</code> edges from the summary to each captured subagent node. Deletes the state file. Result: <code>memtree_neighbors(sessionNodeId)</code> surfaces the full subagent work without the parent agent managing any links.<br><span class="hook-result-badge hr-silent">◉ silent graph update</span></div>
+          <div class="hook-col-body">Queries all nodes created during the subagent's time window. Creates a <code>note</code> summary node as a child of the parent session. Emits <code>summarizes</code> edges from the summary to each captured subagent node. Deletes the state file. Result: <code>ctx_tree_neighbors(sessionNodeId)</code> surfaces the full subagent work without the parent agent managing any links.<br><span class="hook-result-badge hr-silent">◉ silent graph update</span></div>
         </div>
       </div>
     </div>
@@ -908,7 +908,7 @@ footer{padding:36px 0;border-top:1px solid var(--border);text-align:center;color
         </div>
         <div class="hook-col">
           <div class="hook-col-lbl">What it does</div>
-          <div class="hook-col-body">Fire-and-forget: fetches each URL via <code>memtree_browse</code> and stores it as a compact <code>web_chunk</code> node. Does not inject any context or block the response. The stored pages surface in future sessions via <code>memtree_search</code> and the Agent enrichment hook's FTS pass.<br><span class="hook-result-badge hr-silent">◉ fire-and-forget, no output</span></div>
+          <div class="hook-col-body">Fire-and-forget: fetches each URL via <code>ctx_tree_browse</code> and stores it as a compact <code>web_chunk</code> node. Does not inject any context or block the response. The stored pages surface in future sessions via <code>ctx_tree_search</code> and the Agent enrichment hook's FTS pass.<br><span class="hook-result-badge hr-silent">◉ fire-and-forget, no output</span></div>
         </div>
       </div>
     </div>
@@ -923,7 +923,7 @@ footer{padding:36px 0;border-top:1px solid var(--border);text-align:center;color
       <div class="hook-card-body">
         <div class="hook-col">
           <div class="hook-col-lbl">When it fires</div>
-          <div class="hook-col-body">After Claude finishes generating each response turn. Skips re-entrant calls (<code>stop_hook_active</code>). Requires the memtree store to be initialized and a valid <code>transcript_path</code> in the hook payload.</div>
+          <div class="hook-col-body">After Claude finishes generating each response turn. Skips re-entrant calls (<code>stop_hook_active</code>). Requires the ctx-tree store to be initialized and a valid <code>transcript_path</code> in the hook payload.</div>
         </div>
         <div class="hook-col">
           <div class="hook-col-lbl">What it does</div>
@@ -1033,31 +1033,31 @@ footer{padding:36px 0;border-top:1px solid var(--border);text-align:center;color
       <div class="install-step-num">1</div>
       <div class="install-step-body">
         <div class="install-step-ttl">Add the agent marketplace</div>
-        <div class="install-step-desc">Joe's self-hosted marketplace hosts memtree and other agent plugins. Register it once globally — available across all your Claude Code sessions.</div>
+        <div class="install-step-desc">Joe's self-hosted marketplace hosts ctx-tree and other agent plugins. Register it once globally — available across all your Claude Code sessions.</div>
         <div class="install-cmd">/plugin marketplace add joeblackwaslike/agent-marketplace</div>
       </div>
     </div>
     <div class="install-step">
       <div class="install-step-num">2</div>
       <div class="install-step-body">
-        <div class="install-step-ttl">Install the memtree plugin</div>
+        <div class="install-step-ttl">Install the ctx-tree plugin</div>
         <div class="install-step-desc">Installs the MCP server, all hooks, and skills in one command. Hooks are written to <code style="font-family:var(--mono);font-size:11px;color:var(--sky)">~/.claude/settings.json</code> automatically.</div>
-        <div class="install-cmd">/plugin install memtree@agent-marketplace</div>
+        <div class="install-cmd">/plugin install ctx-tree@agent-marketplace</div>
       </div>
     </div>
     <div class="install-step">
       <div class="install-step-num">3</div>
       <div class="install-step-body">
         <div class="install-step-ttl">Verify hooks are active</div>
-        <div class="install-step-desc">Start a new Claude Code session. You should see the memtree context injection message on session start. Read any file — it will be redirected to <code style="font-family:var(--mono);font-size:11px;color:var(--sky)">memtree_read</code> automatically.</div>
-        <div class="install-cmd">memtree_recent()   # should return an empty list on first run</div>
+        <div class="install-step-desc">Start a new Claude Code session. You should see the ctx-tree context injection message on session start. Read any file — it will be redirected to <code style="font-family:var(--mono);font-size:11px;color:var(--sky)">ctx_tree_read</code> automatically.</div>
+        <div class="install-cmd">ctx_tree_recent()   # should return an empty list on first run</div>
       </div>
     </div>
     <div class="install-step">
       <div class="install-step-num">4</div>
       <div class="install-step-body">
         <div class="install-step-ttl">Requirements</div>
-        <div class="install-step-desc">memtree requires Bun for the MCP server and ripgrep for the grep tool.</div>
+        <div class="install-step-desc">ctx-tree requires Bun for the MCP server and ripgrep for the grep tool.</div>
         <div class="install-cmd"># macOS
 brew install bun ripgrep
 
@@ -1069,14 +1069,14 @@ apt install ripgrep   # or: cargo install ripgrep</div>
   </div>
 
   <div class="install-links">
-    <a href="https://github.com/joeblackwaslike/memtree" class="install-link il-github" target="_blank" rel="noopener">
+    <a href="https://github.com/joeblackwaslike/ctx-tree" class="install-link il-github" target="_blank" rel="noopener">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/></svg>
-      GitHub · joeblackwaslike/memtree
+      GitHub · joeblackwaslike/ctx-tree
     </a>
     <a href="https://github.com/joeblackwaslike/agent-marketplace" class="install-link il-market" target="_blank" rel="noopener">
       🛒 Agent Marketplace
     </a>
-    <a href="https://github.com/joeblackwaslike/memtree/blob/main/docs/superpowers/specs/2026-05-17-memtree-design.md" class="install-link il-github" target="_blank" rel="noopener">
+    <a href="https://github.com/joeblackwaslike/ctx-tree/blob/main/docs/superpowers/specs/2026-05-17-ctx-tree-design.md" class="install-link il-github" target="_blank" rel="noopener">
       📄 Design Spec
     </a>
   </div>
@@ -1084,7 +1084,7 @@ apt install ripgrep   # or: cargo install ripgrep</div>
 </div>
 
 <footer>
-  <div class="container">memtree · SQLite property graph for Claude Code · <a href="https://github.com/joeblackwaslike/memtree" style="color:var(--sky);text-decoration:none">github.com/joeblackwaslike/memtree</a> · <a href="https://github.com/joeblackwaslike/agent-marketplace" style="color:var(--muted);text-decoration:none">agent-marketplace</a></div>
+  <div class="container">ctx-tree · SQLite property graph for Claude Code · <a href="https://github.com/joeblackwaslike/ctx-tree" style="color:var(--sky);text-decoration:none">github.com/joeblackwaslike/ctx-tree</a> · <a href="https://github.com/joeblackwaslike/agent-marketplace" style="color:var(--muted);text-decoration:none">agent-marketplace</a></div>
 </footer>
 
 <script>
@@ -2170,7 +2170,7 @@ function renderHooksGraph() {
   });
 
   // Swimlane labels
-  const lanes = ['Claude', 'Hook System', 'memtree', 'Native Tool'];
+  const lanes = ['Claude', 'Hook System', 'ctx-tree', 'Native Tool'];
   const laneH = (H - 40) / 4;
   lanes.forEach((l, i) => {
     const y = 40 + i * laneH;
@@ -2189,13 +2189,13 @@ function renderHooksGraph() {
     { id:'pre-hook', kind:'hook', label:'PreToolUse:Read', x:280, y:40+laneH*1.5, uri:'hook://PreToolUse/Read',
       props:{ hook_type:'PreToolUse', tool:'Read', script:'redirect-read.sh', action:'deny' }},
     { id:'deny', kind:'hook', label:'Deny native', x:430, y:40+laneH*1.5, uri:'hook://PreToolUse/Read/deny',
-      props:{ action:'deny', reason:'memtree intercepts', redirects_to:'memtree_read' }},
-    { id:'memtree-call', kind:'tool_call', label:'memtree_read', x:580, y:40+laneH*2.5, uri:'tool://memtree_read',
-      props:{ mcp_tool:'memtree_read', path:'/src/auth/login.ts', chunks_stored:4 }},
-    { id:'post-hook', kind:'hook', label:'PostToolUse', x:720, y:40+laneH*1.5, uri:'hook://PostToolUse/memtree_read',
+      props:{ action:'deny', reason:'ctx-tree intercepts', redirects_to:'ctx_tree_read' }},
+    { id:'ctx-tree-call', kind:'tool_call', label:'ctx_tree_read', x:580, y:40+laneH*2.5, uri:'tool://ctx_tree_read',
+      props:{ mcp_tool:'ctx_tree_read', path:'/src/auth/login.ts', chunks_stored:4 }},
+    { id:'post-hook', kind:'hook', label:'PostToolUse', x:720, y:40+laneH*1.5, uri:'hook://PostToolUse/ctx_tree_read',
       props:{ hook_type:'PostToolUse', action:'capture', node_ids:['fc-a1b2','fc-c3d4','fc-e5f6','fc-g7h8'] }},
     { id:'ref-returned', kind:'observation', label:'Refs returned', x:820, y:40+laneH*0.5, uri:'observation://result',
-      props:{ type:'tool_result', content:'memtree_read stored 4 chunks: fc-a1b2, fc-c3d4, ...' }},
+      props:{ type:'tool_result', content:'ctx_tree_read stored 4 chunks: fc-a1b2, fc-c3d4, ...' }},
   ];
 
   const hkMap = {};
@@ -2203,8 +2203,8 @@ function renderHooksGraph() {
   const hkLinks = [
     { src:'claude-calls', dst:'pre-hook', kind:'triggers', label:'fires hook' },
     { src:'pre-hook', dst:'deny', kind:'derived_from', label:'deny native' },
-    { src:'deny', dst:'memtree-call', kind:'triggers', label:'redirect to MCP' },
-    { src:'memtree-call', dst:'post-hook', kind:'triggers', label:'fires hook' },
+    { src:'deny', dst:'ctx-tree-call', kind:'triggers', label:'redirect to MCP' },
+    { src:'ctx-tree-call', dst:'post-hook', kind:'triggers', label:'fires hook' },
     { src:'post-hook', dst:'ref-returned', kind:'captures', label:'return refs' },
   ];
 
@@ -2355,7 +2355,7 @@ renderPipelineGraph();
 const searchDefs = {
   semantic: {
     title: 'Semantic Search',
-    query: 'memtree_search({ q: "JWT token expiry handling", type: "semantic", limit: 4 })',
+    query: 'ctx_tree_search({ q: "JWT token expiry handling", type: "semantic", limit: 4 })',
     desc: 'Query → embedding vector → ANN nearest-neighbor → ranked by cosine similarity',
     results: [
       { score:'0.94', badge:'file_chunk', color:'#0ea5e9', uri:'file:///src/auth/login.ts#chunk:2', preview:'validateToken() — jwt.verify(token, SECRET) with exp check' },
@@ -2366,7 +2366,7 @@ const searchDefs = {
   },
   hybrid: {
     title: 'Hybrid Search (BM25 + Semantic → RRF)',
-    query: 'memtree_search({ q: "useAuthContext", type: "hybrid", limit: 4 })',
+    query: 'ctx_tree_search({ q: "useAuthContext", type: "hybrid", limit: 4 })',
     desc: 'BM25 lexical rank + semantic vector rank → Reciprocal Rank Fusion (RRF) combined score',
     results: [
       { score:'0.98', badge:'file_chunk', color:'#0ea5e9', uri:'file:///src/components/Header.tsx#useAuthContext', preview:'const { user } = useAuthContext() — exact FTS5 match + semantic hit' },
@@ -2377,7 +2377,7 @@ const searchDefs = {
   },
   compose: {
     title: 'Compose (Budget-Bounded Recall)',
-    query: 'memtree_compose(["fc-a1b2","fc-c3d4","fc-e5f6"], token_budget=3000)',
+    query: 'ctx_tree_compose(["fc-a1b2","fc-c3d4","fc-e5f6"], token_budget=3000)',
     desc: 'Assembles referenced nodes within a token budget — fills context efficiently from graph references',
     results: [
       { score:'152B', badge:'file_chunk', color:'#0ea5e9', uri:'file:///src/auth/login.ts#chunk:0', preview:'imports block — included (152 tokens)' },
@@ -2388,7 +2388,7 @@ const searchDefs = {
   },
   jsonpath: {
     title: 'JSONPath Filter',
-    query: 'memtree_search({ jsonpath: "$.nodes[?(@.kind==\'file_chunk\' && @.props.lang==\'typescript\')]" })',
+    query: 'ctx_tree_search({ jsonpath: "$.nodes[?(@.kind==\'file_chunk\' && @.props.lang==\'typescript\')]" })',
     desc: 'JSONPath expression over the graph — filter nodes by arbitrary property structure',
     results: [
       { score:'match', badge:'file_chunk', color:'#0ea5e9', uri:'file:///src/auth/login.ts#chunk:1', preview:'login() · lang=typescript · size=487' },
@@ -2399,7 +2399,7 @@ const searchDefs = {
   },
   metadata: {
     title: 'Metadata Filters',
-    query: 'memtree_search({ filters: { kind: "file_chunk", status: "indexed", created_after: "2026-05-25" } })',
+    query: 'ctx_tree_search({ filters: { kind: "file_chunk", status: "indexed", created_after: "2026-05-25" } })',
     desc: 'Filter by node type, status, date range, and other indexed metadata fields',
     results: [
       { score:'indexed', badge:'file_chunk', color:'#0ea5e9', uri:'file:///src/auth/login.ts#chunk:0', preview:'created: 2026-05-26T14:33:50Z · status: indexed' },
@@ -2409,8 +2409,8 @@ const searchDefs = {
     ],
   },
   neighbors: {
-    title: 'memtree.neighbors',
-    query: 'memtree_neighbors({ node_id: "fc-c3d4", hops: 2, kinds: ["file_chunk","prompt"] })',
+    title: 'ctx-tree.neighbors',
+    query: 'ctx_tree_neighbors({ node_id: "fc-c3d4", hops: 2, kinds: ["file_chunk","prompt"] })',
     desc: 'BFS from a seed node — returns all nodes within N hops, filtered by kind',
     results: [
       { score:'hop 0', badge:'file_chunk', color:'#0ea5e9', uri:'file:///src/auth/login.ts#chunk:2', preview:'validateToken() — seed node (hop 0)' },
@@ -2420,8 +2420,8 @@ const searchDefs = {
     ],
   },
   pathroot: {
-    title: 'memtree.path_to_root',
-    query: 'memtree_path_to_root({ node_id: "fc-c3d4" })',
+    title: 'ctx-tree.path_to_root',
+    query: 'ctx_tree_path_to_root({ node_id: "fc-c3d4" })',
     desc: 'Traces the ancestor chain from any leaf node up to the session root via contains/references edges',
     results: [
       { score:'depth 0', badge:'file_chunk', color:'#0ea5e9', uri:'file:///src/auth/login.ts#chunk:2', preview:'validateToken() — start node' },
@@ -2431,8 +2431,8 @@ const searchDefs = {
     ],
   },
   recent: {
-    title: 'memtree.recent',
-    query: 'memtree_recent({ window: "1h", kinds: ["file_chunk","web_content","prompt"], limit: 4 })',
+    title: 'ctx-tree.recent',
+    query: 'ctx_tree_recent({ window: "1h", kinds: ["file_chunk","web_content","prompt"], limit: 4 })',
     desc: 'Returns the most recently created or accessed nodes within a sliding time window, sorted by recency',
     results: [
       { score:'14:36:08', badge:'output_chunk', color:'#ea580c', uri:'output://abc123/6/Bash/2/chunk:1', preview:'Python REPL stdout: 56154 — 2 min ago' },

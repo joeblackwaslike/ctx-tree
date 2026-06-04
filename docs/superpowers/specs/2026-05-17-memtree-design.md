@@ -1,9 +1,9 @@
-# memtree — Design Spec
+# ctx-tree — Design Spec
 
 **Date:** 2026-05-17
 **Status:** Draft (awaiting user approval before implementation plan)
 **Author:** Joe Black
-**Repository:** github.com/joeblackwaslike/memtree
+**Repository:** github.com/joeblackwaslike/ctx-tree
 
 ---
 
@@ -11,9 +11,9 @@
 
 LLM context windows are a scarce, expensive, write-once resource. Tool outputs (Read, Grep, Bash) flood the window with low-signal data that compounds across turns; the model must then carry that ballast through every subsequent inference. Compaction helps but is lossy and not deterministic.
 
-**memtree** is an external, persistent, tree- and graph-shaped context store with surgical recall. In v1 there is one path into it:
+**ctx-tree** is an external, persistent, tree- and graph-shaped context store with surgical recall. In v1 there is one path into it:
 
-1. **Memtree-backed tools** (`memtree.read`, `memtree.grep` in v1; `memtree.bash` deferred to v1.1) — independent MCP tools that implement equivalent behavior on top of `fs` / ripgrep, store the full output, and return only a budget-bounded slice. These are *not* bridges to Claude's native tools; they're separate tools that the agent should reach for **whenever available**, with native `Read`/`Grep` as the fallback for cases where a memtree-backed tool isn't appropriate (e.g. interactive flows the model wants to see in full).
+1. **CtxTree-backed tools** (`ctx-tree.read`, `ctx-tree.grep` in v1; `ctx-tree.bash` deferred to v1.1) — independent MCP tools that implement equivalent behavior on top of `fs` / ripgrep, store the full output, and return only a budget-bounded slice. These are *not* bridges to Claude's native tools; they're separate tools that the agent should reach for **whenever available**, with native `Read`/`Grep` as the fallback for cases where a ctx-tree-backed tool isn't appropriate (e.g. interactive flows the model wants to see in full).
 
 Retrieval happens through MCP tools (`search`, `compose`, `neighbors`) and pulls only the bytes needed.
 
@@ -27,20 +27,20 @@ Retrieval happens through MCP tools (`search`, `compose`, `neighbors`) and pulls
 
 ### Roadmap (v1.1+)
 
-- **Passive capture via PostToolUse hook.** A `sh`+`jq`+`socat` hook fires on every native `Read`/`Grep`/`Bash` call, writing the payload to a Unix socket on the MCP server for background ingestion. Guarantees indexing even when the agent forgets to use a memtree-backed tool. v1.1 implements the hook in passive-capture-only mode; `updatedToolOutput` rewriting (transparent context budgeting) follows in v1.2+.
+- **Passive capture via PostToolUse hook.** A `sh`+`jq`+`socat` hook fires on every native `Read`/`Grep`/`Bash` call, writing the payload to a Unix socket on the MCP server for background ingestion. Guarantees indexing even when the agent forgets to use a ctx-tree-backed tool. v1.1 implements the hook in passive-capture-only mode; `updatedToolOutput` rewriting (transparent context budgeting) follows in v1.2+.
 - **Semantic and hybrid search.** sqlite-vec + configurable embedding provider (Ollama/OpenAI); Reciprocal Rank Fusion over FTS + semantic.
 - **Embedding and summarization provider abstraction.** Drop-in compatible with Ollama (LLAMA), OpenAI API, and Anthropic API (summarization only — Anthropic has no embeddings endpoint). Provider interface defined in v1 types; implementations in v1.1.
 - **Dedupe and summarization walkers.** Near-dup merge via cosine ≥ 0.97; Haiku 4.5 / GPT-4o-mini subtree summaries.
-- **`memtree.bash`.** Memtree-backed Bash equivalent. In-process execution routes through Claude Code's native `Bash` tool via `mcp-exec` (or equivalent SDK bridge), inheriting its permission prompts and sandbox surface rather than bypassing it. Passive-only (store-and-recall without execution) is the default; `trustedExecution: true` in config enables in-process invocation.
+- **`ctx-tree.bash`.** CtxTree-backed Bash equivalent. In-process execution routes through Claude Code's native `Bash` tool via `mcp-exec` (or equivalent SDK bridge), inheriting its permission prompts and sandbox surface rather than bypassing it. Passive-only (store-and-recall without execution) is the default; `trustedExecution: true` in config enables in-process invocation.
 - **Bundled hook binary.** Small compiled binary that replaces the `jq`/`socat`/`awk` system deps for the PostToolUse hook.
 
 ### Non-goals (v1)
 
 - Multi-user / multi-machine sync.
 - A VS Code or web UI (deferred to companion project — see §9).
-- Replacing every native tool call (the agent still uses Read directly when appropriate; memtree augments, doesn't replace).
-- **Passive capture of native tool calls** — deferred to v1.1. In v1 the agent must explicitly call memtree-backed tools.
-- **Capturing Serena MCP outputs.** Serena provides live LSP queries (find_symbol, get_symbols_overview, search_for_pattern) whose outputs are ephemeral — they always reflect the current AST and re-running them is fast. No recall value in storing them. Serena and memtree are complementary: use Serena for live code navigation, memtree for content recall and context budgeting.
+- Replacing every native tool call (the agent still uses Read directly when appropriate; ctx-tree augments, doesn't replace).
+- **Passive capture of native tool calls** — deferred to v1.1. In v1 the agent must explicitly call ctx-tree-backed tools.
+- **Capturing Serena MCP outputs.** Serena provides live LSP queries (find_symbol, get_symbols_overview, search_for_pattern) whose outputs are ephemeral — they always reflect the current AST and re-running them is fast. No recall value in storing them. Serena and ctx-tree are complementary: use Serena for live code navigation, ctx-tree for content recall and context budgeting.
 
 ---
 
@@ -57,7 +57,7 @@ Single-file embedded DB with:
 
 ### Storage Location
 
-`~/.memtree/<project-hash>/store.db`
+`~/.ctx-tree/<project-hash>/store.db`
 
 `<project-hash>` is computed at MCP-server startup:
 
@@ -72,7 +72,7 @@ Rationale: path-dependent by design — moving or re-cloning the repo to a diffe
 
 ### Sidecar config: global + per-project override
 
-Global config at `~/.memtree/config.json`:
+Global config at `~/.ctx-tree/config.json`:
 
 ```json
 {
@@ -91,9 +91,9 @@ Global config at `~/.memtree/config.json`:
 }
 ```
 
-Per-project override at `<project_root>/.memtree/config.json` (repo-local, version-controllable). The file is **shallow-merged into the global config** at server startup — top-level keys in the per-project file replace the corresponding global keys wholesale (not deep-merged), so a project that overrides `capture` must restate the full `capture` block. This rule keeps merge semantics predictable and easy to debug.
+Per-project override at `<project_root>/.ctx-tree/config.json` (repo-local, version-controllable). The file is **shallow-merged into the global config** at server startup — top-level keys in the per-project file replace the corresponding global keys wholesale (not deep-merged), so a project that overrides `capture` must restate the full `capture` block. This rule keeps merge semantics predictable and easy to debug.
 
-Per-project paths used by §7 redaction (`bash.deny`, `path.deny`) live alongside it: `<project_root>/.memtree/bash.deny`, `<project_root>/.memtree/path.deny`. `<project_root>/.memtree/` should be added to `.gitignore` by convention if the project doesn't want config tracked, but is **not** auto-gitignored by memtree.
+Per-project paths used by §7 redaction (`bash.deny`, `path.deny`) live alongside it: `<project_root>/.ctx-tree/bash.deny`, `<project_root>/.ctx-tree/path.deny`. `<project_root>/.ctx-tree/` should be added to `.gitignore` by convention if the project doesn't want config tracked, but is **not** auto-gitignored by ctx-tree.
 
 Precedence at runtime: per-project override > global > built-in defaults.
 
@@ -101,7 +101,7 @@ Precedence at runtime: per-project override > global > built-in defaults.
 
 ## 3. Node Schema & Relationships
 
-memtree is a **tree-spined graph**: every node has exactly one `parent_id` (the spine), plus zero-or-more lateral edges in a separate `edges` table.
+ctx-tree is a **tree-spined graph**: every node has exactly one `parent_id` (the spine), plus zero-or-more lateral edges in a separate `edges` table.
 
 ### `nodes` table
 
@@ -173,42 +173,42 @@ pending → live → stale → superseded → pruned
 
 ---
 
-## 4. Memtree-backed Tool Contract
+## 4. CtxTree-backed Tool Contract
 
-The memtree-backed retrieval tools are the **primary** mechanism for keeping raw outputs out of the window in v1. They are **not** bridges to Claude's built-in Read/Grep — there is no public bridge to native tools. They are independent MCP replacement tools that implement equivalent behavior on top of the filesystem (Node `fs`) and ripgrep, and they store the full output before returning a bounded slice.
+The ctx-tree-backed retrieval tools are the **primary** mechanism for keeping raw outputs out of the window in v1. They are **not** bridges to Claude's built-in Read/Grep — there is no public bridge to native tools. They are independent MCP replacement tools that implement equivalent behavior on top of the filesystem (Node `fs`) and ripgrep, and they store the full output before returning a bounded slice.
 
-**Why memtree-backed tools rather than hook-based rewriting in v1.** The Claude Code hooks API (verified against the `working-with-claude-code` reference, 2026-05) *does* expose a `PostToolUse.updatedToolOutput` field that can replace the tool result before Claude consumes it — an earlier draft of this spec incorrectly claimed otherwise. So in principle a hook could intercept any native `Read`/`Grep`/`Bash` and substitute a memtree-budgeted slice. v1 deliberately does **not** take this path because:
+**Why ctx-tree-backed tools rather than hook-based rewriting in v1.** The Claude Code hooks API (verified against the `working-with-claude-code` reference, 2026-05) *does* expose a `PostToolUse.updatedToolOutput` field that can replace the tool result before Claude consumes it — an earlier draft of this spec incorrectly claimed otherwise. So in principle a hook could intercept any native `Read`/`Grep`/`Bash` and substitute a ctx-tree-budgeted slice. v1 deliberately does **not** take this path because:
 
 1. The hook would need to decide token-budget policy synchronously, in a shell pipeline, on *every* matched tool call — pushing nontrivial logic into the hook hot path.
 2. Silently substituting a truncated result for a tool the agent expected to return full output changes the contract mid-call; the agent has no signal that the substitution happened, and downstream tools that ingest the result (e.g. a follow-up `Bash` that pipes it) will see truncated bytes.
-3. Explicit memtree-backed tools surface the budget decision in the schema (`budget_tokens` param), so the agent's plan is legible from outside.
+3. Explicit ctx-tree-backed tools surface the budget decision in the schema (`budget_tokens` param), so the agent's plan is legible from outside.
 
-Hook-based rewriting is on the v1.1 roadmap as an opt-in mode for users who would rather pay the substitution-surprise cost than train the agent to prefer `memtree.read`.
+Hook-based rewriting is on the v1.1 roadmap as an opt-in mode for users who would rather pay the substitution-surprise cost than train the agent to prefer `ctx-tree.read`.
 
-So the v1 contract is: each memtree-backed tool writes the full output to the store and returns either a node ID + bounded preview, or the raw content within a caller-specified token budget. The agent should prefer memtree-backed tools when available, with native `Read`/`Grep` as fallback. Passive `PostToolUse` capture (§7) covers the gap when the agent uses native tools — those outputs become available for future-turn `memtree.search` / `memtree.compose`, but the current turn is not rewritten.
+So the v1 contract is: each ctx-tree-backed tool writes the full output to the store and returns either a node ID + bounded preview, or the raw content within a caller-specified token budget. The agent should prefer ctx-tree-backed tools when available, with native `Read`/`Grep` as fallback. Passive `PostToolUse` capture (§7) covers the gap when the agent uses native tools — those outputs become available for future-turn `ctx-tree.search` / `ctx-tree.compose`, but the current turn is not rewritten.
 
-### Memtree-backed tools (MCP server exposes)
+### CtxTree-backed tools (MCP server exposes)
 
-- `memtree.read(path, lines?, budget_tokens?)` — reads via Node `fs`; **chunks the file by symbol via tree-sitter** when a parser is available, falling back to 200-line windows otherwise; returns the requested slice; reuses existing node if `mtime` unchanged. v1 ships tree-sitter parsers for TypeScript/TSX, JavaScript/JSX, Python, Rust, Go, Bash, and JSON/TOML/YAML. Other languages get window-based chunking with a `metadata.chunking="window"` marker so the eval harness can distinguish symbol-aware from fallback hits. Adding a parser later requires no schema change — affected files are re-chunked next time their `mtime` advances.
-- `memtree.grep(pattern, path?, ...)` — shells out to system `rg` (ripgrep); stores result set as a `tool_output` node + per-hit child `file_chunk` nodes for the lines hit.
-- `memtree.bash(command, ...)` — **deferred to v1.1.** In v1 there is no `memtree.bash` tool. When added in v1.1, in-process execution routes through Claude Code's native `Bash` tool via `mcp-exec`, inheriting its permission prompts and sandbox rather than bypassing it.
+- `ctx-tree.read(path, lines?, budget_tokens?)` — reads via Node `fs`; **chunks the file by symbol via tree-sitter** when a parser is available, falling back to 200-line windows otherwise; returns the requested slice; reuses existing node if `mtime` unchanged. v1 ships tree-sitter parsers for TypeScript/TSX, JavaScript/JSX, Python, Rust, Go, Bash, and JSON/TOML/YAML. Other languages get window-based chunking with a `metadata.chunking="window"` marker so the eval harness can distinguish symbol-aware from fallback hits. Adding a parser later requires no schema change — affected files are re-chunked next time their `mtime` advances.
+- `ctx-tree.grep(pattern, path?, ...)` — shells out to system `rg` (ripgrep); stores result set as a `tool_output` node + per-hit child `file_chunk` nodes for the lines hit.
+- `ctx-tree.bash(command, ...)` — **deferred to v1.1.** In v1 there is no `ctx-tree.bash` tool. When added in v1.1, in-process execution routes through Claude Code's native `Bash` tool via `mcp-exec`, inheriting its permission prompts and sandbox rather than bypassing it.
 
 ### Path denylist (v1)
 
-`memtree.read` and `memtree.grep` enforce a path denylist **before any DB write** — this is a v1 feature, not deferred to the v1.1 hook. Paths matching any of the following are rejected with an error:
+`ctx-tree.read` and `ctx-tree.grep` enforce a path denylist **before any DB write** — this is a v1 feature, not deferred to the v1.1 hook. Paths matching any of the following are rejected with an error:
 
 `.env*`, `.envrc`, `**/.ssh/**`, `**/.aws/credentials`, `**/.aws/config`, `**/.gnupg/**`, `**/.npmrc`, `**/.pypirc`, `**/.netrc`, `**/id_rsa*`, `**/id_ed25519*`, `**/*.pem`, `**/*.key`, `**/*.pfx`, `**/*.p12`, `**/service-account*.json`, `**/credentials.json`
 
-The default list is extended (not replaced) by an optional per-project `<project_root>/.memtree/path.deny` glob file. The same denylist applies to hook-based Read/Grep ingestion in v1.1 (§7).
+The default list is extended (not replaced) by an optional per-project `<project_root>/.ctx-tree/path.deny` glob file. The same denylist applies to hook-based Read/Grep ingestion in v1.1 (§7).
 
-Note: the Bash output-string redaction (AWS keys, GitHub tokens, JWTs, etc.) is **not** applied to `memtree.read` / `memtree.grep` content in v1 — only path-based rejection. Applying content-level regex to Read/Grep outputs is under investigation for v1.1 (false-positive rate on legitimate code is the open question).
+Note: the Bash output-string redaction (AWS keys, GitHub tokens, JWTs, etc.) is **not** applied to `ctx-tree.read` / `ctx-tree.grep` content in v1 — only path-based rejection. Applying content-level regex to Read/Grep outputs is under investigation for v1.1 (false-positive rate on legitimate code is the open question).
 
 ### Cache invalidation
 
 - For `file_chunk` nodes: compare `mtime` on retrieval; if source file changed, mark old node `stale`, create new node, write `supersedes` edge **newer → older** (the new node points back at what it replaces). This matches §3's definition of `superseded`: "pointed at by a `supersedes` edge from a newer node."
 - For `tool_output` nodes: keep all (audit trail); dedupe by `content_hash` against existing nodes in the same hour window.
 
-### `memtree.compose(node_ids, budget_tokens, format?, query?)` — the surgical-recall tool
+### `ctx-tree.compose(node_ids, budget_tokens, format?, query?)` — the surgical-recall tool
 
 | Param           | Notes                                                                |
 | --------------- | -------------------------------------------------------------------- |
@@ -233,15 +233,15 @@ Returns a single concatenated string + manifest listing included node IDs, dropp
 
 ### MCP tools exposed for retrieval
 
-- `memtree.search(query, mode?, limit?, filters?)` — **v1: only `mode='keyword'` is accepted.** `mode='hybrid'` and `mode='semantic'` are rejected at the tool-schema level with a clear error (`"semantic search requires v1.1 — only mode='keyword' is supported in v1"`) rather than silently falling back, because v1 ships zero embedding code paths. v1.1 introduces hybrid as default with RRF k=60 over keyword + semantic.
-- `memtree.neighbors(node_id, depth?, edge_kinds?)` — graph walk; depth cap **5**; default depth 1.
-- `memtree.path_to_root(node_id)` — spine walk via `parent_id`.
-- `memtree.recent(since?, kind?, limit?)` — time-series scan.
-- `memtree.compose(...)` — see §4.
+- `ctx-tree.search(query, mode?, limit?, filters?)` — **v1: only `mode='keyword'` is accepted.** `mode='hybrid'` and `mode='semantic'` are rejected at the tool-schema level with a clear error (`"semantic search requires v1.1 — only mode='keyword' is supported in v1"`) rather than silently falling back, because v1 ships zero embedding code paths. v1.1 introduces hybrid as default with RRF k=60 over keyword + semantic.
+- `ctx-tree.neighbors(node_id, depth?, edge_kinds?)` — graph walk; depth cap **5**; default depth 1.
+- `ctx-tree.path_to_root(node_id)` — spine walk via `parent_id`.
+- `ctx-tree.recent(since?, kind?, limit?)` — time-series scan.
+- `ctx-tree.compose(...)` — see §4.
 
 ### `filters?` schema (v1)
 
-`memtree.search`, `memtree.recent`, and `memtree.neighbors` accept the same `filters` object:
+`ctx-tree.search`, `ctx-tree.recent`, and `ctx-tree.neighbors` accept the same `filters` object:
 
 ```ts
 type Filters = {
@@ -298,9 +298,9 @@ Hard deps (v1): Node 20+, bundled `better-sqlite3`, bundled `sqlite-vec`, system
 
 ## 7. Capture Strategy (PostToolUse Hook) — v1.1
 
-> **This entire section is v1.1.** In v1, there is no PostToolUse hook and no ingestion socket. Data enters the store only via the memtree-backed tool handlers (`memtree.read`, `memtree.grep`). The hook design below is preserved here for v1.1 implementation; see `docs/superpowers/plans/2026-05-17-memtree-v1.1.md`.
+> **This entire section is v1.1.** In v1, there is no PostToolUse hook and no ingestion socket. Data enters the store only via the ctx-tree-backed tool handlers (`ctx-tree.read`, `ctx-tree.grep`). The hook design below is preserved here for v1.1 implementation; see `docs/superpowers/plans/2026-05-17-ctx-tree-v1.1.md`.
 
-The `PostToolUse` hook is **passive indexing only** — it does *not* rewrite tool output (that's v1.2+ via `updatedToolOutput`). Its job is to make native tool outputs available for *future* `memtree.search` / `memtree.compose` calls. Captured data either lands in `status=pending` for walker triage, or — via the cheap-filter fast path (§6) — directly as `status=live`.
+The `PostToolUse` hook is **passive indexing only** — it does *not* rewrite tool output (that's v1.2+ via `updatedToolOutput`). Its job is to make native tool outputs available for *future* `ctx-tree.search` / `ctx-tree.compose` calls. Captured data either lands in `status=pending` for walker triage, or — via the cheap-filter fast path (§6) — directly as `status=live`.
 
 Hook-level capture is allowlisted at the matcher (`Read|Grep|Bash`) but otherwise greedy: filtering happens in-walker, where size, dedupe state, and recent neighbors are all available. Default `filterMinSize=50` bytes and `maxBytes=100000` per node bound the worst case.
 
@@ -308,9 +308,9 @@ Hook-level capture is allowlisted at the matcher (`Read|Grep|Bash`) but otherwis
 
 The hook does **not** open SQLite directly. A ~80–150ms Node cold start plus `better-sqlite3` load plus WAL handshake on every `Read`/`Grep`/`Bash` would be a tax the agent feels in every turn. Instead:
 
-1. The MCP server, already running for the session, listens on a Unix socket at `~/.memtree/<project-hash>/ingest.sock` (mode `0600`). The server also writes a `<git_root_or_cwd>\t<project-hash>` line to a shared `~/.memtree/projects.tsv` index at startup, keyed by absolute path, so the hook can resolve `cwd → project-hash` without invoking git.
-2. The hook is a tiny script that resolves the project hash from the `cwd` field in the hook payload by walking up the directory tree until it finds a match in `~/.memtree/projects.tsv` (or, equivalently, until a `~/.memtree/<hash>/ingest.sock` exists for an ancestor). It then JSON-encodes the normalized payload `{ tool, input, response, exit, cwd, session_id, ts }` and writes one line to the matching socket. No DB handle, no walker contention. The earlier "single global active-hash file" design (a single `~/.memtree/.active-project-hash`) was broken under concurrent sessions in different projects — it raced and could pipe one project's output into another project's store.
-3. The server's ingestion handler does the redacted `INSERT` via a prepared statement (~1ms) and acks. The cheap-filter fast path (§6) lets most rows skip `pending` and land directly as `live`. Any failure — socket missing, server crashed, EAGAIN — is logged to stderr and silently dropped. memtree must never block tool calls.
+1. The MCP server, already running for the session, listens on a Unix socket at `~/.ctx-tree/<project-hash>/ingest.sock` (mode `0600`). The server also writes a `<git_root_or_cwd>\t<project-hash>` line to a shared `~/.ctx-tree/projects.tsv` index at startup, keyed by absolute path, so the hook can resolve `cwd → project-hash` without invoking git.
+2. The hook is a tiny script that resolves the project hash from the `cwd` field in the hook payload by walking up the directory tree until it finds a match in `~/.ctx-tree/projects.tsv` (or, equivalently, until a `~/.ctx-tree/<hash>/ingest.sock` exists for an ancestor). It then JSON-encodes the normalized payload `{ tool, input, response, exit, cwd, session_id, ts }` and writes one line to the matching socket. No DB handle, no walker contention. The earlier "single global active-hash file" design (a single `~/.ctx-tree/.active-project-hash`) was broken under concurrent sessions in different projects — it raced and could pipe one project's output into another project's store.
+3. The server's ingestion handler does the redacted `INSERT` via a prepared statement (~1ms) and acks. The cheap-filter fast path (§6) lets most rows skip `pending` and land directly as `live`. Any failure — socket missing, server crashed, EAGAIN — is logged to stderr and silently dropped. ctx-tree must never block tool calls.
 
 Realistic hook overhead: **~10–25ms** end-to-end including the socket round-trip. This stays under the noise floor of most tool calls. The earlier ≤5ms claim was wrong — it omitted Node startup. The socket design dodges Node startup entirely because the hook itself is a `sh` + `jq` + `awk` + `socat` shell script (`mcp/hooks/capture.sh`, see §8) — no Node process. The upper-end estimate covers the cwd-walk-up `awk` calls (usually ≤5 ancestor levels) added to fix the multi-project routing bug. `jq`, `awk`, and `socat` are v1.1-only hard deps (added with the PostToolUse hook); `rg` is the only v1 system dep. A bundled compiled binary that subsumes the whole shell pipeline is on the v1.1+ roadmap.
 
@@ -320,11 +320,11 @@ Realistic hook overhead: **~10–25ms** end-to-end including the socket round-tr
 
 So the ingestion handler applies redaction **before** `INSERT`:
 
-- **Command denylist (Bash)** (drop the whole node): `env`, `printenv`, any binary listed in a per-project denylist file at `~/.memtree/<project-hash>/bash.deny` (one regex per line).
+- **Command denylist (Bash)** (drop the whole node): `env`, `printenv`, any binary listed in a per-project denylist file at `~/.ctx-tree/<project-hash>/bash.deny` (one regex per line).
 - **Output-string redaction (Bash)** (replace in-place with `[REDACTED:<tag>]`): regex set for AWS access keys (`AKIA…`, `ASIA…`), GitHub tokens (`ghp_`, `gho_`, `ghs_`, `ghu_`, `ghr_…`), JWT bearer tokens, `AWS_SECRET_…=`, `OPENAI_API_KEY=`, `ANTHROPIC_API_KEY=`, and generic 32+ char hex/base64 blobs following a `secret`/`token`/`password`/`key=` lexical context.
-- **Path denylist (Read/Grep)** (drop the whole node before INSERT): file path matches any of `.env*`, `.envrc`, `**/.ssh/**`, `**/.aws/credentials`, `**/.aws/config`, `**/.gnupg/**`, `**/.npmrc`, `**/.pypirc`, `**/.netrc`, `**/id_rsa*`, `**/id_ed25519*`, `**/*.pem`, `**/*.key`, `**/*.pfx`, `**/*.p12`, `**/service-account*.json`, `**/credentials.json`. The default list is **appended-to** (not overridden) by an optional per-project `~/.memtree/<project-hash>/path.deny` glob file. Gitignored paths are captured but flagged in `metadata.gitignored=true` — gitignored ≠ secret, but a useful signal for the filter walker.
+- **Path denylist (Read/Grep)** (drop the whole node before INSERT): file path matches any of `.env*`, `.envrc`, `**/.ssh/**`, `**/.aws/credentials`, `**/.aws/config`, `**/.gnupg/**`, `**/.npmrc`, `**/.pypirc`, `**/.netrc`, `**/id_rsa*`, `**/id_ed25519*`, `**/*.pem`, `**/*.key`, `**/*.pfx`, `**/*.p12`, `**/service-account*.json`, `**/credentials.json`. The default list is **appended-to** (not overridden) by an optional per-project `~/.ctx-tree/<project-hash>/path.deny` glob file. Gitignored paths are captured but flagged in `metadata.gitignored=true` — gitignored ≠ secret, but a useful signal for the filter walker.
 - **Per-project opt-out**: a project can set `capture.bash = false` (or `capture.read = false` / `capture.grep = false`) in its sidecar config to disable that capture path entirely.
-- **Filesystem hardening**: `~/.memtree/<project-hash>/` created at `0700`; `store.db` and `ingest.sock` at `0600`.
+- **Filesystem hardening**: `~/.ctx-tree/<project-hash>/` created at `0700`; `store.db` and `ingest.sock` at `0600`.
 
 **Known-leaky surfaces (accepted v1 limitations, documented for users):**
 
@@ -340,11 +340,11 @@ The redaction rules ship as a versioned module so users can audit and extend the
 ### Layout
 
 ```
-memtree/
+ctx-tree/
 ├── .claude-plugin/
 │   └── plugin.json              # canonical manifest
 ├── skills/
-│   └── using-memtree/
+│   └── using-ctx-tree/
 │       └── SKILL.md
 ├── mcp/
 │   ├── package.json
@@ -354,7 +354,7 @@ memtree/
 │       ├── project-hash.ts      # git-based project hash (no projects.tsv in v1)
 │       ├── store/               # sqlite + fts5 + sqlite-vec
 │       ├── walkers/             # v1: filter, staleness_marker, pruner
-│       └── tools/               # memtree-backed read/grep + query API
+│       └── tools/               # ctx-tree-backed read/grep + query API
 └── README.md
 ```
 
@@ -364,17 +364,17 @@ memtree/
 
 ```json
 {
-  "name": "memtree",
+  "name": "ctx-tree",
   "description": "Tree/graph-based parallel context store with surgical recall via mcp-exec",
   "author": { "name": "Joe Black", "email": "joeblackwaslike@gmail.com" },
-  "homepage": "https://github.com/joeblackwaslike/memtree",
-  "repository": "https://github.com/joeblackwaslike/memtree",
+  "homepage": "https://github.com/joeblackwaslike/ctx-tree",
+  "repository": "https://github.com/joeblackwaslike/ctx-tree",
   "license": "MIT",
   "mcpServers": {
-    "memtree": {
+    "ctx-tree": {
       "command": "node",
       "args": ["${CLAUDE_PLUGIN_ROOT}/mcp/dist/server.js"],
-      "env": { "MEMTREE_CWD": "${workspaceFolder}" }
+      "env": { "CTX_TREE_CWD": "${workspaceFolder}" }
     }
   }
 }
@@ -394,15 +394,15 @@ memtree/
 
 ### Hook script (`mcp/hooks/capture.sh`) — v1.1
 
-> **Deferred to v1.1.** The full hook script design (cwd-walk-up project routing via `projects.tsv`, `jq` + `socat` pipeline, per-tool payload normalization, epoch-ms timestamp, fire-and-forget socket write) is preserved in §7 for v1.1 implementation. See `docs/superpowers/plans/2026-05-17-memtree-v1.1.md`.
+> **Deferred to v1.1.** The full hook script design (cwd-walk-up project routing via `projects.tsv`, `jq` + `socat` pipeline, per-tool payload normalization, epoch-ms timestamp, fire-and-forget socket write) is preserved in §7 for v1.1 implementation. See `docs/superpowers/plans/2026-05-17-ctx-tree-v1.1.md`.
 
-### Skill (`skills/using-memtree/SKILL.md`)
+### Skill (`skills/using-ctx-tree/SKILL.md`)
 
 Short, retrieval-oriented. Activates when the agent is in a large codebase or long session.
 
-> Use memtree's MCP tools instead of native Read/Grep when working in a large codebase or long session. Use `memtree.read` to read files with symbol-level chunking and mtime caching. Use `memtree.search` for recall, `memtree.compose` to assemble context within a token budget, `memtree.neighbors` to walk lateral relations. Prefer memtree over re-reading files you've already touched this session.
+> Use ctx-tree's MCP tools instead of native Read/Grep when working in a large codebase or long session. Use `ctx-tree.read` to read files with symbol-level chunking and mtime caching. Use `ctx-tree.search` for recall, `ctx-tree.compose` to assemble context within a token budget, `ctx-tree.neighbors` to walk lateral relations. Prefer ctx-tree over re-reading files you've already touched this session.
 >
-> **Serena vs memtree:** Use Serena (`find_symbol`, `get_symbols_overview`, `search_for_pattern`) for live code navigation — cross-references, go-to-definition, symbol rename. Use memtree for content recall and context budgeting across turns and sessions. They are complementary tools.
+> **Serena vs ctx-tree:** Use Serena (`find_symbol`, `get_symbols_overview`, `search_for_pattern`) for live code navigation — cross-references, go-to-definition, symbol rename. Use ctx-tree for content recall and context budgeting across turns and sessions. They are complementary tools.
 
 ### Language: TypeScript
 
@@ -432,7 +432,7 @@ Other platforms (Windows, Linux `x86`, BSDs) are out of v1 scope. The server log
 
 ## 9. Future: VS Code Inspector
 
-Deferred to a separate companion repo, **`memtree-vscode`**, after memtree v1 ships and schema stabilizes.
+Deferred to a separate companion repo, **`ctx-tree-vscode`**, after ctx-tree v1 ships and schema stabilizes.
 
 Scope (MVP, ~1–2 days):
 
@@ -455,9 +455,9 @@ Out of v1 scope; called out here so the schema is designed with external read-on
 - **Embedding model drift (v1.1+).** Changing `embeddingModel` mid-project makes existing vectors unusable. Mitigation lives in the schema: `nodes_vec.embedding_model` + `embedding_dim` per row (§3); mixed-model search is rejected at query time; users get a one-shot re-embed command.
 - **Project-hash collisions.** sha256 truncated to 16 hex chars (~64 bits) — collision-resistant for any realistic project count. Path-dependent by design (see §2).
 - **Monorepo subprojects share a store.** §2's hash is `(git_root, first_commit_sha)`, so all subprojects of a monorepo resolve to the same `<project-hash>` and share one store. Intentional — it's the same repo. Callers can scope queries to a subdirectory via the `parent_id` / `session_id` filters (§5) or via `metadata.cwd` matches. Splitting per-subproject would fragment context across walls the agent reasons over anyway.
-- **Worktrees get separate stores.** `git rev-parse --show-toplevel` returns the worktree path, so two worktrees of the same repo on disk produce two different `<project-hash>` values and two independent stores. Intentional for agentic work where worktrees represent in-flight branches and you want each branch's captured context isolated. Users who want a worktree to share a parent's store can symlink `~/.memtree/<worktree-hash>` → `~/.memtree/<main-hash>` manually; v1 does not auto-detect this.
+- **Worktrees get separate stores.** `git rev-parse --show-toplevel` returns the worktree path, so two worktrees of the same repo on disk produce two different `<project-hash>` values and two independent stores. Intentional for agentic work where worktrees represent in-flight branches and you want each branch's captured context isolated. Users who want a worktree to share a parent's store can symlink `~/.ctx-tree/<worktree-hash>` → `~/.ctx-tree/<main-hash>` manually; v1 does not auto-detect this.
 - **Bash command denylist is not exhaustive (see §7 "Known-leaky surfaces").** Regex-on-command-string misses subshells, `bash -c`, `command env`, etc. v1 documents this and leans on output-side regex redaction as the safety net. Closing the gap fully needs a shell parser or sandboxed-exec strategy that's out of v1 scope.
-- **`memtree.bash` execution surface (v1.1+).** Drop reason from v1: naively executing shell via `child_process` bypasses Claude Code's Bash permission/policy surface. v1.1 implementation routes through Claude Code's native `Bash` tool via `mcp-exec`, inheriting its permission prompts and sandbox — no bypass. Passive-only (store-and-recall, no execution) is the default; `trustedExecution: true` in config enables in-process invocation for trusted environments.
+- **`ctx-tree.bash` execution surface (v1.1+).** Drop reason from v1: naively executing shell via `child_process` bypasses Claude Code's Bash permission/policy surface. v1.1 implementation routes through Claude Code's native `Bash` tool via `mcp-exec`, inheriting its permission prompts and sandbox — no bypass. Passive-only (store-and-recall, no execution) is the default; `trustedExecution: true` in config enables in-process invocation for trusted environments.
 - **System-dep surface (v1.1+).** `jq`/`socat`/`rg` are standard on macOS+Linux but still extra friction. v1.1 ships a small compiled hook binary that removes them.
 
 ---
@@ -468,24 +468,24 @@ v1 narrows the surface vs. earlier drafts. The embedding indexer, summarizer, an
 
 ### v1 ships
 
-- **Memtree-backed tools**: `memtree.read` (tree-sitter symbol chunking + 200-line fallback; path denylist enforced at call time), `memtree.grep`, `memtree.compose` (formats `raw` and `outline`; `mixed` deferred — depends on v1.1 summarizer). `memtree.bash` deferred — see §1 roadmap and §10.
-- **Query API**: `memtree.search` (`mode='keyword'` only — `hybrid`/`semantic` rejected at schema in v1), `memtree.neighbors`, `memtree.path_to_root`, `memtree.recent`. All retrieval tools accept the v1 `filters` schema (`status`, `kind`, `since`/`until`, `parent_id`, `session_id`).
+- **CtxTree-backed tools**: `ctx-tree.read` (tree-sitter symbol chunking + 200-line fallback; path denylist enforced at call time), `ctx-tree.grep`, `ctx-tree.compose` (formats `raw` and `outline`; `mixed` deferred — depends on v1.1 summarizer). `ctx-tree.bash` deferred — see §1 roadmap and §10.
+- **Query API**: `ctx-tree.search` (`mode='keyword'` only — `hybrid`/`semantic` rejected at schema in v1), `ctx-tree.neighbors`, `ctx-tree.path_to_root`, `ctx-tree.recent`. All retrieval tools accept the v1 `filters` schema (`status`, `kind`, `since`/`until`, `parent_id`, `session_id`).
 - **Walkers**: `filter` (batch processing, startup sweep), `staleness_marker`, `pruner`. All walkers have error boundaries; coordinator runs a startup sweep of pre-existing `pending` rows.
 - **Provider interfaces**: `EmbeddingProvider` and `SummarizerProvider` defined in types (no implementations in v1 — v1.1 adds Ollama/OpenAI/Anthropic adapters).
-- **Bundled skill**: `using-memtree` (with Serena complement note).
+- **Bundled skill**: `using-ctx-tree` (with Serena complement note).
 - **Bun workspace**: root `package.json` with workspace config — all commands run from repo root.
 - **Prebuilt native deps** for macOS arm64 + Linux x64/arm64, distributed via GitHub release artifacts + postinstall download (not committed to the repo).
 
 ### v1 is "done" when
 
 1. Plugin installs via marketplace (postinstall pulls the correct native binary archive from the GitHub release on first run); MCP server boots in <500ms cold after that.
-2. `memtree.search(query, mode='keyword')` returns FTS-ranked results across a populated store, defaulting to `WHERE status = 'live'`. Calls with `mode='hybrid'` or `mode='semantic'` are rejected with the documented error.
-3. `memtree.compose(seeds, budget, format='raw' | 'outline')` produces a context bundle within the requested token budget; the manifest correctly reports included/dropped nodes and any truncated content. `format='mixed'` returns an explicit "deferred to v1.1" error in v1.
+2. `ctx-tree.search(query, mode='keyword')` returns FTS-ranked results across a populated store, defaulting to `WHERE status = 'live'`. Calls with `mode='hybrid'` or `mode='semantic'` are rejected with the documented error.
+3. `ctx-tree.compose(seeds, budget, format='raw' | 'outline')` produces a context bundle within the requested token budget; the manifest correctly reports included/dropped nodes and any truncated content. `format='mixed'` returns an explicit "deferred to v1.1" error in v1.
 4. The three v1 walkers run on schedule; `pending → live → stale → pruned` transitions are observable in the DB. Coordinator runs a startup sweep of pre-existing `pending` rows on boot.
-5. Memtree-backed tool round-trip <50ms median for **cached chunks**, where "cached" in v1 means the node already exists in SQLite with unchanged `mtime`.
-6. `memtree.read` rejects secret-file paths (`.env`, `~/.ssh/id_rsa`, `~/.aws/credentials`, etc.) via the path denylist before any DB write — verified by eval security cases.
+5. CtxTree-backed tool round-trip <50ms median for **cached chunks**, where "cached" in v1 means the node already exists in SQLite with unchanged `mtime`.
+6. `ctx-tree.read` rejects secret-file paths (`.env`, `~/.ssh/id_rsa`, `~/.aws/credentials`, etc.) via the path denylist before any DB write — verified by eval security cases.
 7. The eval harness (below) passes on a fresh checkout.
-8. Bundled `using-memtree` skill activates and is discoverable by the agent.
+8. Bundled `using-ctx-tree` skill activates and is discoverable by the agent.
 
 ### Eval harness
 
@@ -493,10 +493,10 @@ v1 narrows the surface vs. earlier drafts. The embedding indexer, summarizer, an
 
 - A **fixture repo** (~30 files, mixed sizes, with a known symbol/structure layout).
 - **Golden queries**: ~20 search assertions (term → expected top-N node IDs) and ~10 compose assertions (`compose(seed_set, budget)` → expected manifest hash).
-- **Latency assertions**: cold start <500ms (post-binary-cache); memtree-backed tool median <50ms (cached chunks per def. above); hook overhead p95 <40ms end-to-end; server-side ingestion p95 <20ms; cheap-filter fast-path p95 `pending → live` <100ms.
+- **Latency assertions**: cold start <500ms (post-binary-cache); ctx-tree-backed tool median <50ms (cached chunks per def. above); hook overhead p95 <40ms end-to-end; server-side ingestion p95 <20ms; cheap-filter fast-path p95 `pending → live` <100ms.
 - **Concurrent-project routing**: scripted spawn of two MCP servers in different cwds; verify that captures from each session land only in the matching project's DB (no cross-contamination).
 - **Hook payload normalization**: golden fixtures for Bash, Read, Grep, Glob, Write, and Edit `PostToolUse` payloads — each must produce a well-formed node row with the expected `tool`, `response`, and `ts` (epoch ms) fields.
-- **Tool-schema rejection**: `memtree.search(mode='hybrid')` and `memtree.compose(format='mixed')` both return the documented v1.1-deferred error rather than silently degrading.
+- **Tool-schema rejection**: `ctx-tree.search(mode='hybrid')` and `ctx-tree.compose(format='mixed')` both return the documented v1.1-deferred error rather than silently degrading.
 - **Budget assertions**: `compose` never overruns budget; `truncated` flag set correctly on capped nodes.
 - **Security assertions**: a list of known-leaky Bash outputs (env dumps, AWS creds, GitHub tokens, JWTs) must all redact to clean state *before* `INSERT`, **plus** a list of secret-file path attempts (`.env`, `~/.ssh/id_rsa`, `~/.aws/credentials`, etc.) via Read/Grep must drop the whole node before `INSERT` — verified by inspecting DB rows post-run.
 - **Negative retrieval**: stale, superseded, and pruned nodes are absent from default-filtered `search`, `compose`, and `neighbors` results; passing an explicit `status` filter returns them.
@@ -511,7 +511,7 @@ Run via `bun mcp/eval/run.ts`; CI gates on it.
 - Semantic and hybrid search (`mode='semantic'`, `mode='hybrid'`).
 - Ollama and Anthropic-API soft dependencies (no embedding/summarization code paths in v1).
 - The `nodes_vec` table is created but stays empty in v1.
-- `memtree.bash` execution tool — see §1 roadmap and §10 risks.
+- `ctx-tree.bash` execution tool — see §1 roadmap and §10 risks.
 - Bundled compiled hook binary (replaces `jq`/`socat` system deps).
 
 ---
@@ -521,5 +521,5 @@ Run via `bun mcp/eval/run.ts`; CI gates on it.
 - Live subscriptions (`watch(query)`).
 - Multi-machine sync.
 - Web/VS Code UI.
-- Replacing every native tool — memtree augments.
+- Replacing every native tool — ctx-tree augments.
 - User-facing query language beyond the MCP tools listed.

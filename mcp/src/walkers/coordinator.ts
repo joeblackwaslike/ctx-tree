@@ -1,5 +1,5 @@
 import type { StoreBackend } from '../store/index.js';
-import type { MemtreeConfig } from '../store/types.js';
+import type { CtxTreeConfig } from '../store/types.js';
 import type { EmbeddingProvider } from '../store/types.js';
 import type { SummarizerProvider } from '../store/types.js';
 import { runFilterWalker } from './filter.js';
@@ -14,18 +14,18 @@ function withErrorBoundary(name: string, fn: () => void | Promise<void>): void {
     const result = fn();
     if (result instanceof Promise) {
       result.catch(e => {
-        process.stderr.write(`memtree ${name} error: ${e}\n`);
+        process.stderr.write(`ctx-tree ${name} error: ${e}\n`);
       });
     }
   } catch (e) {
-    process.stderr.write(`memtree ${name} error: ${e}\n`);
+    process.stderr.write(`ctx-tree ${name} error: ${e}\n`);
   }
 }
 
 export class WalkerCoordinator {
   private timers: ReturnType<typeof setInterval>[] = [];
 
-  async startupSweep(store: StoreBackend, config: MemtreeConfig): Promise<void> {
+  async startupSweep(store: StoreBackend, config: CtxTreeConfig): Promise<void> {
     let swept = 0;
     while (true) {
       const before = await store.countPendingNodes();
@@ -34,12 +34,12 @@ export class WalkerCoordinator {
       swept++;
       if (swept > 1000) break;
     }
-    if (swept > 0) process.stderr.write(`memtree: startup sweep processed pending rows in ${swept} passes\n`);
+    if (swept > 0) process.stderr.write(`ctx-tree: startup sweep processed pending rows in ${swept} passes\n`);
   }
 
-  start(store: StoreBackend, config: MemtreeConfig, embedding?: EmbeddingProvider | null, summarizer?: SummarizerProvider | null): void {
+  start(store: StoreBackend, config: CtxTreeConfig, embedding?: EmbeddingProvider | null, summarizer?: SummarizerProvider | null): void {
     this.startupSweep(store, config).catch(e => {
-      process.stderr.write(`memtree startup-sweep error: ${e}\n`);
+      process.stderr.write(`ctx-tree startup-sweep error: ${e}\n`);
     });
 
     this.timers.push(

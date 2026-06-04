@@ -1,9 +1,9 @@
 import type { StoreBackend } from '../store/index.js';
-import type { MemtreeConfig } from '../store/types.js';
+import type { CtxTreeConfig } from '../store/types.js';
 
 const BATCH_SIZE = 50;
 
-export async function runFilterWalker(store: StoreBackend, config: MemtreeConfig): Promise<void> {
+export async function runFilterWalker(store: StoreBackend, config: CtxTreeConfig): Promise<void> {
   const pending = await store.getPendingNodes(BATCH_SIZE);
   if (pending.length === 0) return;
 

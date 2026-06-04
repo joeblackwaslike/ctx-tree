@@ -1,4 +1,4 @@
-name: Publish memtree VS Code Extension
+name: Publish ctx-tree VS Code Extension
 
 on:
   push:
@@ -18,13 +18,13 @@ jobs:
           node-version: '20'
 
       - name: Install dependencies
-        working-directory: packages/memtree-vscode
+        working-directory: packages/ctx-tree-vscode
         run: npm ci
 
       - name: Build
-        working-directory: packages/memtree-vscode
+        working-directory: packages/ctx-tree-vscode
         run: npm run build
 
       - name: Publish to VS Code Marketplace
-        working-directory: packages/memtree-vscode
+        working-directory: packages/ctx-tree-vscode
         run: npx vsce publish --pat ${{ secrets.VSCE_PAT }}

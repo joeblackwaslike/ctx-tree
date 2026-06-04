@@ -35,13 +35,13 @@ describe('registerProject, deregisterProject, resolveProjectHash', () => {
   
   beforeEach(() => {
     // Create a temporary directory for each test
-    tmpDir = mkdtempSync(join(tmpdir(), 'memtree-test-'));
-    process.env.MEMTREE_HOME = tmpDir;
+    tmpDir = mkdtempSync(join(tmpdir(), 'ctx-tree-test-'));
+    process.env.CTX_TREE_HOME = tmpDir;
   });
 
   afterEach(() => {
     // Clean up the temp directory after each test
-    delete process.env.MEMTREE_HOME;
+    delete process.env.CTX_TREE_HOME;
     try {
       rmSync(tmpDir, { recursive: true });
     } catch {
@@ -112,8 +112,8 @@ describe('registerProject, deregisterProject, resolveProjectHash', () => {
     expect(resolveProjectHash('/tmp/unknown-project')).toBeNull();
   });
 
-  test('registerProject creates missing MEMTREE_HOME directory', () => {
-    // Remove the temp directory to simulate missing ~/.memtree/
+  test('registerProject creates missing CTX_TREE_HOME directory', () => {
+    // Remove the temp directory to simulate missing ~/.ctx-tree/
     rmSync(tmpDir, { recursive: true });
     
     const cwd = '/tmp/test-project-missing-dir';

@@ -1,11 +1,11 @@
 import type { StoreBackend } from '../store/index.js';
-import type { MemtreeConfig, EmbeddingProvider } from '../store/types.js';
+import type { CtxTreeConfig, EmbeddingProvider } from '../store/types.js';
 
 let inFlight = false;
 
 export function runEmbeddingWalker(
   store: StoreBackend,
-  config: MemtreeConfig,
+  config: CtxTreeConfig,
   provider: EmbeddingProvider | null
 ): void {
   if (!provider) return;
@@ -30,7 +30,7 @@ export function runEmbeddingWalker(
       return store.batchUpsertNodeVec(upsertRows);
     });
   }).catch((e: unknown) => {
-    process.stderr.write(`memtree embedding error: ${e}\n`);
+    process.stderr.write(`ctx-tree embedding error: ${e}\n`);
   }).finally(() => {
     inFlight = false;
   });

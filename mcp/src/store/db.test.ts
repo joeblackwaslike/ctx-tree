@@ -3,7 +3,7 @@ import { unlinkSync, existsSync } from 'fs';
 import { openDb, closeDb } from './db';
 import type { Database } from 'bun:sqlite';
 
-const TEST_DB = '/tmp/memtree-test.db';
+const TEST_DB = '/tmp/ctx-tree-test.db';
 let db: Database;
 
 beforeEach(() => { db = openDb(TEST_DB); });

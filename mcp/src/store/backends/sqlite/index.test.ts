@@ -3,7 +3,7 @@ import { unlinkSync, existsSync } from 'fs';
 import { createSqliteBackend } from './index.js';
 import type { StoreBackend } from '../../interface.js';
 
-const TEST_DB = '/tmp/memtree-sqlite-test.db';
+const TEST_DB = '/tmp/ctx-tree-sqlite-test.db';
 
 let store: StoreBackend;
 

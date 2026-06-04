@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * PreToolUse hook — hard-redirects native Read/Grep/Bash/WebFetch/PowerShell/Monitor
- * to memtree equivalents. Agent enrichment is handled by a separate hook. Emits permissionDecision:deny so the original call is blocked,
+ * to ctx-tree equivalents. Agent enrichment is handled by a separate hook. Emits permissionDecision:deny so the original call is blocked,
  * then injects the exact replacement call as additionalContext.
  */
 
@@ -54,8 +54,8 @@ if (toolName === 'read') {
       ? `, lines: ${JSON.stringify(toolInput.lines)}`
       : '';
     deny(
-      `Use memtree_read instead of Read for "${filePath}".`,
-      `Call: memtree_read({ path: ${JSON.stringify(filePath)}${extra} })\n\nReturns identical content. Also symbol-chunks the file, stores nodes in the session graph, and returns nodeIds you can pass to memtree_neighbors to find related code.`,
+      `Use ctx_tree_read instead of Read for "${filePath}".`,
+      `Call: ctx_tree_read({ path: ${JSON.stringify(filePath)}${extra} })\n\nReturns identical content. Also symbol-chunks the file, stores nodes in the session graph, and returns nodeIds you can pass to ctx_tree_neighbors to find related code.`,
     );
   }
 }
@@ -66,8 +66,8 @@ if (toolName === 'grep') {
   const path    = String(toolInput.path ?? toolInput.include ?? '');
   const pathArg = path ? `, path: ${JSON.stringify(path)}` : '';
   deny(
-    `Use memtree_grep instead of Grep.`,
-    `Call: memtree_grep({ pattern: ${JSON.stringify(pattern)}${pathArg} })\n\nSame ripgrep results. Stores each match as a graph node so you can revisit via memtree_search or memtree_neighbors without re-running the search.`,
+    `Use ctx_tree_grep instead of Grep.`,
+    `Call: ctx_tree_grep({ pattern: ${JSON.stringify(pattern)}${pathArg} })\n\nSame ripgrep results. Stores each match as a graph node so you can revisit via ctx_tree_search or ctx_tree_neighbors without re-running the search.`,
   );
 }
 
@@ -89,8 +89,8 @@ if (toolName === 'bash') {
     const pattern = nonFlagArgs[0] ?? '';
     const searchPath = nonFlagArgs[1] ?? '.';
     deny(
-      `Use memtree_grep instead of ${cmdName}.`,
-      `Call: memtree_grep({ pattern: ${JSON.stringify(pattern)}, path: ${JSON.stringify(searchPath)} })\n\nSame results, stored as graph nodes.`,
+      `Use ctx_tree_grep instead of ${cmdName}.`,
+      `Call: ctx_tree_grep({ pattern: ${JSON.stringify(pattern)}, path: ${JSON.stringify(searchPath)} })\n\nSame results, stored as graph nodes.`,
     );
   }
 
@@ -98,8 +98,8 @@ if (toolName === 'bash') {
     const filePath = parts.slice(1).find(p => !p.startsWith('-')) ?? '';
     if (filePath && CODE_EXTENSIONS.has(getExt(filePath))) {
       deny(
-        `Use memtree_read instead of ${cmdName} for "${filePath}".`,
-        `Call: memtree_read({ path: ${JSON.stringify(filePath)} })\n\nReturns the file content and stores symbol-chunked nodes in the session graph.`,
+        `Use ctx_tree_read instead of ${cmdName} for "${filePath}".`,
+        `Call: ctx_tree_read({ path: ${JSON.stringify(filePath)} })\n\nReturns the file content and stores symbol-chunked nodes in the session graph.`,
       );
     }
   }
@@ -109,8 +109,8 @@ if (toolName === 'bash') {
 if (toolName === 'webfetch') {
   const url = String(toolInput.url ?? toolInput.uri ?? '');
   deny(
-    `Use memtree_browse instead of WebFetch for "${url}".`,
-    `Call: memtree_browse({ url: ${JSON.stringify(url)} })\n\nReturns a compact structured reference (title, key sections, nodeId) instead of raw HTML. Stores the page as a web_chunk node so you can revisit via memtree_neighbors or memtree_search.`,
+    `Use ctx_tree_browse instead of WebFetch for "${url}".`,
+    `Call: ctx_tree_browse({ url: ${JSON.stringify(url)} })\n\nReturns a compact structured reference (title, key sections, nodeId) instead of raw HTML. Stores the page as a web_chunk node so you can revisit via ctx_tree_neighbors or ctx_tree_search.`,
   );
 }
 
@@ -133,8 +133,8 @@ if (toolName === 'powershell') {
     const pathIdx = parts.findIndex(p => p.toLowerCase() === '-path');
     const searchPath = pathIdx >= 0 ? (parts[pathIdx + 1] ?? '.') : '.';
     deny(
-      `Use memtree_grep instead of ${parts[0]}.`,
-      `Call: memtree_grep({ pattern: ${JSON.stringify(pattern)}, path: ${JSON.stringify(searchPath)} })\n\nSame results, stored as graph nodes.`,
+      `Use ctx_tree_grep instead of ${parts[0]}.`,
+      `Call: ctx_tree_grep({ pattern: ${JSON.stringify(pattern)}, path: ${JSON.stringify(searchPath)} })\n\nSame results, stored as graph nodes.`,
     );
   }
 
@@ -142,8 +142,8 @@ if (toolName === 'powershell') {
     const filePath = parts.slice(1).find(p => !p.startsWith('-')) ?? '';
     if (filePath && CODE_EXTENSIONS.has(getExt(filePath))) {
       deny(
-        `Use memtree_read instead of ${parts[0]} for "${filePath}".`,
-        `Call: memtree_read({ path: ${JSON.stringify(filePath)} })\n\nReturns the file content and stores symbol-chunked nodes in the session graph.`,
+        `Use ctx_tree_read instead of ${parts[0]} for "${filePath}".`,
+        `Call: ctx_tree_read({ path: ${JSON.stringify(filePath)} })\n\nReturns the file content and stores symbol-chunked nodes in the session graph.`,
       );
     }
   }
@@ -152,8 +152,8 @@ if (toolName === 'powershell') {
     const uriIdx = parts.findIndex(p => p.toLowerCase() === '-uri' || p.toLowerCase() === '-url');
     const url = uriIdx >= 0 ? (parts[uriIdx + 1] ?? '') : (parts[1] ?? '');
     deny(
-      `Use memtree_browse instead of ${parts[0]} for "${url}".`,
-      `Call: memtree_browse({ url: ${JSON.stringify(url)} })\n\nReturns a compact structured reference stored as a web_chunk node.`,
+      `Use ctx_tree_browse instead of ${parts[0]} for "${url}".`,
+      `Call: ctx_tree_browse({ url: ${JSON.stringify(url)} })\n\nReturns a compact structured reference stored as a web_chunk node.`,
     );
   }
 }
@@ -162,15 +162,15 @@ if (toolName === 'powershell') {
 if (toolName === 'monitor') {
   const command = String(toolInput.command ?? toolInput.cmd ?? '');
   deny(
-    `Use memtree_monitor instead of Monitor for "${command.slice(0, 60)}".`,
-    `Call: memtree_monitor({ command: ${JSON.stringify(command)} })\n\nRuns the command, captures ALL output to a stored node, returns a compact reference (nodeId + preview). Output never floods context — retrieve any portion via memtree_compose([nodeId], budget_tokens).`,
+    `Use ctx_tree_monitor instead of Monitor for "${command.slice(0, 60)}".`,
+    `Call: ctx_tree_monitor({ command: ${JSON.stringify(command)} })\n\nRuns the command, captures ALL output to a stored node, returns a compact reference (nodeId + preview). Output never floods context — retrieve any portion via ctx_tree_compose([nodeId], budget_tokens).`,
   );
 }
 
 // ── WebSearch ─────────────────────────────────────────────────────────────────
-// Not blocked — search results are compact already and we have no memtree
+// Not blocked — search results are compact already and we have no ctx-tree
 // replacement yet. PostToolUse hook handles compaction once results arrive.
-// (memtree_web_search is a future tool)
+// (ctx_tree_web_search is a future tool)
 
 // No redirect needed — allow the call
 process.exit(0);

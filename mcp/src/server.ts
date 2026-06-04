@@ -19,14 +19,14 @@ import { searchKeyword, searchSemantic, searchHybrid } from './tools/search.js';
 import { getNeighborsDeep } from './tools/neighbors.js';
 import { getPathToRoot } from './tools/path-to-root.js';
 import { getRecent } from './tools/recent.js';
-import { memtreeRead } from './tools/read.js';
-import { memtreeGrep } from './tools/grep.js';
-import { memtreeCompose } from './tools/compose.js';
-import { memtreeBrowse } from './tools/browse.js';
-import { memtreeMonitor } from './tools/monitor.js';
-import { memtreeNote } from './tools/note.js';
-import { memtreeBash } from './tools/bash.js';
-import { memtreeVisualize } from './tools/visualize.js';
+import { ctxTreeRead } from './tools/read.js';
+import { ctxTreeGrep } from './tools/grep.js';
+import { ctxTreeCompose } from './tools/compose.js';
+import { ctxTreeBrowse } from './tools/browse.js';
+import { ctxTreeMonitor } from './tools/monitor.js';
+import { ctxTreeNote } from './tools/note.js';
+import { ctxTreeBash } from './tools/bash.js';
+import { ctxTreeVisualize } from './tools/visualize.js';
 import type { Filters } from './store/types.js';
 import { loadProviders } from './providers/index.js';
 import { processIngest } from './ingest.js';
@@ -44,7 +44,7 @@ const effectivePlatform = SUPPORTED_PLATFORMS.includes(rawPlatform)
 
 if (!effectivePlatform) {
   process.stderr.write(
-    `memtree: unsupported platform ${rawPlatform}\n` +
+    `ctx-tree: unsupported platform ${rawPlatform}\n` +
       `Supported platforms: ${SUPPORTED_PLATFORMS.join(', ')}\n`,
   );
   process.exit(1);
@@ -56,7 +56,7 @@ try {
   execSync('rg --version', { stdio: 'pipe' });
   rgAvailable = true;
 } catch {
-  process.stderr.write('memtree: `rg` not found — memtree_grep will be unavailable.\n');
+  process.stderr.write('ctx-tree: `rg` not found — ctx_tree_grep will be unavailable.\n');
 }
 
 // ── jq & socat checks (for capture hook) ──────────────────────────────────────
@@ -65,7 +65,7 @@ for (const bin of ['jq', 'socat'] as const) {
     execSync(`${bin} --version`, { stdio: 'pipe' });
   } catch {
     process.stderr.write(
-      `memtree: \`${bin}\` not found — passive capture hook will not function.\n` +
+      `ctx-tree: \`${bin}\` not found — passive capture hook will not function.\n` +
       `  Install: brew install ${bin}\n`,
     );
     // Non-fatal: server still starts; capture.sh will silently exit 0 without the binary.
@@ -73,18 +73,18 @@ for (const bin of ['jq', 'socat'] as const) {
 }
 
 // ── DB path setup ─────────────────────────────────────────────────────────────
-const projectHash = computeProjectHash(process.env.MEMTREE_CWD ?? process.cwd());
-const storeDir = join(process.env.HOME ?? '/tmp', '.memtree', projectHash);
+const projectHash = computeProjectHash(process.env.CTX_TREE_CWD ?? process.cwd());
+const storeDir = join(process.env.HOME ?? '/tmp', '.ctx-tree', projectHash);
 const dbPath = join(storeDir, 'store.db');
 
 mkdirSync(storeDir, { recursive: true, mode: 0o700 });
 
-const config = loadConfig(process.env.MEMTREE_CWD ?? process.cwd());
+const config = loadConfig(process.env.CTX_TREE_CWD ?? process.cwd());
 const store: StoreBackend = await createBackend(config.backend ?? { kind: 'sqlite' }, dbPath);
 chmodSync(dbPath, 0o600);
 
 // Register this project in projects.tsv
-registerProject(process.env.MEMTREE_CWD ?? process.cwd(), projectHash);
+registerProject(process.env.CTX_TREE_CWD ?? process.cwd(), projectHash);
 
 // ── Providers ─────────────────────────────────────────────────────────────────
 const { embedding, summarizer: _summarizer } = loadProviders(config);
@@ -108,7 +108,7 @@ const ingestServer = net.createServer((socket) => {
   socket.on('data', (chunk) => {
     buf += chunk.toString('utf8');
     if (buf.length > MAX_INGEST_BUF) {
-      process.stderr.write(`[memtree/ingest] socket buffer exceeded limit, closing connection\n`);
+      process.stderr.write(`[ctx-tree/ingest] socket buffer exceeded limit, closing connection\n`);
       socket.destroy();
       buf = '';
       return;
@@ -122,12 +122,12 @@ const ingestServer = net.createServer((socket) => {
         const payload = JSON.parse(line) as IngestPayload;
         processIngest(store, config, payload);
       } catch (err) {
-        process.stderr.write(`[memtree/ingest] failed to parse line: ${err}\n`);
+        process.stderr.write(`[ctx-tree/ingest] failed to parse line: ${err}\n`);
       }
     }
   });
   socket.on('error', (err) => {
-    process.stderr.write(`[memtree/ingest] socket connection error: ${err}\n`);
+    process.stderr.write(`[ctx-tree/ingest] socket connection error: ${err}\n`);
   });
 });
 
@@ -136,20 +136,20 @@ ingestServer.listen(ingestSockPath, () => {
 });
 
 ingestServer.on('error', (err) => {
-  process.stderr.write(`[memtree/ingest] server error: ${err}\n`);
+  process.stderr.write(`[ctx-tree/ingest] server error: ${err}\n`);
 });
 
 // ── MCP server ────────────────────────────────────────────────────────────────
 const server = new Server(
-  { name: 'memtree', version: '0.1.0' },
+  { name: 'ctx-tree', version: '0.1.0' },
   { capabilities: { tools: {} } },
 );
 
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: [
     {
-      name: 'memtree_search',
-      description: 'Search over the memtree store. Supports keyword (BM25), semantic (cosine similarity), and hybrid (RRF fusion) modes.',
+      name: 'ctx_tree_search',
+      description: 'Search over the ctx-tree store. Supports keyword (BM25), semantic (cosine similarity), and hybrid (RRF fusion) modes.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -162,7 +162,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
-      name: 'memtree_neighbors',
+      name: 'ctx_tree_neighbors',
       description: 'Graph walk from a node, returning neighbors up to a depth cap of 5.',
       inputSchema: {
         type: 'object',
@@ -176,7 +176,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
-      name: 'memtree_path_to_root',
+      name: 'ctx_tree_path_to_root',
       description: 'Walk the parent chain from a node to the root.',
       inputSchema: {
         type: 'object',
@@ -187,7 +187,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
-      name: 'memtree_recent',
+      name: 'ctx_tree_recent',
       description: 'Return the most recently created nodes, newest first.',
       inputSchema: {
         type: 'object',
@@ -199,7 +199,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
-      name: 'memtree_read',
+      name: 'ctx_tree_read',
       description: 'Read a file with tree-sitter chunking and mtime caching.',
       inputSchema: {
         type: 'object',
@@ -218,7 +218,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
-      name: 'memtree_grep',
+      name: 'ctx_tree_grep',
       description: 'ripgrep integration — search file content by regex pattern.',
       inputSchema: {
         type: 'object',
@@ -232,7 +232,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
-      name: 'memtree_compose',
+      name: 'ctx_tree_compose',
       description: 'BFS graph expansion + scoring + budget-pack into a single context block.',
       inputSchema: {
         type: 'object',
@@ -247,7 +247,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
-      name: 'memtree_note',
+      name: 'ctx_tree_note',
       description: 'Store a note or observation in the graph. Use to persist decisions, summaries, or any context you want retrievable in future sessions.',
       inputSchema: {
         type: 'object',
@@ -259,7 +259,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
-      name: 'memtree_monitor',
+      name: 'ctx_tree_monitor',
       description: 'Run a shell command via the system shell (sh -c), capture output as a stored node, and return a compact reference. WARNING: executes directly — not sandboxed by Claude Code permission model. Sensitive values are redacted before storage. Use instead of Bash when the command produces large or streaming output.',
       inputSchema: {
         type: 'object',
@@ -272,7 +272,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
-      name: 'memtree_browse',
+      name: 'ctx_tree_browse',
       description: 'Fetch a URL, extract structured text, store as a web_chunk node. Returns a compact reference with title, headings, and body excerpt.',
       inputSchema: {
         type: 'object',
@@ -285,7 +285,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
-      name: 'memtree_bash',
+      name: 'ctx_tree_bash',
       description: 'Execute a shell command, redact secrets from output, and store the result in the context store.',
       inputSchema: {
         type: 'object',
@@ -297,12 +297,12 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
-      name: 'memtree_visualize',
+      name: 'ctx_tree_visualize',
       description: 'Start (or return the URL of) the real-time graph visualizer. Opens a browser tab showing all nodes and edges with live updates. Idempotent — safe to call multiple times.',
       inputSchema: {
         type: 'object',
         properties: {
-          port: { type: 'number', description: 'Port to bind (default: 7777, overridden by MEMTREE_VIZ_PORT env)' },
+          port: { type: 'number', description: 'Port to bind (default: 7777, overridden by CTX_TREE_VIZ_PORT env)' },
           open: { type: 'boolean', description: 'Open the browser automatically (default: true)' },
         },
       },
@@ -315,7 +315,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   try {
     switch (name) {
-      case 'memtree_search': {
+      case 'ctx_tree_search': {
         const { query, mode, limit, filters } = args as {
           query: string;
           mode?: string;
@@ -339,7 +339,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         return { content: [{ type: 'text', text: JSON.stringify(result) }] };
       }
 
-      case 'memtree_neighbors': {
+      case 'ctx_tree_neighbors': {
         const { node_id, depth, edge_kinds, filters } = args as {
           node_id: string;
           depth?: number;
@@ -352,14 +352,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         return { content: [{ type: 'text', text: JSON.stringify(result) }] };
       }
 
-      case 'memtree_path_to_root': {
+      case 'ctx_tree_path_to_root': {
         const { node_id } = args as { node_id: string };
         if (typeof node_id !== 'string') throw new McpError(ErrorCode.InvalidParams, '"node_id" is required and must be a string');
         const result = await getPathToRoot(store, node_id);
         return { content: [{ type: 'text', text: JSON.stringify(result) }] };
       }
 
-      case 'memtree_recent': {
+      case 'ctx_tree_recent': {
         const { since, limit, filters } = args as {
           since?: number;
           limit?: number;
@@ -369,18 +369,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         return { content: [{ type: 'text', text: JSON.stringify(result) }] };
       }
 
-      case 'memtree_read': {
+      case 'ctx_tree_read': {
         const { path, lines, budget_tokens } = args as {
           path: string;
           lines?: [number, number];
           budget_tokens?: number;
         };
         if (typeof path !== 'string') throw new McpError(ErrorCode.InvalidParams, '"path" is required and must be a string');
-        const result = await memtreeRead(store, config, { path, lines, budget_tokens });
+        const result = await ctxTreeRead(store, config, { path, lines, budget_tokens });
         return { content: [{ type: 'text', text: result.content }] };
       }
 
-      case 'memtree_grep': {
+      case 'ctx_tree_grep': {
         const { pattern, path, case_insensitive, file_glob } = args as {
           pattern: string;
           path?: string;
@@ -389,7 +389,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
         if (typeof pattern !== 'string') throw new McpError(ErrorCode.InvalidParams, '"pattern" is required and must be a string');
         if (!rgAvailable) throw new McpError(ErrorCode.InvalidParams, '`rg` (ripgrep) is not installed. Install via: brew install ripgrep');
-        const result = await memtreeGrep(store, config, {
+        const result = await ctxTreeGrep(store, config, {
           pattern,
           path,
           caseInsensitive: case_insensitive,
@@ -398,7 +398,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         return { content: [{ type: 'text', text: result.matches.join('\n') }] };
       }
 
-      case 'memtree_compose': {
+      case 'ctx_tree_compose': {
         const { node_ids, budget_tokens, format, query, depth } = args as {
           node_ids: string[];
           budget_tokens: number;
@@ -408,7 +408,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
         if (!Array.isArray(node_ids)) throw new McpError(ErrorCode.InvalidParams, '"node_ids" is required and must be an array');
         if (typeof budget_tokens !== 'number') throw new McpError(ErrorCode.InvalidParams, '"budget_tokens" is required and must be a number');
-        const result = await memtreeCompose(store, {
+        const result = await ctxTreeCompose(store, {
           node_ids,
           budget_tokens,
           format,
@@ -425,21 +425,21 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
 
-      case 'memtree_note': {
+      case 'ctx_tree_note': {
         const { content, title } = args as { content: string; title?: string };
-        const result = await memtreeNote(store, config, { content, title });
+        const result = await ctxTreeNote(store, config, { content, title });
         return {
           content: [{ type: 'text', text: JSON.stringify(result) }],
         };
       }
 
-      case 'memtree_monitor': {
+      case 'ctx_tree_monitor': {
         const { command, timeout_ms, cwd } = args as {
           command: string;
           timeout_ms?: number;
           cwd?: string;
         };
-        const result = await memtreeMonitor(store, config, { command, timeout_ms, cwd });
+        const result = await ctxTreeMonitor(store, config, { command, timeout_ms, cwd });
         return {
           content: [
             {
@@ -451,20 +451,20 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 lines_captured: result.lines_captured,
                 cached: result.cached,
                 preview: result.preview,
-                hint: `Full output stored as node ${result.nodeId}. Call memtree_compose(["${result.nodeId}"], 4000) to retrieve it within a token budget.`,
+                hint: `Full output stored as node ${result.nodeId}. Call ctx_tree_compose(["${result.nodeId}"], 4000) to retrieve it within a token budget.`,
               }),
             },
           ],
         };
       }
 
-      case 'memtree_browse': {
+      case 'ctx_tree_browse': {
         const { url, budget_tokens, force } = args as {
           url: string;
           budget_tokens?: number;
           force?: boolean;
         };
-        const result = await memtreeBrowse(store, config, { url, budget_tokens, force });
+        const result = await ctxTreeBrowse(store, config, { url, budget_tokens, force });
         return {
           content: [
             {
@@ -484,16 +484,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
 
-      case 'memtree_bash': {
+      case 'ctx_tree_bash': {
         const { command, budget_tokens } = args as { command: string; budget_tokens?: number };
         if (typeof command !== 'string') throw new McpError(ErrorCode.InvalidParams, '"command" is required and must be a string');
-        const result = await memtreeBash(store, config, { command, budget_tokens });
+        const result = await ctxTreeBash(store, config, { command, budget_tokens });
         return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
       }
 
-      case 'memtree_visualize': {
+      case 'ctx_tree_visualize': {
         const { port, open } = args as { port?: number; open?: boolean };
-        const result = await memtreeVisualize(store, { port, open });
+        const result = await ctxTreeVisualize(store, { port, open });
         return {
           content: [{
             type: 'text',

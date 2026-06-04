@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Database } from 'bun:sqlite';
-import type { MemtreeNode, MemtreeEdge } from '../store/types.js';
+import type { CtxTreeNode, CtxTreeEdge } from '../store/types.js';
 import { DbWatcher } from './watcher.js';
 
 const VALID_STATUSES = new Set(['pending', 'live', 'stale', 'superseded', 'pruned']);
@@ -59,7 +59,7 @@ export class VisualizeServer {
         if (url.pathname.startsWith('/api/node/')) {
           const id = url.pathname.slice('/api/node/'.length);
           const node = self.db
-            .query<MemtreeNode, [string]>('SELECT * FROM nodes WHERE id = ?')
+            .query<CtxTreeNode, [string]>('SELECT * FROM nodes WHERE id = ?')
             .get(id);
           return node
             ? Response.json(node)
@@ -117,7 +117,7 @@ export class VisualizeServer {
     this.started = false;
   }
 
-  private snapshot(params: URLSearchParams): { nodes: MemtreeNode[]; edges: MemtreeEdge[] } {
+  private snapshot(params: URLSearchParams): { nodes: CtxTreeNode[]; edges: CtxTreeEdge[] } {
     const conditions: string[] = [];
     const args: (string | number)[] = [];
 
@@ -143,10 +143,10 @@ export class VisualizeServer {
 
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
     const nodes = this.db
-      .query<MemtreeNode, typeof args>(`SELECT * FROM nodes ${where}`)
+      .query<CtxTreeNode, typeof args>(`SELECT * FROM nodes ${where}`)
       .all(...args);
     const edges = this.db
-      .query<MemtreeEdge, []>('SELECT * FROM edges')
+      .query<CtxTreeEdge, []>('SELECT * FROM edges')
       .all();
 
     return { nodes, edges };

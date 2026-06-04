@@ -4,13 +4,13 @@ import { VisualizeServer } from '../visualize/server.js';
 
 let vizServer: VisualizeServer | null = null;
 
-export async function memtreeVisualize(
+export async function ctxTreeVisualize(
   db: Database,
   params: { port?: number; open?: boolean }
 ): Promise<{ url: string; port: number; nodeCount: number; edgeCount: number }> {
   if (!vizServer) {
     const port =
-      parseInt(process.env.MEMTREE_VIZ_PORT ?? '', 10) || (params.port ?? 7777);
+      parseInt(process.env.CTX_TREE_VIZ_PORT ?? '', 10) || (params.port ?? 7777);
     vizServer = new VisualizeServer(db, { port });
     await vizServer.start();
   }

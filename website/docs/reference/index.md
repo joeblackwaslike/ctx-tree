@@ -6,7 +6,7 @@ sidebar_position: 1
 
 # Reference
 
-Complete technical reference for all memtree components.
+Complete technical reference for all ctx-tree components.
 
 ## Contents
 

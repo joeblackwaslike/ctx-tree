@@ -6,7 +6,7 @@ import { join } from 'path';
 const input = JSON.parse(readFileSync('/dev/stdin', 'utf8'));
 const { tool_name, tool_input } = input;
 
-const proxyFlag = join(homedir(), '.memtree', 'proxy-mode');
+const proxyFlag = join(homedir(), '.ctx-tree', 'proxy-mode');
 if (!existsSync(proxyFlag)) {
   process.stdout.write('{}');
   process.exit(0);
@@ -21,7 +21,7 @@ if (!rewrite) {
 const output = {
   hookSpecificOutput: {
     additionalContext: [
-      `[memtree proxy] Do NOT call \`${tool_name}\` directly — proxy mode is active.`,
+      `[ctx-tree proxy] Do NOT call \`${tool_name}\` directly — proxy mode is active.`,
       `Call this instead:\n`,
       rewrite,
     ].join('\n'),
@@ -34,14 +34,14 @@ function buildRewrite(toolName, input) {
   switch (toolName) {
     case 'Read':
       return [
-        `memtree_read({`,
+        `ctx_tree_read({`,
         `  file_path: ${JSON.stringify(input.file_path)},`,
         `})`,
       ].join('\n');
 
     case 'Grep':
       return [
-        `memtree_grep({`,
+        `ctx_tree_grep({`,
         `  pattern: ${JSON.stringify(input.pattern)},`,
         input.path ? `  path: ${JSON.stringify(input.path)},` : null,
         `})`,

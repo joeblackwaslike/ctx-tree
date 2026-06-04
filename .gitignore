@@ -10,7 +10,7 @@ docs/_handoff.md
 
 # macOS / editor cruft
 .DS_Store
-memtree.code-workspace
+ctx-tree.code-workspace
 
 # Tool state dirs
 .clawhip/

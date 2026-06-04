@@ -1,11 +1,11 @@
 import type { Database } from 'bun:sqlite';
 import { createHash } from 'crypto';
 import { ulid } from 'ulid';
-import type { MemtreeConfig } from '../../src/store/types';
+import type { CtxTreeConfig } from '../../src/store/types';
 import { DEFAULT_CONFIG } from '../../src/config';
 import { insertNode } from '../../src/store/nodes';
 import { searchKeyword, searchSemantic } from '../../src/tools/search';
-import { memtreeRead } from '../../src/tools/read';
+import { ctxTreeRead } from '../../src/tools/read';
 
 export interface SearchResult {
   name: string;
@@ -102,7 +102,7 @@ export async function runSearchCases(db: Database): Promise<SearchResult[]> {
   // ── Case 3: semantic-mode-no-provider-error ───────────────────────────────
   // Verify searchSemantic throws a clear error when provider is null.
   {
-    const cfg: MemtreeConfig = { ...DEFAULT_CONFIG };
+    const cfg: CtxTreeConfig = { ...DEFAULT_CONFIG };
     let passed = false;
     let error: string | undefined;
     try {
@@ -120,7 +120,7 @@ export async function runSearchCases(db: Database): Promise<SearchResult[]> {
 }
 
 export async function runGracefulDegradationCases(db: Database): Promise<SearchResult[]> {
-  const cfg: MemtreeConfig = { ...DEFAULT_CONFIG };
+  const cfg: CtxTreeConfig = { ...DEFAULT_CONFIG };
   const results: SearchResult[] = [];
 
   // ── Case 1: graceful-degradation:path-denylist ────────────────────────────
@@ -128,8 +128,8 @@ export async function runGracefulDegradationCases(db: Database): Promise<SearchR
     let passed = false;
     let error: string | undefined;
     try {
-      await memtreeRead(db, cfg, { path: '/home/user/.env', budget_tokens: 200 });
-      error = 'Expected memtreeRead to throw for denylist path but it did not';
+      await ctxTreeRead(db, cfg, { path: '/home/user/.env', budget_tokens: 200 });
+      error = 'Expected ctxTreeRead to throw for denylist path but it did not';
     } catch (e: unknown) {
       passed = String((e as Error).message).includes('Path rejected by denylist');
       if (!passed) error = `Wrong error: ${(e as Error).message}`;

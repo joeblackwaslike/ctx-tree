@@ -1,6 +1,6 @@
 /**
  * PreToolUse:Agent — enriches the subagent prompt with:
- *   1. memtree tool map (always)
+ *   1. ctx-tree tool map (always)
  *   2. FTS keyword hits from prior session work (when store is populated)
  *
  * Also lazily creates a session node on first Agent call, and writes a
@@ -27,8 +27,8 @@ if (!taskText) process.exit(0);
 
 // ── Locate DB ─────────────────────────────────────────────────────────────────
 const projectHash = computeProjectHash(cwd);
-const dbPath      = join(process.env.HOME ?? '/tmp', '.memtree', projectHash, 'store.db');
-const hooksDir    = join(process.env.HOME ?? '/tmp', '.memtree', 'hooks');
+const dbPath      = join(process.env.HOME ?? '/tmp', '.ctx-tree', projectHash, 'store.db');
+const hooksDir    = join(process.env.HOME ?? '/tmp', '.ctx-tree', 'hooks');
 mkdirSync(hooksDir, { recursive: true, mode: 0o700 });
 
 // ── Session node ID is deterministic — write state before any early exit ──────
@@ -97,19 +97,19 @@ emitEnrichedPrompt(toolInput, taskText, sessionNodeId, relevantNodes);
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function emitEnrichedPrompt(toolInput, taskText, sessionNodeId, relevantNodes) {
-  let ctx = '\n\n[memtree context]\n';
+  let ctx = '\n\n[ctx-tree context]\n';
 
   if (sessionNodeId) ctx += `Session node: ${sessionNodeId}\n`;
 
-  ctx += `memtree MCP tools — use these instead of native tools:\n`;
-  ctx += `  memtree_read({path})                   → Read\n`;
-  ctx += `  memtree_grep({pattern, path})          → Grep / Bash(rg)\n`;
-  ctx += `  memtree_browse({url})                  → WebFetch\n`;
-  ctx += `  memtree_monitor({command})             → Bash when output could be large\n`;
-  ctx += `  memtree_compose([nodeIds], budget)     → assemble multi-file context\n`;
-  ctx += `  memtree_recent()                       → surface prior session captures\n`;
-  ctx += `  memtree_search(query)                  → keyword search across all nodes\n`;
-  ctx += `  memtree_neighbors(nodeId)              → find related nodes\n`;
+  ctx += `ctx-tree MCP tools — use these instead of native tools:\n`;
+  ctx += `  ctx_tree_read({path})                   → Read\n`;
+  ctx += `  ctx_tree_grep({pattern, path})          → Grep / Bash(rg)\n`;
+  ctx += `  ctx_tree_browse({url})                  → WebFetch\n`;
+  ctx += `  ctx_tree_monitor({command})             → Bash when output could be large\n`;
+  ctx += `  ctx_tree_compose([nodeIds], budget)     → assemble multi-file context\n`;
+  ctx += `  ctx_tree_recent()                       → surface prior session captures\n`;
+  ctx += `  ctx_tree_search(query)                  → keyword search across all nodes\n`;
+  ctx += `  ctx_tree_neighbors(nodeId)              → find related nodes\n`;
 
   if (relevantNodes.length > 0) {
     ctx += `\nRelevant prior context (${relevantNodes.length} nodes matched your task):\n`;
@@ -117,10 +117,10 @@ function emitEnrichedPrompt(toolInput, taskText, sessionNodeId, relevantNodes) {
       ctx += `  [${n.id}] (${n.kind}) ${String(n.preview ?? '').slice(0, 140)}\n`;
     }
     const ids = relevantNodes.map(n => JSON.stringify(n.id)).join(', ');
-    ctx += `\nCall memtree_compose([${ids}], 3000) to load this context before starting.\n`;
+    ctx += `\nCall ctx_tree_compose([${ids}], 3000) to load this context before starting.\n`;
   }
 
-  ctx += `[/memtree context]`;
+  ctx += `[/ctx-tree context]`;
 
   process.stdout.write(JSON.stringify({
     hookSpecificOutput: {

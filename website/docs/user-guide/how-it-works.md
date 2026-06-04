@@ -6,7 +6,7 @@ sidebar_position: 2
 
 # How It Works
 
-memtree sits between Claude Code and every tool call. This page explains the full pipeline from tool interception to context-efficient recall.
+ctx-tree sits between Claude Code and every tool call. This page explains the full pipeline from tool interception to context-efficient recall.
 
 :::tip Interactive visualization
 For a click-to-inspect visualization of every node type, hook, pipeline, and search pattern, see the **[How It Works interactive walkthrough](/how-it-works.html)**.
@@ -19,20 +19,20 @@ For a click-to-inspect visualization of every node type, hook, pipeline, and sea
 ```mermaid
 flowchart TD
     A["🔧 Tool call\nRead · Grep · WebFetch\nMonitor · Agent · MCP"] -->|"PreToolUse\nhook fires"| B["🚫 Native denied\nno raw data"]
-    B --> C["🌳 memtree_*\nMCP tool runs"]
+    B --> C["🌳 ctx_tree_*\nMCP tool runs"]
     C --> D["💾 Node stored\nchunked + indexed"]
     D --> E["📎 nodeId returned\n~60 tokens"]
     E --> F["🎯 compose()\nfree recall"]
     F -.->|"next session\nzero cost"| F
 ```
 
-When Claude calls a native tool (`Read`, `Grep`, `WebFetch`, `Bash` with grep/cat), the `pretooluse-redirect.mjs` hook fires and **blocks the native call**. It emits a `hookSpecificOutput.additionalContext` message telling Claude to use the equivalent `memtree_*` tool instead. No raw data enters the context window.
+When Claude calls a native tool (`Read`, `Grep`, `WebFetch`, `Bash` with grep/cat), the `pretooluse-redirect.mjs` hook fires and **blocks the native call**. It emits a `hookSpecificOutput.additionalContext` message telling Claude to use the equivalent `ctx_tree_*` tool instead. No raw data enters the context window.
 
 ---
 
 ## Node lifecycle
 
-Every piece of content stored in memtree is a **node**. Nodes have a lifecycle managed by background walkers:
+Every piece of content stored in ctx-tree is a **node**. Nodes have a lifecycle managed by background walkers:
 
 ```
 pending  →  live  →  stale  →  superseded  →  pruned
@@ -46,9 +46,9 @@ pending  →  live  →  stale  →  superseded  →  pruned
 
 ---
 
-## Chunking (memtree_read)
+## Chunking (ctx_tree_read)
 
-When a file is read, memtree uses **tree-sitter semantic chunking** to split it into meaningful units:
+When a file is read, ctx-tree uses **tree-sitter semantic chunking** to split it into meaningful units:
 
 1. Parse the file with the appropriate tree-sitter grammar
 2. Walk the AST and split at function/class/declaration boundaries
@@ -61,13 +61,13 @@ For files without a tree-sitter grammar, a fallback line-based chunker splits at
 
 ## FTS5 indexing
 
-All node content is indexed in a SQLite FTS5 virtual table. `memtree_search` runs a BM25-ranked full-text query across all live nodes. Filters by `kind`, `status`, `since`, and `until` narrow the result set.
+All node content is indexed in a SQLite FTS5 virtual table. `ctx_tree_search` runs a BM25-ranked full-text query across all live nodes. Filters by `kind`, `status`, `since`, and `until` narrow the result set.
 
 ---
 
-## BFS composition (memtree_compose)
+## BFS composition (ctx_tree_compose)
 
-`memtree_compose` is the recall primitive. Given seed node IDs and a token budget:
+`ctx_tree_compose` is the recall primitive. Given seed node IDs and a token budget:
 
 1. **BFS expansion**: Walk the graph from the seed nodes, traversing edges up to `depth` hops
 2. **Relevance scoring**: If a `query` is provided, score nodes by BM25 similarity; otherwise score by recency
@@ -85,7 +85,7 @@ Two hooks capture the full conversation structure:
 - **`userpromptsubmit-capture.mjs`**: Stores each user prompt as a `prompt` node, wired to the preceding `response` via a `follows` edge
 - **`stop-response-capture.mjs`**: Reads the session transcript on Stop, stores `thinking` and `response` nodes, wires the full `follows` + `derived_from` chain
 
-This creates a traversable conversation graph in the store. Subagents can be primed with prior conversation context via `memtree_compose`.
+This creates a traversable conversation graph in the store. Subagents can be primed with prior conversation context via `ctx_tree_compose`.
 
 ---
 

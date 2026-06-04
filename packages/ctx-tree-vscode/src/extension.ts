@@ -15,7 +15,7 @@ let activeProc: cp.ChildProcess | undefined;
 
 export function activate(ctx: vscode.ExtensionContext): void {
   ctx.subscriptions.push(
-    vscode.commands.registerCommand('memtree.openVisualizer', () => openVisualizer(ctx))
+    vscode.commands.registerCommand('ctx-tree.openVisualizer', () => openVisualizer(ctx))
   );
 }
 
@@ -32,7 +32,7 @@ async function openVisualizer(ctx: vscode.ExtensionContext): Promise<void> {
 
   const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   if (!root) {
-    vscode.window.showErrorMessage('memtree: no workspace folder open.');
+    vscode.window.showErrorMessage('ctx-tree: no workspace folder open.');
     return;
   }
 
@@ -42,15 +42,15 @@ async function openVisualizer(ctx: vscode.ExtensionContext): Promise<void> {
   } catch (err: unknown) {
     const e = err as NodeJS.ErrnoException;
     const msg = e.code === 'ENOENT'
-      ? 'memtree not found on PATH — install it with: npm install -g memtree'
-      : `memtree failed to start: ${e.message}`;
+      ? 'ctx-tree not found on PATH — install it with: npm install -g ctx-tree'
+      : `ctx-tree failed to start: ${e.message}`;
     vscode.window.showErrorMessage(msg);
     return;
   }
 
   const panel = vscode.window.createWebviewPanel(
-    'memtree.visualizer',
-    `memtree (${info.nodeCount} nodes)`,
+    'ctx-tree.visualizer',
+    `ctx-tree (${info.nodeCount} nodes)`,
     vscode.ViewColumn.Beside,
     { enableScripts: true, retainContextWhenHidden: true }
   );
@@ -65,26 +65,26 @@ async function openVisualizer(ctx: vscode.ExtensionContext): Promise<void> {
   }, null, ctx.subscriptions);
 }
 
-function findMemtreeBin(): Promise<string> {
+function findCtxTreeBin(): Promise<string> {
   if (process.platform === 'win32') {
     return new Promise((resolve, reject) =>
-      cp.exec('where memtree', { timeout: 5_000 }, (err, stdout) => {
+      cp.exec('where ctx-tree', { timeout: 5_000 }, (err, stdout) => {
         const p = stdout.split('\n')[0]?.trim();
-        if (p) resolve(p); else reject(Object.assign(new Error('memtree not found'), { code: 'ENOENT' }));
+        if (p) resolve(p); else reject(Object.assign(new Error('ctx-tree not found'), { code: 'ENOENT' }));
       })
     );
   }
   const shell = process.env.SHELL || '/bin/zsh';
   return new Promise((resolve, reject) =>
-    cp.exec(`${shell} -l -c 'which memtree 2>/dev/null'`, { timeout: 5_000 }, (err, stdout) => {
+    cp.exec(`${shell} -l -c 'which ctx-tree 2>/dev/null'`, { timeout: 5_000 }, (err, stdout) => {
       const p = stdout.trim();
-      if (p) resolve(p); else reject(Object.assign(new Error('memtree not found'), { code: 'ENOENT' }));
+      if (p) resolve(p); else reject(Object.assign(new Error('ctx-tree not found'), { code: 'ENOENT' }));
     })
   );
 }
 
 async function startServer(cwd: string): Promise<VizInfo> {
-  const bin = await findMemtreeBin();
+  const bin = await findCtxTreeBin();
   return new Promise((resolve, reject) => {
     const child = cp.spawn(
       bin,
@@ -105,10 +105,10 @@ async function startServer(cwd: string): Promise<VizInfo> {
 
     child.on('error', reject);
     child.on('exit', (code) => {
-      if (code !== 0) reject(new Error(`memtree exited with code ${code ?? 'null'}`));
+      if (code !== 0) reject(new Error(`ctx-tree exited with code ${code ?? 'null'}`));
     });
 
-    setTimeout(() => reject(new Error('memtree startup timed out after 15s')), 15_000);
+    setTimeout(() => reject(new Error('ctx-tree startup timed out after 15s')), 15_000);
   });
 }
 
@@ -130,7 +130,7 @@ function buildHtml(ctx: vscode.ExtensionContext, port: number): string {
   );
   html = html.replace(
     '</head>',
-    `<script>globalThis.MEMTREE_WS_URL='ws://127.0.0.1:${port}/api/events';</script>\n</head>`
+    `<script>globalThis.CTX_TREE_WS_URL='ws://127.0.0.1:${port}/api/events';</script>\n</head>`
   );
 
   return html;

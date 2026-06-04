@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>memtree viz</title>
+<title>ctx-tree viz</title>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body {
@@ -99,7 +99,7 @@ body {
 <body>
 
 <div id="toolbar">
-  <span class="logo">🌳 memtree</span>
+  <span class="logo">🌳 ctx-tree</span>
   <button class="tab active" onclick="switchView('graph',this)">Graph</button>
   <button class="tab" onclick="switchView('timeline',this)">Timeline</button>
   <button class="tab" onclick="switchView('feed',this)">Feed</button>
@@ -354,7 +354,7 @@ function applyFilters() {
 // ── WebSocket ──────────────────────────────────────────────────────────────────
 function connect() {
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const ws = new WebSocket(globalThis.MEMTREE_WS_URL || `${proto}//${location.host}/api/events`);
+  const ws = new WebSocket(globalThis.CTX_TREE_WS_URL || `${proto}//${location.host}/api/events`);
 
   ws.onopen = () => {
     document.getElementById('ws-status').innerHTML = '<span class="live">● live</span>';

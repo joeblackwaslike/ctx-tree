@@ -1,18 +1,18 @@
 #!/usr/bin/env bun
 
 const HELP = `
-memtree — CLI for the memtree context store
+ctx-tree — CLI for the ctx-tree context store
 
 USAGE
-  memtree <command> [subcommand] [options]
+  ctx-tree <command> [subcommand] [options]
 
 COMMANDS
-  viz server start    Find the memtree DB for the current project,
+  viz server start    Find the ctx-tree DB for the current project,
                       start the visualizer, and open the browser.
   viz server attach   Start the visualizer against an explicit DB path.
                       Designed for the VS Code extension (--json mode).
 
-Run memtree <command> --help for details.
+Run ctx-tree <command> --help for details.
 `.trim();
 
 const [, , group, ...rest] = process.argv;
@@ -31,14 +31,14 @@ if (group === 'viz') {
 
 async function runViz(args: string[]): Promise<void> {
   const VIZ_HELP = `
-memtree viz — real-time graph visualizer for the memtree context store
+ctx-tree viz — real-time graph visualizer for the ctx-tree context store
 
 USAGE
-  memtree viz server start   [--cwd <dir>] [--port <n>] [--no-open]
-  memtree viz server attach  --db <path>   [--port <n>] [--no-open] [--json]
+  ctx-tree viz server start   [--cwd <dir>] [--port <n>] [--no-open]
+  ctx-tree viz server attach  --db <path>   [--port <n>] [--no-open] [--json]
 
 COMMANDS
-  server start    Find the memtree DB for the current project, start the
+  server start    Find the ctx-tree DB for the current project, start the
                   HTTP+WebSocket server, and open the browser.
 
   server attach   Start the server against an explicit database path.
@@ -47,12 +47,12 @@ COMMANDS
 
 OPTIONS (server start)
   --cwd <dir>     Project root to resolve the DB from (default: cwd)
-  --port <n>      Port to bind (default: 7777 or $MEMTREE_VIZ_PORT)
+  --port <n>      Port to bind (default: 7777 or $CTX_TREE_VIZ_PORT)
   --no-open       Don't open the browser
 
 OPTIONS (server attach)
   --db <path>     Path to the SQLite database file (required)
-  --port <n>      Port to bind (default: 7777 or $MEMTREE_VIZ_PORT)
+  --port <n>      Port to bind (default: 7777 or $CTX_TREE_VIZ_PORT)
   --no-open       Don't open the browser
   --json          Output JSON to stdout then stay running silently
 `.trim();

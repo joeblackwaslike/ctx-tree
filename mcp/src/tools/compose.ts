@@ -1,5 +1,5 @@
 import type { StoreBackend } from '../store/index.js';
-import type { MemtreeNode, ComposeManifest } from '../store/types.js';
+import type { CtxTreeNode, ComposeManifest } from '../store/types.js';
 
 export interface ComposeParams {
   node_ids: string[];
@@ -19,7 +19,7 @@ function estimateTokens(text: string): number {
 }
 
 function scoreNode(
-  node: MemtreeNode,
+  node: CtxTreeNode,
   graphDistance: number,
   queryRank: number,
   hasQuery: boolean
@@ -32,7 +32,7 @@ function scoreNode(
   return wDist * (1 / (1 + graphDistance)) + wRecency * recencyDecay + wQuery * queryRank;
 }
 
-function formatOutline(node: MemtreeNode): string {
+function formatOutline(node: CtxTreeNode): string {
   const prefix = `[${node.id}] ${node.kind}: `;
   const suffix = '…';
   const maxPreview = Math.max(0, Math.min(120, node.content.length - prefix.length - suffix.length - 1));
@@ -40,7 +40,7 @@ function formatOutline(node: MemtreeNode): string {
   return `${prefix}${preview}${suffix}`;
 }
 
-export async function memtreeCompose(
+export async function ctxTreeCompose(
   store: StoreBackend,
   params: ComposeParams
 ): Promise<ComposeResult> {

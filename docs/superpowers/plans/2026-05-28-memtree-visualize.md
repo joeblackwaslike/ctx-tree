@@ -1,10 +1,10 @@
-# memtree Visualizer Implementation Plan
+# ctx-tree Visualizer Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add a real-time web visualizer to memtree — a lazy-start HTTP+WebSocket server embedded in the MCP process that streams live graph changes to a D3 browser UI.
+**Goal:** Add a real-time web visualizer to ctx-tree — a lazy-start HTTP+WebSocket server embedded in the MCP process that streams live graph changes to a D3 browser UI.
 
-**Architecture:** `DbWatcher` wraps `db.onUpdate` to emit typed `ChangeEvent`s. `VisualizeServer` serves a self-contained HTML frontend and broadcasts events to WebSocket clients. The MCP tool `memtree_visualize` lazy-starts the server on first call and returns the URL. All three components are decoupled so VS Code can reuse `VisualizeServer` directly.
+**Architecture:** `DbWatcher` wraps `db.onUpdate` to emit typed `ChangeEvent`s. `VisualizeServer` serves a self-contained HTML frontend and broadcasts events to WebSocket clients. The MCP tool `ctx_tree_visualize` lazy-starts the server on first call and returns the URL. All three components are decoupled so VS Code can reuse `VisualizeServer` directly.
 
 **Tech Stack:** Bun HTTP server (`Bun.serve`), `bun:sqlite` update hook, D3 v7 (CDN), TypeScript, bun:test
 
@@ -18,7 +18,7 @@
 | `mcp/src/visualize/server.ts` | Create | `VisualizeServer` class: HTTP + WebSocket + static HTML |
 | `mcp/src/visualize/ui.html` | Create | Self-contained D3 frontend (Graph / Timeline / Feed tabs) |
 | `mcp/src/tools/visualize.ts` | Create | MCP tool: lazy-start singleton, browser open, return URL |
-| `mcp/src/server.ts` | Modify | Import + register `memtree_visualize` tool |
+| `mcp/src/server.ts` | Modify | Import + register `ctx_tree_visualize` tool |
 | `mcp/package.json` | Modify | Add `cp ui.html` to build script |
 | `mcp/src/visualize/watcher.test.ts` | Create | Unit tests for `DbWatcher` change events |
 | `mcp/src/visualize/server.test.ts` | Create | HTTP endpoint tests for `VisualizeServer` |
@@ -51,7 +51,7 @@ let tmpDir: string;
 let db: Database;
 
 beforeEach(() => {
-  tmpDir = mkdtempSync(join(tmpdir(), 'memtree-watcher-test-'));
+  tmpDir = mkdtempSync(join(tmpdir(), 'ctx-tree-watcher-test-'));
   db = openDb(join(tmpDir, 'test.db'));
 });
 
@@ -168,12 +168,12 @@ Note the exact signature — use it in the implementation below.
 ```ts
 // mcp/src/visualize/watcher.ts
 import type { Database } from 'bun:sqlite';
-import type { MemtreeNode, MemtreeEdge } from '../store/types.js';
+import type { CtxTreeNode, CtxTreeEdge } from '../store/types.js';
 
 export type ChangeEvent =
-  | { op: 'insert' | 'update'; table: 'nodes'; id: string; data: MemtreeNode }
+  | { op: 'insert' | 'update'; table: 'nodes'; id: string; data: CtxTreeNode }
   | { op: 'delete'; table: 'nodes'; id: string }
-  | { op: 'insert'; table: 'edges'; id: string; data: MemtreeEdge }
+  | { op: 'insert'; table: 'edges'; id: string; data: CtxTreeEdge }
   | { op: 'delete'; table: 'edges'; id: string };
 
 export type ChangeListener = (event: ChangeEvent) => void;
@@ -215,18 +215,18 @@ export class DbWatcher {
       }
 
       if (table === 'nodes') {
-        const row = db.query<MemtreeNode, [number]>('SELECT * FROM nodes WHERE rowid = ?').get(rowid);
+        const row = db.query<CtxTreeNode, [number]>('SELECT * FROM nodes WHERE rowid = ?').get(rowid);
         if (!row) return;
         this.nodeRowids.set(rowid, row.id);
         this.emit({ op, table: 'nodes', id: row.id, data: row });
       } else {
-        const row = db.query<MemtreeEdge & { rowid: number }, [number]>(
+        const row = db.query<CtxTreeEdge & { rowid: number }, [number]>(
           'SELECT rowid, * FROM edges WHERE rowid = ?'
         ).get(rowid);
         if (!row) return;
         const compositeId = `${row.src_id}:${row.dst_id}:${row.kind}`;
         this.edgeRowids.set(rowid, compositeId);
-        const { rowid: _rowid, ...edge } = row as MemtreeEdge & { rowid: number };
+        const { rowid: _rowid, ...edge } = row as CtxTreeEdge & { rowid: number };
         this.emit({ op: op as 'insert', table: 'edges', id: compositeId, data: edge });
       }
     });
@@ -286,7 +286,7 @@ let db: Database;
 let srv: VisualizeServer;
 
 beforeEach(() => {
-  tmpDir = mkdtempSync(join(tmpdir(), 'memtree-viz-test-'));
+  tmpDir = mkdtempSync(join(tmpdir(), 'ctx-tree-viz-test-'));
   db = openDb(join(tmpDir, 'test.db'));
   // Use port 0 to let OS assign a free port
   srv = new VisualizeServer(db, { port: 0 });
@@ -385,7 +385,7 @@ Expected: import error for `./server.js`
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import type { Database } from 'bun:sqlite';
-import type { MemtreeNode, MemtreeEdge } from '../store/types.js';
+import type { CtxTreeNode, CtxTreeEdge } from '../store/types.js';
 import { DbWatcher } from './watcher.js';
 
 const VALID_STATUSES = new Set(['pending', 'live', 'stale', 'superseded', 'pruned']);
@@ -447,7 +447,7 @@ export class VisualizeServer {
         if (url.pathname.startsWith('/api/node/')) {
           const id = url.pathname.slice('/api/node/'.length);
           const node = self.db
-            .query<MemtreeNode, [string]>('SELECT * FROM nodes WHERE id = ?')
+            .query<CtxTreeNode, [string]>('SELECT * FROM nodes WHERE id = ?')
             .get(id);
           return node
             ? Response.json(node)
@@ -501,7 +501,7 @@ export class VisualizeServer {
     this.started = false;
   }
 
-  private snapshot(params: URLSearchParams): { nodes: MemtreeNode[]; edges: MemtreeEdge[] } {
+  private snapshot(params: URLSearchParams): { nodes: CtxTreeNode[]; edges: CtxTreeEdge[] } {
     const conditions: string[] = [];
     const args: (string | number)[] = [];
 
@@ -527,10 +527,10 @@ export class VisualizeServer {
 
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
     const nodes = this.db
-      .query<MemtreeNode, typeof args>(`SELECT * FROM nodes ${where}`)
+      .query<CtxTreeNode, typeof args>(`SELECT * FROM nodes ${where}`)
       .all(...args);
     const edges = this.db
-      .query<MemtreeEdge, []>('SELECT * FROM edges')
+      .query<CtxTreeEdge, []>('SELECT * FROM edges')
       .all();
 
     return { nodes, edges };
@@ -560,7 +560,7 @@ cd mcp && bun test src/visualize/server.test.ts
 Expected: all 7 tests PASS. If any fail due to `ui.html` missing, create a placeholder first (step 3 creates the real one):
 
 ```bash
-echo '<!DOCTYPE html><html><body>memtree viz</body></html>' > mcp/src/visualize/ui.html
+echo '<!DOCTYPE html><html><body>ctx-tree viz</body></html>' > mcp/src/visualize/ui.html
 ```
 
 - [ ] **Step 2.5 — Commit**
@@ -588,7 +588,7 @@ Replace the placeholder with the full file:
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>memtree viz</title>
+<title>ctx-tree viz</title>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body {
@@ -685,7 +685,7 @@ body {
 <body>
 
 <div id="toolbar">
-  <span class="logo">🌳 memtree</span>
+  <span class="logo">🌳 ctx-tree</span>
   <button class="tab active" onclick="switchView('graph',this)">Graph</button>
   <button class="tab" onclick="switchView('timeline',this)">Timeline</button>
   <button class="tab" onclick="switchView('feed',this)">Feed</button>
@@ -1063,7 +1063,7 @@ git commit -m "feat(visualize): add self-contained D3 frontend (Graph/Timeline/F
 
 ---
 
-## Task 4: `memtree_visualize` MCP tool
+## Task 4: `ctx_tree_visualize` MCP tool
 
 **Files:**
 - Create: `mcp/src/tools/visualize.ts`
@@ -1080,13 +1080,13 @@ import { VisualizeServer } from '../visualize/server.js';
 
 let vizServer: VisualizeServer | null = null;
 
-export async function memtreeVisualize(
+export async function ctxTreeVisualize(
   db: Database,
   params: { port?: number; open?: boolean }
 ): Promise<{ url: string; port: number; nodeCount: number; edgeCount: number }> {
   if (!vizServer) {
     const port =
-      parseInt(process.env.MEMTREE_VIZ_PORT ?? '', 10) || params.port ?? 7777;
+      parseInt(process.env.CTX_TREE_VIZ_PORT ?? '', 10) || params.port ?? 7777;
     vizServer = new VisualizeServer(db, { port });
     await vizServer.start();
   }
@@ -1106,12 +1106,12 @@ export async function memtreeVisualize(
 
 ```bash
 git add mcp/src/tools/visualize.ts
-git commit -m "feat(visualize): add memtree_visualize MCP tool — lazy-start VisualizeServer, opens browser"
+git commit -m "feat(visualize): add ctx_tree_visualize MCP tool — lazy-start VisualizeServer, opens browser"
 ```
 
 ---
 
-## Task 5: Register `memtree_visualize` in `server.ts`
+## Task 5: Register `ctx_tree_visualize` in `server.ts`
 
 **Files:**
 - Modify: `mcp/src/server.ts`
@@ -1121,7 +1121,7 @@ git commit -m "feat(visualize): add memtree_visualize MCP tool — lazy-start Vi
 At the top of `mcp/src/server.ts`, after the existing tool imports (around line 27), add:
 
 ```ts
-import { memtreeVisualize } from './tools/visualize.js';
+import { ctxTreeVisualize } from './tools/visualize.js';
 ```
 
 - [ ] **Step 5.2 — Add tool definition to `ListToolsRequestSchema` handler**
@@ -1130,12 +1130,12 @@ In the `tools: [...]` array inside the `ListToolsRequestSchema` handler, add thi
 
 ```ts
 {
-  name: 'memtree_visualize',
+  name: 'ctx_tree_visualize',
   description: 'Start (or return the URL of) the real-time graph visualizer. Opens a browser tab showing all nodes and edges with live updates. Idempotent — safe to call multiple times.',
   inputSchema: {
     type: 'object',
     properties: {
-      port: { type: 'number', description: 'Port to bind (default: 7777, overridden by MEMTREE_VIZ_PORT env)' },
+      port: { type: 'number', description: 'Port to bind (default: 7777, overridden by CTX_TREE_VIZ_PORT env)' },
       open: { type: 'boolean', description: 'Open the browser automatically (default: true)' },
     },
   },
@@ -1147,9 +1147,9 @@ In the `tools: [...]` array inside the `ListToolsRequestSchema` handler, add thi
 In the `switch (name)` block inside the `CallToolRequestSchema` handler, add before the `default:` case:
 
 ```ts
-case 'memtree_visualize': {
+case 'ctx_tree_visualize': {
   const { port, open } = args as { port?: number; open?: boolean };
-  const result = await memtreeVisualize(db, { port, open });
+  const result = await ctxTreeVisualize(db, { port, open });
   return {
     content: [{
       type: 'text',
@@ -1180,19 +1180,19 @@ Expected: `dist/server.js` created, `dist/ui.html` copied alongside it. No TypeS
 Start the MCP server in dev mode and call the tool:
 
 ```bash
-cd mcp && MEMTREE_CWD=$(pwd) bun run src/server.ts &
+cd mcp && CTX_TREE_CWD=$(pwd) bun run src/server.ts &
 # In another terminal or via Claude session:
-# Call memtree_visualize via the MCP protocol
+# Call ctx_tree_visualize via the MCP protocol
 # Verify: browser opens at http://localhost:7777
 # Verify: graph shows nodes from the current session's DB
-# Verify: making a new memtree_note call adds a node to the graph in real time
+# Verify: making a new ctx_tree_note call adds a node to the graph in real time
 ```
 
 - [ ] **Step 5.7 — Commit**
 
 ```bash
 git add mcp/src/server.ts
-git commit -m "feat(visualize): register memtree_visualize tool in MCP server"
+git commit -m "feat(visualize): register ctx_tree_visualize tool in MCP server"
 ```
 
 ---
@@ -1210,4 +1210,4 @@ git commit -m "feat(visualize): register memtree_visualize tool in MCP server"
 - ✅ Build artifact: ui.html copied to dist/ — Task 3
 - ✅ VS Code reuse path: `VisualizeServer` accepts `Database`, no MCP coupling — Tasks 2 + 4
 
-**Type consistency:** `ChangeEvent`, `VisualizeServer`, `memtreeVisualize` signatures are consistent across all tasks. `DbWatcher` constructed in `VisualizeServer.constructor` matches Task 1 API.
+**Type consistency:** `ChangeEvent`, `VisualizeServer`, `ctxTreeVisualize` signatures are consistent across all tasks. `DbWatcher` constructed in `VisualizeServer.constructor` matches Task 1 API.

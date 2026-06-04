@@ -10,7 +10,7 @@ import type { Database } from 'bun:sqlite';
 import type { StoreBackend } from '../store/index.js';
 import type { EmbeddingProvider } from '../store/types.js';
 
-const TEST_DB = '/tmp/memtree-embedding-test.db';
+const TEST_DB = '/tmp/ctx-tree-embedding-test.db';
 let db: Database;
 let store: StoreBackend;
 const cfg = DEFAULT_CONFIG;
@@ -108,7 +108,7 @@ describe('embedding walker', () => {
       expect(() => runEmbeddingWalker(store, cfg, errorProvider)).not.toThrow();
       await new Promise(r => setTimeout(r, 50));
       const logged = stderrChunks.join('');
-      expect(logged).toMatch(/memtree embedding error/);
+      expect(logged).toMatch(/ctx-tree embedding error/);
     } finally {
       (process.stderr as any).write = originalWrite;
     }

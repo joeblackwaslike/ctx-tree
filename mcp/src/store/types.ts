@@ -2,7 +2,7 @@ export type NodeStatus = 'pending' | 'live' | 'stale' | 'superseded' | 'pruned';
 export type NodeKind = 'session' | 'file_chunk' | 'tool_output' | 'summary' | 'note' | 'observation' | 'web_chunk' | 'prompt' | 'thinking' | 'response';
 export type EdgeKind = 'derived_from' | 'references' | 'summarizes' | 'supersedes' | 'follows';
 
-export interface MemtreeNode {
+export interface CtxTreeNode {
   id: string;            // ULID
   parent_id: string | null;
   kind: NodeKind;
@@ -19,7 +19,7 @@ export interface MemtreeNode {
   summary?: string | null;  // optional summary text (v1.1+)
 }
 
-export interface MemtreeEdge {
+export interface CtxTreeEdge {
   src_id: string;
   dst_id: string;
   kind: EdgeKind;
@@ -53,11 +53,11 @@ export interface RetentionConfig {
 export type BackendKind = 'sqlite' | 'edgelite';
 
 export interface BackendConfig {
-  kind: BackendKind;     // env: MEMTREE_BACKEND
-  schemaPath?: string;   // edgelite only — env: MEMTREE_SCHEMA_PATH
+  kind: BackendKind;     // env: CTX_TREE_BACKEND
+  schemaPath?: string;   // edgelite only — env: CTX_TREE_SCHEMA_PATH
 }
 
-export interface MemtreeConfig {
+export interface CtxTreeConfig {
   embeddingModel: string;
   summarizerModel: string;
   retention: RetentionConfig;
