@@ -165,3 +165,55 @@ describe('pruneNode', () => {
     expect(node!.content).toBe('');
   });
 });
+
+// ── searchSemantic invalid limit ────────────────────────────────────────────
+
+describe('searchSemantic invalid limit', () => {
+  test('rejects with "Invalid limit: 0" for limit 0', async () => {
+    await expect(store.searchSemantic([], 'model', {}, 0)).rejects.toThrow('Invalid limit: 0');
+  });
+
+  test('rejects with "Invalid limit: -1" for limit -1', async () => {
+    await expect(store.searchSemantic([], 'model', {}, -1)).rejects.toThrow('Invalid limit: -1');
+  });
+
+  test('rejects for NaN limit', async () => {
+    await expect(store.searchSemantic([], 'model', {}, NaN)).rejects.toThrow('Invalid limit: NaN');
+  });
+
+  test('rejects for Infinity limit', async () => {
+    await expect(store.searchSemantic([], 'model', {}, Infinity)).rejects.toThrow('Invalid limit: Infinity');
+  });
+});
+
+// ── atomicBatchFilter ───────────────────────────────────────────────────────
+
+describe('atomicBatchFilter', () => {
+  test('empty decisions is a no-op', async () => {
+    await expect(store.atomicBatchFilter([])).resolves.toBeUndefined();
+  });
+
+  test('mixed batch atomically applies all decisions', async () => {
+    await store.insertNode('01batch-p', {
+      parent_id: null, kind: 'note', source_uri: null,
+      content: 'prune me', content_hash: 'batch-p', status: 'pending',
+      mtime: 0, truncated: 0, original_bytes: 0, metadata: '{}',
+    });
+    await store.insertNode('01batch-q', {
+      parent_id: null, kind: 'note', source_uri: null,
+      content: 'promote me', content_hash: 'batch-q', status: 'pending',
+      mtime: 0, truncated: 0, original_bytes: 0, metadata: '{}',
+    });
+
+    await store.atomicBatchFilter([
+      { id: '01batch-p', action: 'prune' },
+      { id: '01batch-q', action: 'promote' },
+    ]);
+
+    const pruned = await store.getNode('01batch-p');
+    const promoted = await store.getNode('01batch-q');
+    expect(pruned!.status).toBe('pruned');
+    expect(pruned!.content).toBe('');
+    expect(promoted!.status).toBe('live');
+  });
+});

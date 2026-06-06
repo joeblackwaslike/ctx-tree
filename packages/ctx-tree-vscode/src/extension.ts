@@ -113,16 +113,7 @@ async function startServer(cwd: string): Promise<VizInfo> {
   });
 }
 
-function buildHtml(ctx: vscode.ExtensionContext, webview: vscode.Webview, port: number): string {
-  const nonce = crypto.randomBytes(16).toString('hex');
-
-  const d3Uri = webview.asWebviewUri(
-    vscode.Uri.joinPath(ctx.extensionUri, 'media', 'd3.min.js')
-  );
-
-  const uiPath = path.join(ctx.extensionPath, 'media', 'ui.html');
-  let html = fs.readFileSync(uiPath, 'utf8');
-
+export function patchHtml(html: string, nonce: string, d3Uri: string, port: number): string {
   const csp = [
     "default-src 'none'",
     `script-src 'nonce-${nonce}'`,
@@ -136,21 +127,17 @@ function buildHtml(ctx: vscode.ExtensionContext, webview: vscode.Webview, port: 
     `<head>\n<meta http-equiv="Content-Security-Policy" content="${csp};">`
   );
 
-  // Replace CDN D3 URL with local vscode-resource URI and add nonce
+  // Replace CDN D3 URL with local vscode-resource URI
   html = html.replace(
     'https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js',
-    d3Uri.toString()
-  );
-  html = html.replaceAll(
-    '<script src=',
-    `<script nonce="${nonce}" src=`
+    d3Uri
   );
 
+  // Add nonce to all <script src=...> tags
+  html = html.replaceAll('<script src=', `<script nonce="${nonce}" src=`);
+
   // Add nonce to all inline <script> blocks
-  html = html.replaceAll(
-    '<script>',
-    `<script nonce="${nonce}">`
-  );
+  html = html.replaceAll('<script>', `<script nonce="${nonce}">`);
 
   // Inject WS URL global with nonce before </head>
   html = html.replace(
@@ -159,4 +146,13 @@ function buildHtml(ctx: vscode.ExtensionContext, webview: vscode.Webview, port: 
   );
 
   return html;
+}
+
+function buildHtml(ctx: vscode.ExtensionContext, webview: vscode.Webview, port: number): string {
+  const nonce = crypto.randomBytes(16).toString('hex');
+  const d3Uri = webview.asWebviewUri(
+    vscode.Uri.joinPath(ctx.extensionUri, 'media', 'd3.min.js')
+  ).toString();
+  const html = fs.readFileSync(path.join(ctx.extensionPath, 'media', 'ui.html'), 'utf8');
+  return patchHtml(html, nonce, d3Uri, port);
 }
