@@ -1,5 +1,9 @@
 # ctx-tree
 
+## Git Branches
+
+The default branch and PR target is **`main`**. Use `main` as the base for all PRs; `feat/*` branches are feature integration branches, not the trunk.
+
 ## PR Review Routine
 
 After every `git push` or `gh pr create`, create a beads tracking issue so review feedback doesn't get missed:
