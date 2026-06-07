@@ -1,11 +1,10 @@
 import { statSync } from 'fs';
-import type { Database } from 'bun:sqlite';
-import type { MemtreeConfig } from '../store/types';
-import { getLiveFileChunks, updateNodeStatus } from '../store/nodes';
+import type { StoreBackend } from '../store/index.js';
+import type { CtxTreeConfig } from '../store/types.js';
 
-export function runStalenessWalker(db: Database, _config: MemtreeConfig): void {
+export async function runStalenessWalker(store: StoreBackend, _config: CtxTreeConfig): Promise<void> {
   const checkBefore = Date.now() - 5000;
-  const chunks = getLiveFileChunks(db, checkBefore);
+  const chunks = await store.getLiveFileChunks(checkBefore);
 
   for (const node of chunks) {
     const meta = JSON.parse(node.metadata) as { filePath?: string };
@@ -15,10 +14,10 @@ export function runStalenessWalker(db: Database, _config: MemtreeConfig): void {
     try {
       const stat = statSync(filePath);
       if (Math.round(stat.mtimeMs) !== node.mtime) {
-        updateNodeStatus(db, node.id, 'stale');
+        await store.updateNodeStatus(node.id, 'stale');
       }
     } catch {
-      updateNodeStatus(db, node.id, 'stale');
+      await store.updateNodeStatus(node.id, 'stale');
     }
   }
 }

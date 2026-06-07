@@ -1,0 +1,36 @@
+{
+  "name": "@joeblackwaslike2/ctx-tree",
+  "version": "0.1.0",
+  "description": "CLI for the ctx-tree context store — visualize, inspect, and manage your AI session graph",
+  "type": "module",
+  "bin": {
+    "ctx-tree": "dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "mkdir -p dist && bun build src/cli.ts --target bun --outfile dist/cli.js && cp ../../mcp/src/visualize/ui.html dist/ui.html",
+    "prepublishOnly": "bun run build"
+  },
+  "engines": {
+    "bun": ">=1.0.0"
+  },
+  "keywords": [
+    "ctx-tree",
+    "visualizer",
+    "graph",
+    "sqlite",
+    "claude",
+    "mcp",
+    "context"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/joeblackwaslike/ctx-tree.git"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.1.0"
+  }
+}

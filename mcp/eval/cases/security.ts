@@ -1,7 +1,7 @@
 import type { Database } from 'bun:sqlite';
-import { memtreeRead } from '../../src/tools/read';
+import { ctxTreeRead } from '../../src/tools/read';
 import { shouldDropPath, shouldDropBashCommand, redactBashOutput } from '../../src/redaction';
-import type { MemtreeConfig } from '../../src/store/types';
+import type { CtxTreeConfig } from '../../src/store/types';
 import { DEFAULT_CONFIG } from '../../src/config';
 
 export interface SecurityResult {
@@ -28,7 +28,7 @@ const SECRET_FILE_PATHS = [
 ];
 
 export async function runSecurityCases(db: Database): Promise<SecurityResult[]> {
-  const cfg: MemtreeConfig = { ...DEFAULT_CONFIG };
+  const cfg: CtxTreeConfig = { ...DEFAULT_CONFIG };
   const results: SecurityResult[] = [];
 
   for (const { command, output } of LEAKY_BASH_PAYLOADS) {
@@ -45,7 +45,7 @@ export async function runSecurityCases(db: Database): Promise<SecurityResult[]> 
     let passed = false;
     let error: string | undefined;
     try {
-      await memtreeRead(db, cfg, { path: filePath, budget_tokens: 200 });
+      await ctxTreeRead(db, cfg, { path: filePath, budget_tokens: 200 });
       error = `Expected rejection for ${filePath} but got a result`;
     } catch (e: unknown) {
       passed = String((e as Error).message).includes('Path rejected by denylist');

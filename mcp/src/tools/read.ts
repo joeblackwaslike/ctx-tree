@@ -1,11 +1,9 @@
-import { readFileSync, statSync } from 'fs';
-import { createHash } from 'crypto';
+import { readFileSync, statSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { ulid } from 'ulid';
-import { extname } from 'path';
-import type { Database } from 'bun:sqlite';
-import type { MemtreeConfig } from '../store/types';
-import { insertNode, getNodeBySourceUri, updateNodeStatus, markStaleByFilePath } from '../store/nodes';
-import { insertEdge } from '../store/edges';
+import { extname } from 'node:path';
+import type { StoreBackend } from '../store/index.js';
+import type { CtxTreeConfig } from '../store/types.js';
 import { shouldDropPath } from '../redaction';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 
@@ -16,7 +14,7 @@ export interface ReadParams {
 }
 
 export interface ReadResult {
-  nodeId: string;
+  nodeIds: string[];
   content: string;
   truncated: boolean;
   chunking: 'treesitter' | 'window';
@@ -26,7 +24,7 @@ interface Chunk {
   startLine: number;
   endLine: number;
   content: string;
-  symbolName?: string;
+  symbolName: string;
 }
 
 function estimateTokens(text: string): number {
@@ -37,27 +35,53 @@ function windowChunk(lines: string[], windowSize = 200): Chunk[] {
   const chunks: Chunk[] = [];
   for (let i = 0; i < lines.length; i += windowSize) {
     const slice = lines.slice(i, i + windowSize);
-    chunks.push({ startLine: i + 1, endLine: i + slice.length, content: slice.join('\n') });
+    const startLine = i + 1;
+    const endLine = i + slice.length;
+    chunks.push({ startLine, endLine, content: slice.join('\n'), symbolName: `L${startLine}-${endLine}` });
   }
   return chunks;
 }
 
 type TreeSitterLanguage = { [key: string]: unknown };
 
-const LANG_MAP: Record<string, () => TreeSitterLanguage> = {
-  '.ts': () => require('tree-sitter-typescript').typescript,
-  '.tsx': () => require('tree-sitter-typescript').tsx,
-  '.js': () => require('tree-sitter-javascript'),
-  '.jsx': () => require('tree-sitter-javascript'),
-  '.py': () => require('tree-sitter-python'),
-  '.rs': () => require('tree-sitter-rust'),
-  '.go': () => require('tree-sitter-go'),
-  '.sh': () => require('tree-sitter-bash'),
+const LANG_MAP: Record<string, () => Promise<TreeSitterLanguage>> = {
+  '.ts': async () => {
+    const { typescript } = await import('tree-sitter-typescript');
+    return typescript;
+  },
+  '.tsx': async () => {
+    const { tsx } = await import('tree-sitter-typescript');
+    return tsx;
+  },
+  '.js': async () => {
+    const defaultExport = await import('tree-sitter-javascript');
+    return defaultExport.default;
+  },
+  '.jsx': async () => {
+    const defaultExport = await import('tree-sitter-javascript');
+    return defaultExport.default;
+  },
+  '.py': async () => {
+    const defaultExport = await import('tree-sitter-python');
+    return defaultExport.default;
+  },
+  '.rs': async () => {
+    const defaultExport = await import('tree-sitter-rust');
+    return defaultExport.default;
+  },
+  '.go': async () => {
+    const defaultExport = await import('tree-sitter-go');
+    return defaultExport.default;
+  },
+  '.sh': async () => {
+    const defaultExport = await import('tree-sitter-bash');
+    return defaultExport.default;
+  },
 };
 
-function treeSitterChunk(source: string, lang: TreeSitterLanguage): Chunk[] {
+async function treeSitterChunk(source: string, lang: TreeSitterLanguage): Promise<Chunk[]> {
   try {
-    const Parser = require('tree-sitter');
+    const { default: Parser } = await import('tree-sitter');
     const parser = new Parser();
     parser.setLanguage(lang);
     const tree = parser.parse(source);
@@ -66,10 +90,12 @@ function treeSitterChunk(source: string, lang: TreeSitterLanguage): Chunk[] {
 
     type TSNode = {
       type: string;
+      text: string;
       startPosition: { row: number };
       endPosition: { row: number };
       childCount: number;
       children: TSNode[];
+      childForFieldName(field: string): TSNode | null;
     };
 
     // Classes are containers — recurse into them to capture individual methods.
@@ -80,12 +106,30 @@ function treeSitterChunk(source: string, lang: TreeSitterLanguage): Chunk[] {
       'function_item', 'struct_item', 'enum_item', 'impl_item',
     ]);
 
+    function extractSymbolName(node: TSNode): string {
+      // BFS up to depth 3 to find the declared identifier, even for wrapped nodes
+      // like export_statement → lexical_declaration → variable_declarator → name.
+      type QItem = { n: TSNode; depth: number };
+      const queue: QItem[] = [{ n: node, depth: 0 }];
+      while (queue.length > 0) {
+        const { n, depth } = queue.shift()!;
+        const nameNode = n.childForFieldName('name');
+        if (nameNode) return nameNode.text;
+        if (depth >= 3) continue;
+        for (const child of n.children) {
+          if (child.type === 'identifier' || child.type === 'property_identifier') return child.text;
+          queue.push({ n: child, depth: depth + 1 });
+        }
+      }
+      return node.type;
+    }
+
     function walk(node: TSNode) {
       if (LEAF_TYPES.has(node.type)) {
         const startLine = node.startPosition.row + 1;
         const endLine = node.endPosition.row + 1;
         const content = lines.slice(startLine - 1, endLine).join('\n');
-        chunks.push({ startLine, endLine, content, symbolName: node.type });
+        chunks.push({ startLine, endLine, content, symbolName: extractSymbolName(node) });
         return;
       }
       if (node.childCount > 0) {
@@ -100,9 +144,9 @@ function treeSitterChunk(source: string, lang: TreeSitterLanguage): Chunk[] {
   }
 }
 
-export async function memtreeRead(
-  db: Database,
-  config: MemtreeConfig,
+export async function ctxTreeRead(
+  store: StoreBackend,
+  config: CtxTreeConfig,
   params: ReadParams
 ): Promise<ReadResult> {
   const { path, lines, budget_tokens = 2000 } = params;
@@ -120,19 +164,8 @@ export async function memtreeRead(
   const mtime = Math.round(stat.mtimeMs);
   const ext = extname(path).toLowerCase();
 
-  // Cache key includes lines and budget to avoid returning wrong cached content.
-  const lineKey = lines ? `${lines[0]},${lines[1]}` : 'all';
-  const cacheUri = `file://${path}?lines=${lineKey}&budget=${budget_tokens}`;
-
-  const cached = getNodeBySourceUri(db, cacheUri);
-  if (cached && cached.mtime === mtime) {
-    const meta = JSON.parse(cached.metadata) as { chunking: 'treesitter' | 'window' };
-    return { nodeId: cached.id, content: cached.content, truncated: cached.truncated === 1, chunking: meta.chunking };
-  }
-
-  if (cached) updateNodeStatus(db, cached.id, 'stale');
-  // Stale any other cached reads of this file whose mtime no longer matches.
-  markStaleByFilePath(db, path, mtime);
+  // Stale any cached reads of this file whose mtime no longer matches.
+  await store.markStaleByFilePath(path, mtime);
 
   let raw = readFileSync(path, 'utf8');
   const originalBytes = Buffer.byteLength(raw, 'utf8');
@@ -148,8 +181,8 @@ export async function memtreeRead(
 
   if (langLoader) {
     try {
-      const lang = langLoader();
-      chunks = treeSitterChunk(raw, lang);
+      const lang = await langLoader();
+      chunks = await treeSitterChunk(raw, lang);
       chunking = 'treesitter';
     } catch {
       chunks = windowChunk(raw.split('\n'));
@@ -178,24 +211,75 @@ export async function memtreeRead(
     used += tokens;
   }
 
+  // Get or create the file root node (navigation anchor; parent of all per-chunk nodes).
+  const fileRootUri = `file://${path}`;
+  let fileRootId: string;
+  const cachedRoot = await store.getNodeBySourceUri(fileRootUri);
+  if (cachedRoot && cachedRoot.mtime === mtime) {
+    fileRootId = cachedRoot.id;
+  } else {
+    if (cachedRoot) await store.updateNodeStatus(cachedRoot.id, 'stale');
+    fileRootId = ulid();
+    const emptyHash = createHash('sha256').update('').digest('hex');
+    await store.insertNode(fileRootId, {
+      parent_id: null,
+      kind: 'file_chunk',
+      source_uri: fileRootUri,
+      content: '',
+      content_hash: emptyHash,
+      status: 'live',
+      mtime,
+      truncated: truncated ? 1 : 0,
+      original_bytes: originalBytes,
+      metadata: JSON.stringify({ filePath: path, is_file_root: true }),
+    });
+    if (cachedRoot) await store.insertEdge({ src_id: fileRootId, dst_id: cachedRoot.id, kind: 'supersedes' });
+  }
+
+  const nodeIds: string[] = [];
+
+  // Deduplicate symbol names within this read (e.g. two anonymous export_statement nodes).
+  // Collisions get a :L<startLine> suffix to keep URIs stable and unique.
+  const seenNames = new Set<string>();
+  function uniqueSymbolKey(chunk: Chunk): string {
+    if (!seenNames.has(chunk.symbolName)) {
+      seenNames.add(chunk.symbolName);
+      return chunk.symbolName;
+    }
+    return `${chunk.symbolName}:L${chunk.startLine}`;
+  }
+
+  for (const chunk of included) {
+    const chunkUri = `file://${path}#${uniqueSymbolKey(chunk)}`;
+    const contentHash = createHash('sha256').update(chunk.content).digest('hex');
+
+    const cached = await store.getNodeBySourceUri(chunkUri);
+    if (cached && cached.mtime === mtime) {
+      nodeIds.push(cached.id);
+      continue;
+    }
+
+    if (cached) await store.updateNodeStatus(cached.id, 'stale');
+
+    const nodeId = ulid();
+    await store.insertNode(nodeId, {
+      parent_id: fileRootId,
+      kind: 'file_chunk',
+      source_uri: chunkUri,
+      content: chunk.content,
+      content_hash: contentHash,
+      status: 'live',
+      mtime,
+      truncated: truncated ? 1 : 0,
+      original_bytes: originalBytes,
+      metadata: JSON.stringify({ filePath: path, chunking, symbolName: chunk.symbolName }),
+    });
+
+    if (cached) await store.insertEdge({ src_id: nodeId, dst_id: cached.id, kind: 'supersedes' });
+
+    nodeIds.push(nodeId);
+  }
+
   const content = included.map(c => c.content).join('\n\n');
-  const contentHash = createHash('sha256').update(content).digest('hex');
-  const nodeId = ulid();
-
-  insertNode(db, nodeId, {
-    parent_id: null,
-    kind: 'file_chunk',
-    source_uri: cacheUri,
-    content,
-    content_hash: contentHash,
-    status: 'live',
-    mtime,
-    truncated: truncated ? 1 : 0,
-    original_bytes: originalBytes,
-    metadata: JSON.stringify({ filePath: path, chunking, chunkCount: included.length }),
-  });
-
-  if (cached) insertEdge(db, { src_id: nodeId, dst_id: cached.id, kind: 'supersedes' });
-
-  return { nodeId, content, truncated, chunking };
+  return { nodeIds, content, truncated, chunking };
 }

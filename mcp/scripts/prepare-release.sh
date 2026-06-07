@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# prepare-release.sh — build and optionally publish a memtree GitHub release
+# prepare-release.sh — build and optionally publish a ctx-tree GitHub release
 #
 # Usage:
 #   ./scripts/prepare-release.sh <VERSION>          # build only
@@ -14,11 +14,11 @@ VERSION="${1:?Usage: $0 <VERSION>  (e.g. 1.0.0)}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MCP_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-echo "memtree: preparing release v${VERSION}"
+echo "ctx-tree: preparing release v${VERSION}"
 echo "  Working directory: ${MCP_DIR}"
 
 # ── Build ────────────────────────────────────────────────────────────────────
-echo "memtree: building server bundle..."
+echo "ctx-tree: building server bundle..."
 cd "$MCP_DIR"
 bun build src/server.ts \
   --target bun \
@@ -32,7 +32,7 @@ bun build src/server.ts \
   --external tree-sitter-bash
 
 echo ""
-echo "memtree: build complete."
+echo "ctx-tree: build complete."
 echo "  Artifact: dist/server.js"
 echo ""
 echo "  NOTE: dist/server.js is the only release artifact needed."
@@ -47,14 +47,14 @@ if [[ "${PUBLISH:-}" == "1" ]]; then
     exit 1
   fi
 
-  echo "memtree: creating GitHub release v${VERSION}..."
+  echo "ctx-tree: creating GitHub release v${VERSION}..."
   gh release create "v${VERSION}" \
     dist/server.js \
-    --repo joeblackwaslike/memtree \
+    --repo joeblackwaslike/ctx-tree \
     --title "v${VERSION}" \
     --generate-notes
 
-  echo "memtree: release v${VERSION} published."
+  echo "ctx-tree: release v${VERSION} published."
 else
   echo "  To publish: PUBLISH=1 $0 ${VERSION}"
 fi

@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'bun:test';
-import type { MemtreeNode, MemtreeConfig, NodeStatus } from './types';
+import type { CtxTreeNode, CtxTreeConfig, NodeStatus } from './types';
 
 describe('types', () => {
   test('NodeStatus values are a closed set', () => {
@@ -7,8 +7,8 @@ describe('types', () => {
     expect(valid).toHaveLength(5);
   });
 
-  test('MemtreeNode shape is stable', () => {
-    const node: MemtreeNode = {
+  test('CtxTreeNode shape is stable', () => {
+    const node: CtxTreeNode = {
       id: '01HX', parent_id: null, kind: 'session',
       source_uri: null, content: '', content_hash: '',
       status: 'live', mtime: 0, created_at: 0, updated_at: 0,

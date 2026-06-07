@@ -11,7 +11,7 @@ const platform = `${process.platform}-${process.arch}`;
 
 if (!SUPPORTED.has(platform)) {
   process.stderr.write(
-    `memtree: unsupported platform "${platform}". ` +
+    `ctx-tree: unsupported platform "${platform}". ` +
       `Supported: ${[...SUPPORTED].join(", ")}\n`
   );
   process.exit(1);
@@ -22,9 +22,9 @@ if (!SUPPORTED.has(platform)) {
 const rg = spawnSync('rg', ['--version'], { stdio: 'pipe' });
 if (rg.status !== 0) {
   process.stderr.write(
-    "memtree: WARNING — `rg` (ripgrep) not found in PATH.\n" +
-      "  memtree's code-search tools require ripgrep at runtime.\n" +
-      "  Install it before using memtree:\n" +
+    "ctx-tree: WARNING — `rg` (ripgrep) not found in PATH.\n" +
+      "  ctx-tree's code-search tools require ripgrep at runtime.\n" +
+      "  Install it before using ctx-tree:\n" +
       "    macOS:  brew install ripgrep\n" +
       "    Ubuntu: apt-get install ripgrep\n" +
       "    Arch:   pacman -S ripgrep\n" +
@@ -32,4 +32,4 @@ if (rg.status !== 0) {
   );
 }
 
-process.stdout.write("memtree: postinstall complete\n");
+process.stdout.write("ctx-tree: postinstall complete\n");

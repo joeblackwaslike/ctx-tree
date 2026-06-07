@@ -2,3 +2,20 @@ docs/agent-setup
 docs/_backlog.md
 docs/_handoff.md
 .worktrees/
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key
+
+# macOS / editor cruft
+.DS_Store
+ctx-tree.code-workspace
+
+# Tool state dirs
+.clawhip/
+.serena/
+node_modules
+website/build
+website/node_modules
+website/.docusaurus

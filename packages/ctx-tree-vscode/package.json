@@ -1,0 +1,35 @@
+{
+  "name": "ctx-tree-vscode",
+  "displayName": "ctx-tree",
+  "description": "Real-time property graph visualizer for the ctx-tree context store",
+  "version": "0.1.0",
+  "publisher": "joeblackwaslike",
+  "repository": "https://github.com/joeblackwaslike/ctx-tree",
+  "license": "MIT",
+  "engines": { "vscode": "^1.90.0" },
+  "categories": ["Visualization", "Other"],
+  "activationEvents": [],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "ctx-tree.openVisualizer",
+        "title": "Open Visualizer",
+        "category": "ctx-tree"
+      }
+    ]
+  },
+  "scripts": {
+    "copy-ui": "cp ../../mcp/src/visualize/ui.html media/ui.html",
+    "compile": "tsc -p tsconfig.json",
+    "build": "npm run copy-ui && npm run compile",
+    "package": "npm run build && vsce package",
+    "publish": "npm run build && vsce publish"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.90.0",
+    "@vscode/vsce": "^3.0.0",
+    "typescript": "^5.4.0"
+  }
+}

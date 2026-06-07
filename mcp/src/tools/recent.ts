@@ -1,16 +1,18 @@
-import type { Database } from 'bun:sqlite';
-import type { MemtreeNode, Filters } from '../store/types';
-import { buildFilterSQL } from './filters';
+import type { StoreBackend } from '../store/index.js';
+import type { CtxTreeNode, Filters, NodeKind } from '../store/types.js';
 
-export function getRecent(
-  db: Database,
+const CONTENT_KINDS: NodeKind[] = [
+  'file_chunk', 'tool_output', 'summary', 'note', 'observation', 'web_chunk',
+];
+
+export async function getRecent(
+  store: StoreBackend,
   since?: number,
   limit = 50,
   filters: Filters = {}
-): MemtreeNode[] {
-  const effectiveFilters: Filters = { ...filters, ...(since ? { since } : {}) };
-  const { where, params } = buildFilterSQL(effectiveFilters);
-  return db.query(`
-    SELECT * FROM nodes WHERE ${where} ORDER BY created_at DESC LIMIT ?
-  `).all(...params, limit) as MemtreeNode[];
+): Promise<CtxTreeNode[]> {
+  return store.getRecentNodes(since, limit, {
+    kind: CONTENT_KINDS,
+    ...filters,
+  });
 }

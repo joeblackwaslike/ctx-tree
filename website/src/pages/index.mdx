@@ -1,0 +1,99 @@
+---
+title: ctx-tree — Context rot, eliminated.
+description: ctx-tree intercepts every Claude Code tool call — native and MCP — and routes content through a persistent SQLite graph. Claude gets compact node references instead of raw data. 95–99% context reduction.
+---
+
+<div align="center">
+
+# 🌳 ctx-tree
+
+### Context rot, eliminated.
+
+*ctx-tree intercepts every Claude Code tool call — native and MCP — and routes content through a persistent SQLite graph. Claude gets compact node references instead of raw data. 95–99% context reduction. Knowledge accumulates across sessions.*
+
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/joeblackwaslike/ctx-tree/blob/main/LICENSE)
+[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey)](#development)
+[![Bun ≥1.1](https://img.shields.io/badge/requires-Bun%20%E2%89%A51.1-f472b6)](https://bun.sh)
+[![Built on mcp-exec](https://img.shields.io/badge/built%20on-mcp--exec-orange)](https://github.com/joeblackwaslike/mcp-exec)
+
+</div>
+
+---
+
+Your Claude session is doing real work — reading source files, grepping for symbols, fetching docs, spawning agents. And every single one of those tool calls is **dumping raw data straight into the context window.**
+
+By the time you're 60% through a complex task, the window is stuffed with file contents that already answered their question, grep output nobody needs anymore, and a web page from two subtasks ago. Claude starts forgetting the beginning. You lose the thread. The session dies before the work is done.
+
+**That's context rot. Every developer using Claude Code hits it. ctx-tree aims to eliminate it.**
+
+Every tool call — native *and* MCP — is intercepted by a hook, the result is stored in a persistent SQLite property graph, and Claude gets back a compact `nodeId` reference instead of raw bytes. The same file read next week costs zero tokens. It's already in the graph.
+
+---
+
+## Before / After
+
+| Operation | Without ctx-tree | With ctx-tree | Saved |
+| --------- | --------------- | ------------ | ----- |
+| Read file | ~4,200 tok | ~60 tok | **98.6%** |
+| Grep (8 files) | ~8,400 tok | ~160 tok | **98.1%** |
+| WebFetch | ~11,000 tok | ~110 tok | **99.0%** |
+| MCP tool | ~3,600 tok | ~70 tok | **98.1%** |
+
+Raw data never enters the context window — only compact `nodeId` references do. The graph stores the content; Claude recalls what it needs via `ctx_tree_compose`.
+
+---
+
+## Install
+
+```sh
+# Add the marketplace — one-time global setup
+/plugin marketplace add joeblackwaslike/agent-marketplace
+
+# Install ctx-tree — MCP server, all 9 hooks, skills configured automatically
+/plugin install ctx-tree@agent-marketplace
+```
+
+That's it. Start a new Claude Code session. Every tool call is already being intercepted.
+
+**Requirements:** macOS arm64 or Linux x64/arm64 · [Bun ≥1.1](https://bun.sh) · `rg ≥13`
+
+```sh
+brew install bun ripgrep          # macOS
+curl -fsSL https://bun.sh/install | bash && apt install ripgrep  # Linux
+```
+
+---
+
+## What you get
+
+**98–99% context reduction per operation.** Every read, search, and fetch that used to cost thousands of tokens now costs tens. Operations you've already run cost *nothing* — the graph remembers.
+
+**Zero configuration. Total interception.** Ten hooks fire automatically across every native Claude Code tool and every MCP tool you have installed. Nothing slips through. No per-project setup. No flags to flip.
+
+**Knowledge that outlasts the session.** Prior reads, searches, and web fetches are available next week via `ctx_tree_search` and `ctx_tree_compose`. The graph grows with every session. The context stays lean.
+
+---
+
+## How it works
+
+```mermaid
+flowchart TD
+    A["🔧 Tool call\nRead · Grep · WebFetch\nMonitor · Agent · MCP"] -->|"PreToolUse\nhook fires"| B["🚫 Native denied\nno raw data"]
+    B --> C["🌳 ctx_tree_*\nMCP tool runs"]
+    C --> D["💾 Node stored\nchunked + indexed"]
+    D --> E["📎 nodeId returned\n~60 tokens"]
+    E --> F["🎯 compose()\nfree recall"]
+    F -.->|"next session\nzero cost"| F
+```
+
+→ **[Interactive walkthrough — every node type, hook, pipeline, and search pattern](/how-it-works.html)**
+
+---
+
+## Explore the docs
+
+- **[Getting Started](/docs/getting-started)** — install, first session, verify it's working
+- **[MCP Tools](/docs/reference/mcp-tools)** — `ctx_tree_read`, `ctx_tree_grep`, `ctx_tree_compose`, and all 10 tools
+- **[Hooks](/docs/reference/hooks)** — all 10 hooks and what they intercept
+- **[Graph Schema](/docs/reference/graph-schema)** — node kinds, edge kinds, store layout
+- **[Design Spec](/docs/architecture/design-spec)** — full architecture document

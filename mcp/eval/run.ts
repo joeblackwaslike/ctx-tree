@@ -4,9 +4,10 @@ import { openDb, closeDb } from '../src/store/db';
 import { DEFAULT_CONFIG } from '../src/config';
 import { runSecurityCases } from './cases/security';
 import { runLatencyCases } from './cases/latency';
-import { memtreeCompose } from '../src/tools/compose';
+import { runSearchCases, runGracefulDegradationCases } from './cases/search';
+import { runRoutingCases } from './cases/routing';
 
-const DB_PATH = '/tmp/memtree-eval.db';
+const DB_PATH = '/tmp/ctx-tree-eval.db';
 const FIXTURE_DIR = join(import.meta.dir, 'fixtures', 'src');
 const FIXTURE_FILE = join(FIXTURE_DIR, 'math.ts');
 
@@ -35,19 +36,28 @@ async function main() {
       if (!r.passed) failed++;
     }
 
-    console.log('\n=== Schema Rejection ===');
-    try {
-      await memtreeCompose(db, { node_ids: ['x'], budget_tokens: 100, format: 'mixed' as any });
-      console.log('  ✗ compose format=mixed should have thrown');
-      failed++;
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
-      if (msg.includes('deferred to v1.1')) {
-        console.log('  ✓ compose format=mixed correctly rejected');
-      } else {
-        console.log(`  ✗ compose format=mixed threw wrong error: ${msg}`);
-        failed++;
-      }
+    console.log('\n=== Search Cases ===');
+    const searchResults = await runSearchCases(db);
+    for (const r of searchResults) {
+      const icon = r.passed ? '✓' : '✗';
+      console.log(`  ${icon} ${r.name}${r.error ? `: ${r.error}` : ''}`);
+      if (!r.passed) failed++;
+    }
+
+    console.log('\n=== Graceful Degradation ===');
+    const degradResults = await runGracefulDegradationCases(db);
+    for (const r of degradResults) {
+      const icon = r.passed ? '✓' : '✗';
+      console.log(`  ${icon} ${r.name}${r.error ? `: ${r.error}` : ''}`);
+      if (!r.passed) failed++;
+    }
+
+    console.log('\n=== Routing Cases ===');
+    const routingResults = await runRoutingCases(db, cfg);
+    for (const r of routingResults) {
+      const icon = r.passed ? '✓' : '✗';
+      console.log(`  ${icon} ${r.name}${r.error ? `: ${r.error}` : ''}`);
+      if (!r.passed) failed++;
     }
   } finally {
     closeDb(db);

@@ -1,6 +1,6 @@
 import type { Database } from 'bun:sqlite';
-import { memtreeRead } from '../../src/tools/read';
-import type { MemtreeConfig } from '../../src/store/types';
+import { ctxTreeRead } from '../../src/tools/read';
+import type { CtxTreeConfig } from '../../src/store/types';
 
 export interface LatencyResult {
   name: string;
@@ -23,18 +23,18 @@ async function measureMs(fn: () => Promise<void>, n: number): Promise<{ p50: num
 
 export async function runLatencyCases(
   db: Database,
-  config: MemtreeConfig,
+  config: CtxTreeConfig,
   fixturePath: string
 ): Promise<LatencyResult[]> {
-  await memtreeRead(db, config, { path: fixturePath, budget_tokens: 2000 });
+  await ctxTreeRead(db, config, { path: fixturePath, budget_tokens: 2000 });
 
   const { p50, p95 } = await measureMs(
-    () => memtreeRead(db, config, { path: fixturePath, budget_tokens: 2000 }),
+    () => ctxTreeRead(db, config, { path: fixturePath, budget_tokens: 2000 }),
     20
   );
 
   return [{
-    name: 'memtree.read cached p50',
+    name: 'ctx-tree.read cached p50',
     p50Ms: p50, p95Ms: p95,
     thresholdMs: 50,
     passed: p50 < 50,

@@ -1,0 +1,111 @@
+/* ctx-tree dark theme — matches docs/how-it-works.html palette */
+
+:root {
+  --ifm-color-primary: #38bdf8;
+  --ifm-color-primary-dark: #0ea5e9;
+  --ifm-color-primary-darker: #0284c7;
+  --ifm-color-primary-darkest: #0369a1;
+  --ifm-color-primary-light: #7dd3fc;
+  --ifm-color-primary-lighter: #bae6fd;
+  --ifm-color-primary-lightest: #e0f2fe;
+  --ifm-code-font-size: 95%;
+  --docusaurus-highlighted-code-line-bg: rgba(56, 189, 248, 0.1);
+}
+
+[data-theme='dark'] {
+  --ifm-color-primary: #38bdf8;
+  --ifm-color-primary-dark: #0ea5e9;
+  --ifm-color-primary-darker: #0284c7;
+  --ifm-color-primary-darkest: #0369a1;
+  --ifm-color-primary-light: #7dd3fc;
+  --ifm-color-primary-lighter: #bae6fd;
+  --ifm-color-primary-lightest: #e0f2fe;
+  --ifm-background-color: #080e1a;
+  --ifm-background-surface-color: #0f172a;
+  --ifm-navbar-background-color: #080e1a;
+  --ifm-footer-background-color: #080e1a;
+  --ifm-toc-border-color: #1e293b;
+  --ifm-color-emphasis-300: #334155;
+  --ifm-hr-border-color: #1e293b;
+  --docusaurus-highlighted-code-line-bg: rgba(56, 189, 248, 0.08);
+}
+
+/* Navbar border */
+[data-theme='dark'] .navbar {
+  border-bottom: 1px solid #1e293b;
+}
+
+/* Code blocks */
+[data-theme='dark'] pre,
+[data-theme='dark'] code {
+  background-color: #0f172a !important;
+}
+
+/* Tables */
+[data-theme='dark'] table {
+  border-color: #1e293b;
+}
+[data-theme='dark'] th {
+  background-color: #0f172a;
+  border-color: #1e293b;
+}
+[data-theme='dark'] td {
+  border-color: #1e293b;
+}
+
+/* Sidebar */
+[data-theme='dark'] .menu__link {
+  color: #94a3b8;
+}
+[data-theme='dark'] .menu__link:hover,
+[data-theme='dark'] .menu__link--active {
+  color: #38bdf8;
+}
+
+/* Hero gradient strip for homepage */
+.hero-strip {
+  background: linear-gradient(135deg, #080e1a 0%, #0f172a 50%, #080e1a 100%);
+  border-bottom: 1px solid #1e293b;
+  padding: 4rem 2rem;
+  text-align: center;
+}
+
+.hero-strip h1 {
+  font-size: 3rem;
+  font-weight: 700;
+  color: #e2e8f0;
+  margin-bottom: 0.5rem;
+}
+
+.hero-strip .tagline {
+  font-size: 1.4rem;
+  color: #38bdf8;
+  margin-bottom: 1rem;
+}
+
+.hero-strip .subtagline {
+  font-size: 1rem;
+  color: #64748b;
+  font-style: italic;
+}
+
+/* Badge row */
+.badge-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem;
+  margin: 1.5rem 0;
+}
+
+/* Savings table highlight */
+[data-theme='dark'] .savings-highlight td:last-child {
+  color: #4ade80;
+  font-weight: 600;
+}
+
+/* Admonition overrides */
+[data-theme='dark'] .alert {
+  background-color: #0f172a;
+  border-left-color: #38bdf8;
+}

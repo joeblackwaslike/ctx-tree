@@ -1,16 +1,19 @@
 {
-  "name": "@memtree/mcp",
+  "name": "@ctx-tree/mcp",
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "build": "bun build src/server.ts --target bun --outdir dist --external tree-sitter --external tree-sitter-typescript --external tree-sitter-javascript --external tree-sitter-python --external tree-sitter-rust --external tree-sitter-go --external tree-sitter-bash",
+    "build": "bun build src/server.ts --target bun --outdir dist --external tree-sitter --external tree-sitter-typescript --external tree-sitter-javascript --external tree-sitter-python --external tree-sitter-rust --external tree-sitter-go --external tree-sitter-bash && cp src/visualize/ui.html dist/ui.html",
     "postinstall": "bun run scripts/postinstall.ts",
     "test": "bun test",
     "dev": "bun run src/server.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.97.0",
     "@modelcontextprotocol/sdk": "^1.10.0",
+    "edgelite": "/Users/joe/github/joeblackwaslike/edgelite",
     "micromatch": "^4.0.8",
+    "openai": "^6.38.0",
     "tree-sitter": "^0.21.1",
     "tree-sitter-bash": "^0.21.0",
     "tree-sitter-go": "^0.21.0",
