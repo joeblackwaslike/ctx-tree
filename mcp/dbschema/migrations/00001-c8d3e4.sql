@@ -1,4 +1,8 @@
-CREATE EXTENSION IF NOT EXISTS pg_trgm;
+-- PGlite compatibility note: no CREATE EXTENSION required for this migration.
+-- TSVECTOR, to_tsvector(), plainto_tsquery(), ts_rank(), the @@ operator,
+-- GIN indexes, and plpgsql are all core PostgreSQL features included in
+-- PGlite's WASM build. pg_trgm is NOT used here (trigram similarity is a
+-- separate extension). pgvector is handled separately in 00002.
 CREATE TABLE nodes (
   id TEXT PRIMARY KEY,
   kind TEXT NOT NULL,

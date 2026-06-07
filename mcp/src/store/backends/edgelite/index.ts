@@ -399,6 +399,22 @@ class EdgeliteBackend implements StoreBackend {
     );
   }
 
+  async atomicBatchFilter(decisions: Array<{ id: string; action: 'prune' | 'promote' }>): Promise<void> {
+    // NOTE: Not atomic on this backend. edgelite exposes no public transaction
+    // API (Db only surfaces run/close/path; the pglite handle is internal), so
+    // we apply decisions sequentially — a mid-batch failure can leave partial
+    // writes. The SqliteBackend equivalent wraps these in db.transaction().
+    // Tracked by the edgelite "expose public transaction API" request + the
+    // ctx-tree follow-up to consume it. PGlite itself supports transactions.
+    for (const { id, action } of decisions) {
+      if (action === 'prune') {
+        await this.pruneNode(id);
+      } else {
+        await this.updateNodeStatus(id, 'live');
+      }
+    }
+  }
+
   async updateNodeSummary(id: string, summary: string): Promise<void> {
     await this.db.run(
       e.update(e.Node, (n) => ({

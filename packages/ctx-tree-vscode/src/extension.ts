@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import * as cp from 'child_process';
+import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -55,7 +56,7 @@ async function openVisualizer(ctx: vscode.ExtensionContext): Promise<void> {
     { enableScripts: true, retainContextWhenHidden: true }
   );
 
-  panel.webview.html = buildHtml(ctx, info.port);
+  panel.webview.html = buildHtml(ctx, panel.webview, info.port);
   activePanel = panel;
 
   panel.onDidDispose(() => {
@@ -112,13 +113,10 @@ async function startServer(cwd: string): Promise<VizInfo> {
   });
 }
 
-function buildHtml(ctx: vscode.ExtensionContext, port: number): string {
-  const uiPath = path.join(ctx.extensionPath, 'media', 'ui.html');
-  let html = fs.readFileSync(uiPath, 'utf8');
-
+export function patchHtml(html: string, nonce: string, d3Uri: string, port: number): string {
   const csp = [
     "default-src 'none'",
-    "script-src 'unsafe-inline' https://cdn.jsdelivr.net",
+    `script-src 'nonce-${nonce}'`,
     "style-src 'unsafe-inline'",
     `connect-src ws://127.0.0.1:${port} ws://localhost:${port}`,
     'img-src data:',
@@ -128,10 +126,33 @@ function buildHtml(ctx: vscode.ExtensionContext, port: number): string {
     '<head>',
     `<head>\n<meta http-equiv="Content-Security-Policy" content="${csp};">`
   );
+
+  // Replace CDN D3 URL with local vscode-resource URI
+  html = html.replace(
+    'https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js',
+    d3Uri
+  );
+
+  // Add nonce to all <script src=...> tags
+  html = html.replaceAll('<script src=', `<script nonce="${nonce}" src=`);
+
+  // Add nonce to all inline <script> blocks
+  html = html.replaceAll('<script>', `<script nonce="${nonce}">`);
+
+  // Inject WS URL global with nonce before </head>
   html = html.replace(
     '</head>',
-    `<script>globalThis.CTX_TREE_WS_URL='ws://127.0.0.1:${port}/api/events';</script>\n</head>`
+    `<script nonce="${nonce}">globalThis.CTX_TREE_WS_URL='ws://127.0.0.1:${port}/api/events';</script>\n</head>`
   );
 
   return html;
+}
+
+function buildHtml(ctx: vscode.ExtensionContext, webview: vscode.Webview, port: number): string {
+  const nonce = crypto.randomBytes(16).toString('hex');
+  const d3Uri = webview.asWebviewUri(
+    vscode.Uri.joinPath(ctx.extensionUri, 'media', 'd3.min.js')
+  ).toString();
+  const html = fs.readFileSync(path.join(ctx.extensionPath, 'media', 'ui.html'), 'utf8');
+  return patchHtml(html, nonce, d3Uri, port);
 }
