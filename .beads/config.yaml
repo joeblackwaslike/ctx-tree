@@ -52,3 +52,7 @@
 # - linear.api-key
 # - github.org
 # - github.repo
+
+# Use the shared Dolt server (~/.beads/shared-server, port 3308) rather than a
+# per-project server. Prevents per-project server drift. Matches agency-agents.
+dolt.shared-server: true
