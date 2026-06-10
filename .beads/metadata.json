@@ -2,7 +2,7 @@
   "database": "dolt",
   "backend": "dolt",
   "dolt_mode": "server",
-  "dolt_database": "memtree",
+  "dolt_database": "ctx_tree",
   "project_id": "830cf7bb-f717-496c-9c89-3ac85b71b0a5",
   "global_dolt_database": "beads_global"
 }
