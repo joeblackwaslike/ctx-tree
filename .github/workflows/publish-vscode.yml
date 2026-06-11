@@ -5,26 +5,58 @@ on:
     tags:
       - 'vscode-v*'
 
+# Platform-specific publishing: the extension bundles a `bun build --compile`
+# standalone binary, so each marketplace target needs its own .vsix containing the
+# matching native binary. bun cross-compiles every target from a single Linux runner.
 jobs:
   publish:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - vsce_target: darwin-arm64
+            bun_target: bun-darwin-arm64
+          - vsce_target: darwin-x64
+            bun_target: bun-darwin-x64
+          - vsce_target: linux-x64
+            bun_target: bun-linux-x64
+          - vsce_target: linux-arm64
+            bun_target: bun-linux-arm64
+          - vsce_target: win32-x64
+            bun_target: bun-windows-x64
     steps:
       - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
 
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
 
-      - name: Install dependencies
+      - name: Install extension dependencies
         working-directory: packages/ctx-tree-vscode
         run: npm ci
 
-      - name: Build
+      - name: Copy webview UI assets
         working-directory: packages/ctx-tree-vscode
-        run: npm run build
+        run: npm run copy-ui
 
-      - name: Publish to VS Code Marketplace
+      # bun appends .exe automatically for the windows target, matching the
+      # `ctx-tree.exe` name the extension looks for on win32.
+      - name: Cross-compile ctx-tree binary (${{ matrix.bun_target }})
+        working-directory: packages/ctx-tree
+        run: |
+          mkdir -p ../ctx-tree-vscode/bin
+          bun build src/cli.ts --compile --target=${{ matrix.bun_target }} \
+            --outfile ../ctx-tree-vscode/bin/ctx-tree
+
+      - name: Compile extension
         working-directory: packages/ctx-tree-vscode
-        run: npx vsce publish --pat ${{ secrets.VSCE_PAT }}
+        run: npm run compile
+
+      - name: Publish ${{ matrix.vsce_target }} to VS Code Marketplace
+        working-directory: packages/ctx-tree-vscode
+        run: npx vsce publish --target ${{ matrix.vsce_target }} --pat ${{ secrets.VSCE_PAT }}
