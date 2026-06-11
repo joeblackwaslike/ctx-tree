@@ -1,5 +1,5 @@
 {
-  "name": "@joeblackwaslike2/ctx-tree",
+  "name": "@ctx-tree/cli",
   "version": "0.1.0",
   "description": "CLI for the ctx-tree context store — visualize, inspect, and manage your AI session graph",
   "type": "module",
