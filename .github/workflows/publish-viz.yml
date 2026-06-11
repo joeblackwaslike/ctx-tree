@@ -3,7 +3,8 @@ name: Publish ctx-tree to npm
 on:
   push:
     tags:
-      - 'v*'
+      # v0.1.0, v1.2.3 — but NOT vscode-v* (the bare `v*` glob matched those too)
+      - 'v[0-9]*'
 
 jobs:
   publish:
