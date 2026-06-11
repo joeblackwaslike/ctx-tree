@@ -26784,7 +26784,7 @@ class StdioServerTransport {
 import { execSync as execSync2 } from "child_process";
 import { mkdirSync as mkdirSync5, chmodSync, unlinkSync, existsSync as existsSync3 } from "fs";
 import * as net from "net";
-import { join as join8 } from "path";
+import { join as join7 } from "path";
 
 // src/store/index.ts
 import path3 from "path";
@@ -27133,7 +27133,7 @@ function getEdgesFrom(db, srcId) {
 // src/tools/filters.ts
 function buildFilterSQL(filters = {}, tableAlias = "") {
   if (tableAlias && !/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(tableAlias)) {
-    throw new Error(`Invalid tableAlias: ${tableAlias}`);
+    throw new McpError(ErrorCode.InvalidParams, `Invalid tableAlias: ${tableAlias}`);
   }
   if (filters.session_id && filters.metadata?.session_id) {
     throw new McpError(ErrorCode.InvalidParams, "filters.session_id and filters.metadata.session_id cannot both be set");
@@ -27240,6 +27240,18 @@ class SqliteBackend {
   async pruneNode(id) {
     pruneNode(this.db, id);
   }
+  async atomicBatchFilter(decisions) {
+    if (decisions.length === 0)
+      return;
+    const prune = this.db.prepare(`UPDATE nodes SET status = 'pruned', content = '', updated_at = ? WHERE id = ?`);
+    const promote = this.db.prepare(`UPDATE nodes SET status = 'live', updated_at = ? WHERE id = ?`);
+    const now = Date.now();
+    this.db.transaction(() => {
+      for (const { id, action } of decisions) {
+        (action === "prune" ? prune : promote).run(now, id);
+      }
+    })();
+  }
   async updateNodeSummary(id, summary) {
     this.db.run("UPDATE nodes SET summary = ?, updated_at = ? WHERE id = ?", summary, Date.now(), id);
   }
@@ -27278,12 +27290,15 @@ class SqliteBackend {
       }
       embeddingModelCache.set(this.db, normalizedModel);
     }
-    const { where, params } = buildFilterSQL(filters);
+    if (!Number.isFinite(limit) || limit < 1)
+      throw new Error(`Invalid limit: ${limit}`);
+    const { where, params } = buildFilterSQL(filters, "n");
     const queryFloat = new Float32Array(vector);
     const rows = this.db.query(`
       SELECT v.id, v.embedding FROM nodes_vec v
       JOIN nodes n ON v.id = n.id
       WHERE ${where}
+      LIMIT ${Math.min(Math.max(limit * 20, 500), 5000)}
     `).all(...params);
     if (rows.length === 0)
       return [];
@@ -27295,7 +27310,8 @@ class SqliteBackend {
         normA += queryFloat[i2] * queryFloat[i2];
         normB += stored[i2] * stored[i2];
       }
-      return { id: row.id, sim: dot / (Math.sqrt(normA) * Math.sqrt(normB)) };
+      const denom = Math.sqrt(normA) * Math.sqrt(normB);
+      return { id: row.id, sim: !isFinite(denom) || denom === 0 ? 0 : dot / denom };
     });
     scored.sort((a, b) => b.sim - a.sim);
     const topIds = scored.slice(0, limit).map((r) => r.id);
@@ -27460,6 +27476,12 @@ class SqliteBackend {
   }
   async markNodeStatusPruned(id, now) {
     this.db.run(`UPDATE nodes SET status='pruned', updated_at=? WHERE id=?`, now, id);
+  }
+  async atomicPruneAndSupersede(pruneId, keepId, now) {
+    this.db.transaction(() => {
+      this.db.run(`UPDATE nodes SET status='pruned', updated_at=? WHERE id=?`, now, pruneId);
+      insertEdge(this.db, { src_id: keepId, dst_id: pruneId, kind: "supersedes" });
+    })();
   }
   async getNodesNeedingSummarization(charThreshold, limit) {
     return this.db.query(`
@@ -33844,6 +33866,15 @@ class EdgeliteBackend {
       set: { status: "pruned", content: "", updated_at: Date.now() }
     })));
   }
+  async atomicBatchFilter(decisions) {
+    for (const { id, action } of decisions) {
+      if (action === "prune") {
+        await this.pruneNode(id);
+      } else {
+        await this.updateNodeStatus(id, "live");
+      }
+    }
+  }
   async updateNodeSummary(id, summary) {
     await this.db.run(edgelite_default.update(edgelite_default.Node, (n4) => ({
       filter: edgelite_default.op(n4.id, "=", id),
@@ -34119,6 +34150,10 @@ class EdgeliteBackend {
   async markNodeStatusPruned(id, _now) {
     return this.pruneNode(id);
   }
+  async atomicPruneAndSupersede(pruneId, keepId, _now) {
+    await this.pruneNode(pruneId);
+    await this.insertEdge({ src_id: keepId, dst_id: pruneId, kind: "supersedes" });
+  }
   async getNodesNeedingSummarization(charThreshold, limit) {
     const rows = await this.db.pglite.query(`SELECT id, content, source_uri FROM nodes
        WHERE status = 'live'
@@ -34281,18 +34316,20 @@ async function runFilterWalker(store, config2) {
   const pending = await store.getPendingNodes(BATCH_SIZE);
   if (pending.length === 0)
     return;
+  const decisions = [];
   for (const node of pending) {
     if (node.original_bytes < config2.capture.filterMinSize) {
-      await store.pruneNode(node.id);
+      decisions.push({ id: node.id, action: "prune" });
       continue;
     }
     const existing = await store.getNodeByContentHash(node.content_hash);
     if (existing && existing.id !== node.id && existing.status === "live") {
-      await store.pruneNode(node.id);
+      decisions.push({ id: node.id, action: "prune" });
       continue;
     }
-    await store.updateNodeStatus(node.id, "live");
+    decisions.push({ id: node.id, action: "promote" });
   }
+  await store.atomicBatchFilter(decisions);
 }
 
 // src/walkers/staleness.ts
@@ -34336,11 +34373,11 @@ function runEmbeddingWalker(store, config2, provider) {
     return;
   if (inFlight)
     return;
+  inFlight = true;
   const batchSize = config2.walkers.embeddingBatchSize;
   store.getPendingEmbeddingNodes(batchSize).then((rows) => {
     if (rows.length === 0)
       return;
-    inFlight = true;
     const texts = rows.map((r2) => r2.content);
     return provider.embed(texts).then((vectors) => {
       const now = Date.now();
@@ -34371,38 +34408,38 @@ function runSummarizerWalker(store, config2, provider) {
     return;
   const charThreshold = Math.max(500, config2.walkers.summarizerSubtreeThreshold * CHAR_THRESHOLD_MULTIPLIER);
   const batchSize = 10;
+  inFlight2 = true;
   store.getNodesNeedingSummarization(charThreshold, batchSize).then((rows) => {
-    if (rows.length === 0)
-      return;
-    inFlight2 = true;
-    let pending = rows.length;
-    for (const row of rows) {
-      provider.summarize(row.content, row.source_uri ?? undefined).then((summary) => {
-        return store.updateNodeSummary(row.id, summary);
-      }).catch((e2) => {
-        process.stderr.write(`ctx-tree summarizer error: ${e2}
-`);
-      }).finally(() => {
-        pending--;
-        if (pending === 0)
-          inFlight2 = false;
-      });
+    if (rows.length === 0) {
+      return Promise.resolve();
     }
+    const promises = rows.map((row) => provider.summarize(row.content, row.source_uri ?? undefined).then((summary) => store.updateNodeSummary(row.id, summary)).catch((e2) => {
+      process.stderr.write(`ctx-tree summarizer error: ${e2}
+`);
+    }));
+    return Promise.all(promises);
   }).catch((e2) => {
     process.stderr.write(`ctx-tree summarizer error: ${e2}
 `);
+  }).finally(() => {
+    inFlight2 = false;
   });
 }
 
 // src/walkers/dedupe.ts
 function cosineSimilarity(a2, b4) {
+  if (a2.length !== b4.length)
+    return 0;
   let dot = 0, normA = 0, normB = 0;
   for (let i3 = 0;i3 < a2.length; i3++) {
     dot += a2[i3] * b4[i3];
     normA += a2[i3] * a2[i3];
     normB += b4[i3] * b4[i3];
   }
-  return dot / (Math.sqrt(normA) * Math.sqrt(normB));
+  const denom = Math.sqrt(normA) * Math.sqrt(normB);
+  if (!isFinite(denom) || denom === 0)
+    return 0;
+  return dot / denom;
 }
 async function runDedupeWalker(store, _config) {
   const pairs = await store.getDedupeCandidatePairs();
@@ -34416,8 +34453,7 @@ async function runDedupeWalker(store, _config) {
     if (sim > 0.95) {
       const keepId = pair.ts1 >= pair.ts2 ? pair.id1 : pair.id2;
       const pruneId = pair.ts1 >= pair.ts2 ? pair.id2 : pair.id1;
-      await store.markNodeStatusPruned(pruneId, now);
-      await store.insertEdge({ src_id: keepId, dst_id: pruneId, kind: "supersedes" });
+      await store.atomicPruneAndSupersede(pruneId, keepId, now);
     }
   }
 }
@@ -34483,6 +34519,8 @@ async function searchKeyword(store, query, limit = 20, filters = {}) {
   return { nodes };
 }
 async function searchSemantic(store, config2, provider, query, limit = 20, filters = {}) {
+  if (!query.trim())
+    return { nodes: [] };
   if (!provider) {
     throw new McpError(ErrorCode.InvalidParams, "semantic search requires an embedding provider");
   }
@@ -34491,6 +34529,8 @@ async function searchSemantic(store, config2, provider, query, limit = 20, filte
   return { nodes };
 }
 async function searchHybrid(store, config2, provider, query, limit = 20, filters = {}) {
+  if (!query.trim())
+    return { nodes: [] };
   if (!provider) {
     throw new McpError(ErrorCode.InvalidParams, "hybrid search requires an embedding provider");
   }
@@ -35132,10 +35172,13 @@ function budgetContent(text, budget) {
 import { createHash as createHash5 } from "crypto";
 var DEFAULT_TIMEOUT_MS = 30000;
 var PREVIEW_CHARS = 500;
-async function ctxTreeMonitor(store, _config, params) {
+async function ctxTreeMonitor(store, config2, params) {
   const { command, timeout_ms = DEFAULT_TIMEOUT_MS, cwd } = params;
   if (!command || typeof command !== "string") {
     throw new McpError(ErrorCode.InvalidParams, '"command" is required and must be a string');
+  }
+  if (!config2.trustedExecution) {
+    throw new McpError(ErrorCode.InvalidParams, "ctx_tree_monitor requires trustedExecution: true in config. Set it in your ctx-tree config to enable this tool.");
   }
   const sourceUri = `cmd://${createHash5("sha256").update(command).digest("hex").slice(0, 16)}`;
   let output;
@@ -35238,6 +35281,12 @@ import { exec } from "child_process";
 import { promisify } from "util";
 import { createHash as createHash7 } from "crypto";
 var execAsync = promisify(exec);
+function truncateToBytes(str, maxB) {
+  if (Buffer.byteLength(str, "utf8") <= maxB)
+    return str;
+  const buf = Buffer.from(str, "utf8").subarray(0, maxB);
+  return new TextDecoder("utf-8", { fatal: false }).decode(buf);
+}
 async function ctxTreeBash(store, config2, params) {
   const { command, budget_tokens = 2000 } = params;
   if (shouldDropBashCommand(command)) {
@@ -35252,7 +35301,8 @@ async function ctxTreeBash(store, config2, params) {
   try {
     const result = await execAsync(command, {
       encoding: "utf8",
-      maxBuffer: 100 * 1024 * 1024
+      maxBuffer: 10 * 1024 * 1024,
+      timeout: 30000
     });
     rawStdout = result.stdout;
     rawStderr = result.stderr;
@@ -35267,26 +35317,16 @@ async function ctxTreeBash(store, config2, params) {
   const maxBytes = config2.capture.maxBytes;
   const charBudget = budget_tokens * 4;
   let truncated = false;
-  let truncatedStdout = redactedStdout;
   const originalBytes = Buffer.byteLength(redactedStdout, "utf8");
-  if (originalBytes > maxBytes) {
-    let low = 0, high = truncatedStdout.length;
-    while (low < high) {
-      const mid = Math.floor((low + high + 1) / 2);
-      if (Buffer.byteLength(truncatedStdout.slice(0, mid), "utf8") <= maxBytes) {
-        low = mid;
-      } else {
-        high = mid - 1;
-      }
-    }
-    truncatedStdout = truncatedStdout.slice(0, low);
+  let truncatedStdout = truncateToBytes(redactedStdout, maxBytes);
+  if (truncatedStdout.length < redactedStdout.length)
     truncated = true;
-  }
   if (truncatedStdout.length > charBudget) {
     truncatedStdout = truncatedStdout.slice(0, charBudget);
     truncated = true;
   }
-  const content = truncatedStdout || redactedStderr;
+  const truncatedStderr = truncateToBytes(redactedStderr, maxBytes);
+  const content = truncatedStdout || truncatedStderr;
   const nodeId = ulid2();
   if (content.length >= config2.capture.filterMinSize) {
     const commandHash = createHash7("sha256").update(command).digest("hex").slice(0, 8);
@@ -35307,7 +35347,7 @@ async function ctxTreeBash(store, config2, params) {
   return {
     nodeId,
     stdout: truncatedStdout,
-    stderr: redactedStderr,
+    stderr: truncatedStderr,
     exit_code,
     truncated
   };
@@ -35316,9 +35356,422 @@ async function ctxTreeBash(store, config2, params) {
 // src/tools/visualize.ts
 import { spawnSync as spawnSync2 } from "child_process";
 
-// src/visualize/server.ts
-import { readFileSync as readFileSync5 } from "fs";
-import { join as join4 } from "path";
+// src/visualize/ui.html
+var ui_default = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>ctx-tree viz</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: #080e1a; color: #e2e8f0;
+  font-family: 'SF Mono', 'Fira Code', monospace; font-size: 13px;
+  height: 100vh; display: flex; flex-direction: column; overflow: hidden;
+}
+/* \u2500\u2500 Toolbar \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 */
+#toolbar {
+  background: #1e293b; padding: 7px 12px;
+  display: flex; align-items: center; gap: 8px;
+  border-bottom: 1px solid #334155; flex-shrink: 0;
+}
+.logo { color: #38bdf8; font-weight: bold; font-size: 14px; margin-right: 4px; }
+.tab {
+  background: #0f172a; color: #64748b;
+  border: none; border-radius: 4px;
+  padding: 4px 12px; cursor: pointer;
+  font-family: inherit; font-size: 12px; transition: background .15s;
+}
+.tab.active { background: #38bdf8; color: #0d1b2e; font-weight: bold; }
+.tab:hover:not(.active) { background: #1e293b; color: #94a3b8; }
+.filter-select {
+  background: #0f172a; color: #94a3b8;
+  border: 1px solid #334155; border-radius: 4px;
+  padding: 3px 8px; font-family: inherit; font-size: 11px;
+}
+#ws-status { margin-left: auto; font-size: 11px; }
+.live { color: #22c55e; }
+.disconnected { color: #ef4444; }
+.reconnect-btn {
+  background: #38bdf8; color: #0d1b2e;
+  border: none; border-radius: 3px;
+  padding: 2px 8px; cursor: pointer;
+  font-family: inherit; font-size: 10px; margin-left: 6px;
+}
+/* \u2500\u2500 Layout \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 */
+#main { display: flex; flex: 1; overflow: hidden; }
+#view-area { flex: 1; overflow: hidden; position: relative; }
+#detail-panel {
+  width: 260px; background: #111827;
+  border-left: 1px solid #1e293b;
+  overflow-y: auto; padding: 12px; flex-shrink: 0;
+}
+/* \u2500\u2500 Graph view \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 */
+#graph-view { width: 100%; height: 100%; }
+#graph-view svg { width: 100%; height: 100%; }
+/* \u2500\u2500 Timeline view \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 */
+#timeline-view { padding: 16px; overflow-y: auto; height: 100%; }
+.tl-row { margin-bottom: 18px; }
+.tl-label {
+  color: #64748b; font-size: 10px;
+  text-transform: uppercase; letter-spacing: .05em; margin-bottom: 4px;
+}
+.tl-track {
+  position: relative; height: 26px;
+  background: #0f172a; border-radius: 4px;
+}
+.tl-dot {
+  position: absolute; top: 50%; transform: translate(-50%,-50%);
+  width: 10px; height: 10px; border-radius: 50%; cursor: pointer;
+  transition: transform .1s;
+}
+.tl-dot:hover { transform: translate(-50%,-50%) scale(1.5); }
+/* \u2500\u2500 Feed view \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 */
+#feed-view { padding: 8px 12px; overflow-y: auto; height: 100%; }
+.feed-line { padding: 1px 0; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.op-insert { color: #22c55e; }
+.op-update { color: #fbbf24; }
+.op-delete { color: #ef4444; }
+/* \u2500\u2500 Detail panel \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 */
+.d-kind {
+  font-size: 11px; font-weight: bold;
+  padding: 3px 8px; border-radius: 3px;
+  display: inline-block; margin-bottom: 10px;
+}
+.d-field { margin-bottom: 8px; }
+.d-label {
+  color: #475569; font-size: 10px;
+  text-transform: uppercase; letter-spacing: .05em; margin-bottom: 2px;
+}
+.d-value { color: #e2e8f0; word-break: break-all; font-size: 12px; }
+.d-content {
+  background: #0f172a; border-radius: 4px; padding: 8px;
+  color: #94a3b8; font-size: 11px; line-height: 1.5;
+  white-space: pre-wrap; max-height: 220px; overflow-y: auto;
+}
+.d-edge-out { color: #38bdf8; font-size: 11px; cursor: pointer; }
+.d-edge-out:hover, .d-edge-in:hover { text-decoration: underline; }
+.d-edge-in { color: #64748b; font-size: 11px; cursor: pointer; }
+.empty-panel { color: #1e293b; text-align: center; margin-top: 48px; font-size: 12px; }
+</style>
+</head>
+<body>
+
+<div id="toolbar">
+  <span class="logo">\uD83C\uDF33 ctx-tree</span>
+  <button class="tab active" onclick="switchView('graph',this)">Graph</button>
+  <button class="tab" onclick="switchView('timeline',this)">Timeline</button>
+  <button class="tab" onclick="switchView('feed',this)">Feed</button>
+  <select class="filter-select" id="f-kind" onchange="applyFilters()">
+    <option value="">kind: all</option>
+    <option value="session">session</option>
+    <option value="file_chunk">file_chunk</option>
+    <option value="tool_output">tool_output</option>
+    <option value="web_chunk">web_chunk</option>
+    <option value="prompt">prompt</option>
+    <option value="thinking">thinking</option>
+    <option value="response">response</option>
+    <option value="note">note</option>
+    <option value="observation">observation</option>
+    <option value="summary">summary</option>
+  </select>
+  <select class="filter-select" id="f-status" onchange="applyFilters()">
+    <option value="">status: active</option>
+    <option value="live">live</option>
+    <option value="stale">stale</option>
+    <option value="superseded">superseded</option>
+    <option value="pruned">pruned</option>
+  </select>
+  <span id="ws-status"><span class="disconnected">\u25CB connecting\u2026</span></span>
+</div>
+
+<div id="main">
+  <div id="view-area">
+    <div id="graph-view"></div>
+    <div id="timeline-view" style="display:none"></div>
+    <div id="feed-view" style="display:none"></div>
+  </div>
+  <div id="detail-panel"><div class="empty-panel">Click a node<br>to inspect it</div></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+<script>
+// \u2500\u2500 Constants \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+const KIND_COLOR = {
+  session:'#a78bfa', file_chunk:'#38bdf8', tool_output:'#fb923c',
+  summary:'#fbbf24', note:'#4ade80', observation:'#4ade80',
+  web_chunk:'#f472b6', prompt:'#e2e8f0', thinking:'#64748b', response:'#60a5fa',
+};
+const EDGE_COLOR = {
+  derived_from:'#475569', references:'#38bdf8', summarizes:'#fbbf24',
+  supersedes:'#ef4444', follows:'#a78bfa',
+};
+function nodeColor(d) { return KIND_COLOR[d.kind] ?? '#64748b'; }
+function nodeR(d) { return d.kind === 'session' ? 11 : d.kind === 'response' || d.kind === 'file_chunk' ? 7 : 5; }
+
+// \u2500\u2500 State \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+const nodeMap = new Map();  // id \u2192 node
+let edgeArr = [];
+let feedLines = [];
+let currentView = 'graph';
+let retryTimer = null;
+
+// \u2500\u2500 D3 Graph \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+let svg, g, simulation;
+
+function initGraph() {
+  const el = document.getElementById('graph-view');
+  const w = el.clientWidth || window.innerWidth - 260;
+  const h = el.clientHeight || window.innerHeight - 48;
+
+  svg = d3.select('#graph-view').append('svg');
+
+  const defs = svg.append('defs');
+  Object.entries(EDGE_COLOR).forEach(([kind, color]) => {
+    defs.append('marker').attr('id','arr-'+kind)
+      .attr('viewBox','0 -4 8 8').attr('refX',14).attr('refY',0)
+      .attr('markerWidth',5).attr('markerHeight',5).attr('orient','auto')
+      .append('path').attr('d','M0,-4L8,0L0,4').attr('fill',color).attr('opacity',.5);
+  });
+
+  g = svg.append('g');
+  svg.call(d3.zoom().scaleExtent([0.1,4]).on('zoom', e => g.attr('transform', e.transform)));
+
+  simulation = d3.forceSimulation()
+    .force('link', d3.forceLink().id(d => d.id).distance(70))
+    .force('charge', d3.forceManyBody().strength(-150))
+    .force('center', d3.forceCenter(w/2, h/2))
+    .force('collision', d3.forceCollide(d => nodeR(d) + 4));
+}
+
+function getFilters() {
+  return {
+    kind: document.getElementById('f-kind').value,
+    status: document.getElementById('f-status').value,
+  };
+}
+
+function visibleNodes() {
+  const { kind, status } = getFilters();
+  return [...nodeMap.values()].filter(n => {
+    if (kind && n.kind !== kind) return false;
+    if (status) return n.status === status;
+    return n.status !== 'pruned';
+  });
+}
+
+function renderGraph() {
+  if (!svg) initGraph();
+  const vn = visibleNodes();
+  const vnIds = new Set(vn.map(n => n.id));
+  const ve = edgeArr.filter(e => vnIds.has(e.src_id) && vnIds.has(e.dst_id));
+
+  const link = g.selectAll('line.lnk')
+    .data(ve, d => \`\${d.src_id}|\${d.dst_id}|\${d.kind}\`)
+    .join(
+      en => en.append('line').attr('class','lnk')
+        .attr('stroke', d => EDGE_COLOR[d.kind] ?? '#334155')
+        .attr('stroke-width',1).attr('stroke-opacity',.35)
+        .attr('marker-end', d => \`url(#arr-\${d.kind})\`),
+      up => up, ex => ex.remove()
+    );
+
+  const node = g.selectAll('circle.nd')
+    .data(vn, d => d.id)
+    .join(
+      en => en.append('circle').attr('class','nd')
+        .attr('r', nodeR).attr('fill', nodeColor)
+        .attr('stroke','#080e1a').attr('stroke-width',1.5)
+        .attr('cursor','pointer')
+        .on('click', (_, d) => showDetail(d))
+        .call(d3.drag()
+          .on('start',(e,d) => { if(!e.active) simulation.alphaTarget(.3).restart(); d.fx=d.x; d.fy=d.y; })
+          .on('drag', (e,d) => { d.fx=e.x; d.fy=e.y; })
+          .on('end',  (e,d) => { if(!e.active) simulation.alphaTarget(0); d.fx=null; d.fy=null; }))
+        .each(function(d) { d3.select(this).append('title').text(\`\${d.kind}\\n\${d.source_uri ?? d.id}\`); }),
+      up => up.attr('fill', nodeColor).attr('r', nodeR),
+      ex => ex.remove()
+    );
+
+  const simLinks = ve.map(e => ({ ...e, source: e.src_id, target: e.dst_id }));
+  simulation.nodes(vn);
+  simulation.force('link').links(simLinks);
+  simulation.alpha(0.1).restart();
+
+  simulation.on('tick', () => {
+    link.attr('x1',d=>d.source.x).attr('y1',d=>d.source.y)
+        .attr('x2',d=>d.target.x).attr('y2',d=>d.target.y);
+    node.attr('cx',d=>d.x).attr('cy',d=>d.y);
+  });
+}
+
+function pulseNode(id) {
+  if (!g) return;
+  g.selectAll('circle.nd').filter(d => d.id === id)
+    .transition().duration(150).attr('r', d => nodeR(d)*2).attr('opacity',.5)
+    .transition().duration(600).attr('r', nodeR).attr('opacity',1);
+}
+
+// \u2500\u2500 Timeline \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+function renderTimeline() {
+  const el = document.getElementById('timeline-view');
+  el.innerHTML = '';
+  const vn = visibleNodes().sort((a,b) => a.created_at - b.created_at);
+  if (!vn.length) { el.innerHTML = '<div style="color:#1e293b;text-align:center;margin-top:40px">No nodes match current filters</div>'; return; }
+
+  const byKind = {};
+  vn.forEach(n => (byKind[n.kind] = byKind[n.kind] ?? []).push(n));
+  const minT = vn[0].created_at, maxT = vn[vn.length-1].created_at, range = maxT - minT || 1;
+
+  Object.entries(byKind).sort().forEach(([kind, nodes]) => {
+    const row = document.createElement('div'); row.className = 'tl-row';
+    const lbl = document.createElement('div'); lbl.className = 'tl-label'; lbl.textContent = kind;
+    const track = document.createElement('div'); track.className = 'tl-track';
+    nodes.forEach(n => {
+      const pct = ((n.created_at - minT) / range * 92 + 3);
+      const dot = document.createElement('div');
+      dot.className = 'tl-dot';
+      dot.style.cssText = \`left:\${pct}%;background:\${KIND_COLOR[kind]??'#64748b'}\`;
+      dot.title = n.source_uri ?? n.id;
+      dot.onclick = () => showDetail(n);
+      track.appendChild(dot);
+    });
+    row.appendChild(lbl); row.appendChild(track);
+    el.appendChild(row);
+  });
+}
+
+// \u2500\u2500 Feed \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+function addFeedLine(op, table, id, data) {
+  const ts = new Date().toTimeString().slice(0,8);
+  const sym = op === 'insert' ? '+' : op === 'update' ? '~' : '-';
+  const label = data ? \`\${data.kind??''} \${(data.source_uri??id).slice(0,70)}\` : id.slice(0,60);
+  feedLines.unshift({ op, ts, sym, label });
+  if (feedLines.length > 500) feedLines.length = 500;
+  if (currentView === 'feed') renderFeed();
+}
+
+function renderFeed() {
+  const el = document.getElementById('feed-view');
+  el.innerHTML = feedLines.map(l =>
+    \`<div class="feed-line op-\${l.op}">[\${l.ts}] \${l.sym} \${l.op.padEnd(6)} \${l.label}</div>\`
+  ).join('');
+}
+
+// \u2500\u2500 Detail panel \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+function showDetail(node) {
+  const color = KIND_COLOR[node.kind] ?? '#64748b';
+  let meta = {};
+  try { meta = JSON.parse(node.metadata || '{}'); } catch {}
+  const outE = edgeArr.filter(e => e.src_id === node.id);
+  const inE  = edgeArr.filter(e => e.dst_id === node.id);
+  const ts = t => new Date(t).toLocaleString();
+  const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+  document.getElementById('detail-panel').innerHTML = \`
+    <span class="d-kind" style="background:\${color}22;color:\${color}">\${node.kind}</span>
+    <div class="d-field"><div class="d-label">ID</div><div class="d-value" style="font-size:10px">\${node.id}</div></div>
+    \${node.source_uri ? \`<div class="d-field"><div class="d-label">Source</div><div class="d-value">\${esc(node.source_uri)}</div></div>\` : ''}
+    <div class="d-field"><div class="d-label">Status</div>
+      <div class="d-value" style="color:\${node.status==='live'?'#22c55e':'#94a3b8'}">\${node.status}</div></div>
+    <div class="d-field"><div class="d-label">Created</div><div class="d-value">\${ts(node.created_at)}</div></div>
+    \${Object.entries(meta).filter(([,v])=>v!=null&&v!=='').map(([k,v])=>
+      \`<div class="d-field"><div class="d-label">\${esc(k)}</div><div class="d-value">\${esc(String(v).slice(0,120))}</div></div>\`).join('')}
+    \${node.content ? \`<div class="d-field"><div class="d-label">Content</div>
+      <div class="d-content">\${esc(node.content.slice(0,600))}\${node.content.length>600?'\\n\u2026':''}</div></div>\` : ''}
+    \${outE.length ? \`<div class="d-field"><div class="d-label">Out (\${outE.length})</div>\${
+      outE.map(e=>\`<div class="d-edge-out" onclick="fetchAndShow('\${e.dst_id}')">\u2192 \${e.kind} \${e.dst_id.slice(0,14)}\u2026</div>\`).join('')}</div>\` : ''}
+    \${inE.length  ? \`<div class="d-field"><div class="d-label">In (\${inE.length})</div>\${
+      inE.map(e=>\`<div class="d-edge-in" onclick="fetchAndShow('\${e.src_id}')">\u2190 \${e.kind} \${e.src_id.slice(0,14)}\u2026</div>\`).join('')}</div>\` : ''}
+  \`;
+}
+
+async function fetchAndShow(id) {
+  if (nodeMap.has(id)) { showDetail(nodeMap.get(id)); return; }
+  const r = await fetch(\`/api/node/\${id}\`);
+  if (r.ok) showDetail(await r.json());
+}
+
+// \u2500\u2500 View switching \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+function switchView(view, btn) {
+  currentView = view;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('graph-view').style.display    = view==='graph'    ? 'block' : 'none';
+  document.getElementById('timeline-view').style.display = view==='timeline' ? 'block' : 'none';
+  document.getElementById('feed-view').style.display     = view==='feed'     ? 'block' : 'none';
+  if (view === 'graph')    renderGraph();
+  if (view === 'timeline') renderTimeline();
+  if (view === 'feed')     renderFeed();
+}
+
+function applyFilters() {
+  if (currentView === 'graph')    renderGraph();
+  if (currentView === 'timeline') renderTimeline();
+}
+
+// \u2500\u2500 WebSocket \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+function connect() {
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const ws = new WebSocket(globalThis.CTX_TREE_WS_URL || \`\${proto}//\${location.host}/api/events\`);
+
+  ws.onopen = () => {
+    document.getElementById('ws-status').innerHTML = '<span class="live">\u25CF live</span>';
+    if (retryTimer) { clearInterval(retryTimer); retryTimer = null; }
+  };
+
+  ws.onmessage = ev => {
+    const msg = JSON.parse(ev.data);
+
+    if (msg.op === 'snapshot') {
+      nodeMap.clear(); edgeArr.length = 0;
+      msg.nodes.forEach(n => nodeMap.set(n.id, n));
+      edgeArr.push(...msg.edges);
+      renderGraph();
+      if (currentView === 'timeline') renderTimeline();
+      return;
+    }
+
+    if (msg.op === 'insert' || msg.op === 'update') {
+      if (msg.table === 'nodes') {
+        nodeMap.set(msg.id, msg.data);
+        if (currentView === 'graph') { renderGraph(); pulseNode(msg.id); }
+        if (currentView === 'timeline') renderTimeline();
+      } else {
+        edgeArr.push(msg.data);
+        if (currentView === 'graph') renderGraph();
+      }
+      addFeedLine(msg.op, msg.table, msg.id, msg.data);
+      return;
+    }
+
+    if (msg.op === 'delete') {
+      if (msg.table === 'nodes') nodeMap.delete(msg.id);
+      else {
+        const [src,dst,kind] = msg.id.split(':');
+        const i = edgeArr.findIndex(e => e.src_id===src && e.dst_id===dst && e.kind===kind);
+        if (i >= 0) edgeArr.splice(i, 1);
+      }
+      if (currentView === 'graph')    renderGraph();
+      if (currentView === 'timeline') renderTimeline();
+      addFeedLine('delete', msg.table, msg.id, null);
+    }
+  };
+
+  ws.onclose = () => {
+    document.getElementById('ws-status').innerHTML =
+      '<span class="disconnected">\u25CB disconnected <button class="reconnect-btn" onclick="connect()">retry</button></span>';
+    if (!retryTimer) retryTimer = setInterval(connect, 3000);
+  };
+
+  ws.onerror = () => ws.close();
+}
+
+connect();
+</script>
+</body>
+</html>
+`;
 
 // src/visualize/watcher.ts
 class DbWatcher {
@@ -35424,7 +35877,7 @@ class VisualizeServer {
     this.host = options.host ?? "127.0.0.1";
     this.port = options.port ?? 7777;
     this.watcher = new DbWatcher(db);
-    this.ui = readFileSync5(join4(import.meta.dir, "ui.html"), "utf8");
+    this.ui = ui_default;
   }
   async start() {
     if (this.started)
@@ -42864,7 +43317,8 @@ function loadProviders(config2) {
         embedding = new OllamaEmbeddingProvider(config2.embeddingModel);
       }
     } catch (err2) {
-      process.stderr.write(`ctx-tree: embedding provider unavailable: ${err2}
+      const msg = String(err2).replace(/sk-[A-Za-z0-9_-]{10,}/g, "sk-***");
+      process.stderr.write(`ctx-tree: embedding provider unavailable: ${msg}
 `);
       embedding = null;
     }
@@ -42880,7 +43334,8 @@ function loadProviders(config2) {
         summarizer = new OllamaSummarizerProvider(config2.summarizerModel);
       }
     } catch (err2) {
-      process.stderr.write(`ctx-tree: summarizer provider unavailable: ${err2}
+      const msg = String(err2).replace(/sk-[A-Za-z0-9_-]{10,}/g, "sk-***");
+      process.stderr.write(`ctx-tree: summarizer provider unavailable: ${msg}
 `);
       summarizer = null;
     }
@@ -43015,33 +43470,23 @@ function drainRing() {
 async function processPayloadAsync(store, config2, payload) {
   const capture = config2.capture;
   if (payload.tool === "Read" && capture.read === false) {
-    process.stderr.write(`[ctx-tree/ingest] dropped: read capture disabled
-`);
     return;
   }
   if (payload.tool === "Grep" && capture.grep === false) {
-    process.stderr.write(`[ctx-tree/ingest] dropped: grep capture disabled
-`);
     return;
   }
   if (payload.tool === "Bash" && capture.bash === false) {
-    process.stderr.write(`[ctx-tree/ingest] dropped: bash capture disabled
-`);
     return;
   }
   if (payload.tool === "Read" || payload.tool === "Grep") {
     const filePath = payload.input["path"];
     if (typeof filePath === "string" && shouldDropPath(filePath, capture.pathDenylistExtra)) {
-      process.stderr.write(`[ctx-tree/ingest] dropped: path on denylist: ${filePath}
-`);
       return;
     }
   }
   if (payload.tool === "Bash") {
     const cmd = payload.input["command"] ?? payload.input["cmd"];
     if (typeof cmd === "string" && shouldDropBashCommand(cmd)) {
-      process.stderr.write(`[ctx-tree/ingest] dropped: bash command blocked
-`);
       return;
     }
   }
@@ -43051,14 +43496,10 @@ async function processPayloadAsync(store, config2, payload) {
   }
   const minSize = capture.filterMinSize ?? 50;
   if (content.length < minSize) {
-    process.stderr.write(`[ctx-tree/ingest] dropped: content too small (${content.length} < ${minSize})
-`);
     return;
   }
   const key = dedupKey(payload);
   if (isDeduped(key)) {
-    process.stderr.write(`[ctx-tree/ingest] dropped: duplicate within dedup window
-`);
     return;
   }
   let gitignored = false;
@@ -43154,8 +43595,8 @@ for (const bin of ["jq", "socat"]) {
   }
 }
 var projectHash = computeProjectHash(process.env.CTX_TREE_CWD ?? process.cwd());
-var storeDir = join8(process.env.HOME ?? "/tmp", ".ctx-tree", projectHash);
-var dbPath = join8(storeDir, "store.db");
+var storeDir = join7(process.env.HOME ?? "/tmp", ".ctx-tree", projectHash);
+var dbPath = join7(storeDir, "store.db");
 mkdirSync5(storeDir, { recursive: true, mode: 448 });
 var config2 = loadConfig(process.env.CTX_TREE_CWD ?? process.cwd());
 var store = await createBackend(config2.backend ?? { kind: "sqlite" }, dbPath);
@@ -43164,7 +43605,7 @@ registerProject(process.env.CTX_TREE_CWD ?? process.cwd(), projectHash);
 var { embedding, summarizer: _summarizer } = loadProviders(config2);
 var walkers = new WalkerCoordinator;
 walkers.start(store, config2, embedding, _summarizer);
-var ingestSockPath = join8(storeDir, "ingest.sock");
+var ingestSockPath = join7(storeDir, "ingest.sock");
 if (existsSync3(ingestSockPath)) {
   try {
     unlinkSync(ingestSockPath);

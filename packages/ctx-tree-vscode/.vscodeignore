@@ -3,3 +3,8 @@
 src/**
 tsconfig.json
 .vscodeignore
+.gitignore
+bunfig.toml
+test-preload.ts
+package-lock.json
+**/*.map

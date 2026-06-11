@@ -1,6 +1,7 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import type { Database } from 'bun:sqlite';
+// Embed the visualizer UI at build time so `bun build --compile` bakes it into the
+// standalone binary — at runtime there is no ui.html sitting next to the entrypoint.
+import uiHtml from './ui.html' with { type: 'text' };
 import type { CtxTreeNode, CtxTreeEdge } from '../store/types.js';
 import { DbWatcher } from './watcher.js';
 
@@ -30,7 +31,7 @@ export class VisualizeServer {
     this.host = options.host ?? '127.0.0.1';
     this.port = options.port ?? 7777;
     this.watcher = new DbWatcher(db);
-    this.ui = readFileSync(join(import.meta.dir, 'ui.html'), 'utf8');
+    this.ui = uiHtml;
   }
 
   async start(): Promise<{ url: string; port: number }> {

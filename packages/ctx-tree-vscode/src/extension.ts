@@ -39,11 +39,11 @@ async function openVisualizer(ctx: vscode.ExtensionContext): Promise<void> {
 
   let info: VizInfo;
   try {
-    info = await startServer(root);
+    info = await startServer(root, ctx);
   } catch (err: unknown) {
     const e = err as NodeJS.ErrnoException;
     const msg = e.code === 'ENOENT'
-      ? 'ctx-tree not found on PATH — install it with: npm install -g ctx-tree'
+      ? 'ctx-tree binary not found. Try reinstalling the ctx-tree extension.'
       : `ctx-tree failed to start: ${e.message}`;
     vscode.window.showErrorMessage(msg);
     return;
@@ -84,8 +84,20 @@ function findCtxTreeBin(): Promise<string> {
   );
 }
 
-async function startServer(cwd: string): Promise<VizInfo> {
-  const bin = await findCtxTreeBin();
+function resolveBinary(ctx: vscode.ExtensionContext): Promise<string> {
+  const name = process.platform === 'win32' ? 'ctx-tree.exe' : 'ctx-tree';
+  const bundled = path.join(ctx.extensionPath, 'bin', name);
+  if (fs.existsSync(bundled)) {
+    // The .vsix is a zip and may drop the executable bit on extraction; restore it.
+    try { fs.chmodSync(bundled, 0o755); } catch { /* bit may already be set */ }
+    return Promise.resolve(bundled);
+  }
+  // Dev fallback: a globally-installed ctx-tree on PATH.
+  return findCtxTreeBin();
+}
+
+async function startServer(cwd: string, ctx: vscode.ExtensionContext): Promise<VizInfo> {
+  const bin = await resolveBinary(ctx);
   return new Promise((resolve, reject) => {
     const child = cp.spawn(
       bin,

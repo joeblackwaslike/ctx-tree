@@ -21,9 +21,10 @@
   },
   "scripts": {
     "copy-ui": "mkdir -p media && cp ../../mcp/src/visualize/ui.html media/ui.html && cp node_modules/d3/dist/d3.min.js media/d3.min.js",
+    "copy-bin": "mkdir -p bin && (cd ../ctx-tree && bun build src/cli.ts --compile --outfile ../ctx-tree-vscode/bin/ctx-tree) && chmod +x bin/ctx-tree",
     "compile": "tsc -p tsconfig.json",
     "test": "bun test src",
-    "build": "npm run copy-ui && npm run compile",
+    "build": "npm run copy-ui && npm run copy-bin && npm run compile",
     "package": "npm run build && vsce package",
     "publish": "npm run build && vsce publish"
   },

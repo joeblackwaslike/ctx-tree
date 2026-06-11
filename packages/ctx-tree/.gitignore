@@ -1,0 +1,2 @@
+# bun --compile temp artifacts (left in cwd during the extension's binary build)
+*.bun-build
