@@ -27497,7 +27497,7 @@ class SqliteBackend {
   }
 }
 
-// ../node_modules/.bun/edgelite@file+..+edgelite+4522eabb25b6f4c1/node_modules/edgelite/dist/db.js
+// ../node_modules/.bun/@edgelite+edgelite@0.2.0/node_modules/@edgelite/edgelite/dist/db.js
 import { mkdirSync as mkdirSync3 } from "fs";
 import path2 from "path";
 
@@ -33169,7 +33169,7 @@ u();
 var n3 = async (s4, t) => ({ emscriptenOpts: t, bundlePath: new URL("../vector.tar.gz", import.meta.url) });
 var o4 = { name: "pgvector", setup: n3 };
 
-// ../node_modules/.bun/edgelite@file+..+edgelite+4522eabb25b6f4c1/node_modules/edgelite/dist/errors.js
+// ../node_modules/.bun/@edgelite+edgelite@0.2.0/node_modules/@edgelite/edgelite/dist/errors.js
 class EdgeLiteRuntimeError extends Error {
   cause;
   constructor(message, cause) {
@@ -33193,7 +33193,7 @@ class EdgeLiteConcurrencyError extends Error {
   }
 }
 
-// ../node_modules/.bun/edgelite@file+..+edgelite+4522eabb25b6f4c1/node_modules/edgelite/dist/migration/apply.js
+// ../node_modules/.bun/@edgelite+edgelite@0.2.0/node_modules/@edgelite/edgelite/dist/migration/apply.js
 import { readFileSync, readdirSync } from "fs";
 import path from "path";
 async function applyMigrations(pglite, migrationsDir, options = {}) {
@@ -33239,7 +33239,7 @@ function getMigrationFiles(migrationsDir) {
   }
 }
 
-// ../node_modules/.bun/edgelite@file+..+edgelite+4522eabb25b6f4c1/node_modules/edgelite/dist/runtime/compile.js
+// ../node_modules/.bun/@edgelite+edgelite@0.2.0/node_modules/@edgelite/edgelite/dist/runtime/compile.js
 function compileQuery(query) {
   switch (query.kind) {
     case "select": {
@@ -33391,7 +33391,7 @@ function compileOp(expr, alias, parameters) {
   return `${col} ${expr.operator} $${parameters.length}`;
 }
 
-// ../node_modules/.bun/edgelite@file+..+edgelite+4522eabb25b6f4c1/node_modules/edgelite/dist/runtime/map.js
+// ../node_modules/.bun/@edgelite+edgelite@0.2.0/node_modules/@edgelite/edgelite/dist/runtime/map.js
 function mapResult(rows, shape) {
   if (!shape)
     return rows;
@@ -33419,12 +33419,12 @@ function mapRow(row, shape) {
   return result;
 }
 
-// ../node_modules/.bun/edgelite@file+..+edgelite+4522eabb25b6f4c1/node_modules/edgelite/dist/runtime/execute.js
+// ../node_modules/.bun/@edgelite+edgelite@0.2.0/node_modules/@edgelite/edgelite/dist/runtime/execute.js
 var ERROR_SQL_PREVIEW_LENGTH = 80;
-async function execute(pglite, query) {
+async function execute(executor, query) {
   const compiled = compileQuery(query);
   try {
-    const result = await pglite.query(compiled.sql, compiled.params);
+    const result = await executor.query(compiled.sql, compiled.params);
     if (query.kind === "count") {
       return result.rows[0]?.count ?? 0;
     }
@@ -33440,7 +33440,7 @@ async function execute(pglite, query) {
   }
 }
 
-// ../node_modules/.bun/edgelite@file+..+edgelite+4522eabb25b6f4c1/node_modules/edgelite/dist/db.js
+// ../node_modules/.bun/@edgelite+edgelite@0.2.0/node_modules/@edgelite/edgelite/dist/db.js
 async function openDb2(dbPath, schemaPath, options = {}) {
   mkdirSync3(dbPath, { recursive: true });
   const pglite = await Ue2.create(dbPath, {
@@ -33499,8 +33499,91 @@ class DbImpl {
       this.inFlight = false;
     }
   }
+  async transaction(fn2) {
+    if (this.inFlight) {
+      throw new EdgeLiteConcurrencyError("db.transaction() called while another query is in flight");
+    }
+    this.inFlight = true;
+    try {
+      return await this.pglite.transaction(async (tx) => {
+        const txDb = new TxDb(tx, this.path, { n: 0 });
+        try {
+          return await fn2(txDb);
+        } finally {
+          txDb.deactivate();
+        }
+      });
+    } finally {
+      this.inFlight = false;
+    }
+  }
   async close() {
+    if (this.inFlight) {
+      throw new EdgeLiteConcurrencyError("db.close() called while another query is in flight");
+    }
     await this.pglite.close();
+  }
+}
+
+class TxDb {
+  path;
+  tx;
+  counter;
+  inFlight = false;
+  active = true;
+  constructor(tx, path3, counter) {
+    this.tx = tx;
+    this.path = path3;
+    this.counter = counter;
+  }
+  deactivate() {
+    this.active = false;
+  }
+  async run(query) {
+    this.assertActive();
+    if (this.inFlight) {
+      throw new EdgeLiteConcurrencyError("db.run() called while another query is in flight");
+    }
+    this.inFlight = true;
+    try {
+      return await execute(this.tx, query);
+    } finally {
+      this.inFlight = false;
+    }
+  }
+  async transaction(fn2) {
+    this.assertActive();
+    if (this.inFlight) {
+      throw new EdgeLiteConcurrencyError("db.transaction() called while another query is in flight");
+    }
+    this.inFlight = true;
+    try {
+      const name2 = `edgelite_sp_${this.counter.n++}`;
+      await this.tx.query(`SAVEPOINT ${name2}`);
+      const child = new TxDb(this.tx, this.path, this.counter);
+      try {
+        const result = await fn2(child);
+        await this.tx.query(`RELEASE SAVEPOINT ${name2}`);
+        return result;
+      } catch (error2) {
+        try {
+          await this.tx.query(`ROLLBACK TO SAVEPOINT ${name2}`);
+        } catch {}
+        throw error2;
+      } finally {
+        child.deactivate();
+      }
+    } finally {
+      this.inFlight = false;
+    }
+  }
+  close() {
+    return Promise.reject(new EdgeLiteRuntimeError("Cannot close the database inside a transaction"));
+  }
+  assertActive() {
+    if (!this.active) {
+      throw new EdgeLiteRuntimeError("Transaction has already ended");
+    }
   }
 }
 // dbschema/edgelite.ts
@@ -33676,8 +33759,8 @@ class EdgeliteBackend {
     })));
     return rows.length > 0 ? toCtxTreeNode(rows[0]) : null;
   }
-  async updateNodeStatus(id, status) {
-    await this.db.run(edgelite_default.update(edgelite_default.Node, (n4) => ({
+  async updateNodeStatus(id, status, exec = this.db) {
+    await exec.run(edgelite_default.update(edgelite_default.Node, (n4) => ({
       filter: edgelite_default.op(n4.id, "=", id),
       set: { status, updated_at: Date.now() }
     })));
@@ -33860,20 +33943,22 @@ class EdgeliteBackend {
     const result = await this.db.pglite.query(`SELECT * FROM nodes WHERE status = 'superseded' AND updated_at < $1`, [olderThanMs]);
     return result.rows.map(toCtxTreeNode);
   }
-  async pruneNode(id) {
-    await this.db.run(edgelite_default.update(edgelite_default.Node, (n4) => ({
+  async pruneNode(id, exec = this.db) {
+    await exec.run(edgelite_default.update(edgelite_default.Node, (n4) => ({
       filter: edgelite_default.op(n4.id, "=", id),
       set: { status: "pruned", content: "", updated_at: Date.now() }
     })));
   }
   async atomicBatchFilter(decisions) {
-    for (const { id, action } of decisions) {
-      if (action === "prune") {
-        await this.pruneNode(id);
-      } else {
-        await this.updateNodeStatus(id, "live");
+    await this.db.transaction(async (tx) => {
+      for (const { id, action } of decisions) {
+        if (action === "prune") {
+          await this.pruneNode(id, tx);
+        } else {
+          await this.updateNodeStatus(id, "live", tx);
+        }
       }
-    }
+    });
   }
   async updateNodeSummary(id, summary) {
     await this.db.run(edgelite_default.update(edgelite_default.Node, (n4) => ({
@@ -33881,8 +33966,8 @@ class EdgeliteBackend {
       set: { summary, updated_at: Date.now() }
     })));
   }
-  async insertEdge(edge) {
-    await this.db.run(edgelite_default.insert(edgelite_default.Edge, {
+  async insertEdge(edge, exec = this.db) {
+    await exec.run(edgelite_default.insert(edgelite_default.Edge, {
       src_id: edge.src_id,
       dst_id: edge.dst_id,
       kind: edge.kind,
@@ -34151,8 +34236,10 @@ class EdgeliteBackend {
     return this.pruneNode(id);
   }
   async atomicPruneAndSupersede(pruneId, keepId, _now) {
-    await this.pruneNode(pruneId);
-    await this.insertEdge({ src_id: keepId, dst_id: pruneId, kind: "supersedes" });
+    await this.db.transaction(async (tx) => {
+      await this.pruneNode(pruneId, tx);
+      await this.insertEdge({ src_id: keepId, dst_id: pruneId, kind: "supersedes" }, tx);
+    });
   }
   async getNodesNeedingSummarization(charThreshold, limit) {
     const rows = await this.db.pglite.query(`SELECT id, content, source_uri FROM nodes

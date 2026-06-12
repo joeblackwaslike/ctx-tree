@@ -52,6 +52,71 @@ describe('updateNodeStatus', () => {
   });
 });
 
+describe('atomicBatchFilter (transactional)', () => {
+  test('empty decisions is a no-op', async () => {
+    await expect(store.atomicBatchFilter([])).resolves.toBeUndefined();
+  });
+
+  test('mixed batch applies all decisions atomically', async () => {
+    await store.insertNode('01el-batchp', {
+      parent_id: null, kind: 'note', source_uri: null,
+      content: 'prune me', content_hash: 'el-bp', status: 'pending',
+      mtime: 0, truncated: 0, original_bytes: 0, metadata: '{}',
+    });
+    await store.insertNode('01el-batchq', {
+      parent_id: null, kind: 'note', source_uri: null,
+      content: 'promote me', content_hash: 'el-bq', status: 'pending',
+      mtime: 0, truncated: 0, original_bytes: 0, metadata: '{}',
+    });
+
+    await store.atomicBatchFilter([
+      { id: '01el-batchp', action: 'prune' },
+      { id: '01el-batchq', action: 'promote' },
+    ]);
+
+    expect((await store.getNode('01el-batchp'))!.status).toBe('pruned');
+    expect((await store.getNode('01el-batchq'))!.status).toBe('live');
+  });
+});
+
+describe('atomicPruneAndSupersede (transactional)', () => {
+  test('prunes the node and links the supersedes edge atomically', async () => {
+    await store.insertNode('01el-prune', {
+      parent_id: null, kind: 'note', source_uri: null,
+      content: 'old', content_hash: 'el-old', status: 'live',
+      mtime: 0, truncated: 0, original_bytes: 0, metadata: '{}',
+    });
+    await store.insertNode('01el-keep', {
+      parent_id: null, kind: 'note', source_uri: null,
+      content: 'new', content_hash: 'el-new', status: 'live',
+      mtime: 0, truncated: 0, original_bytes: 0, metadata: '{}',
+    });
+
+    await store.atomicPruneAndSupersede('01el-prune', '01el-keep', Date.now());
+
+    expect((await store.getNode('01el-prune'))!.status).toBe('pruned');
+    const edges = await store.getEdgesFrom('01el-keep');
+    expect(edges.some((edge) => edge.dst_id === '01el-prune' && edge.kind === 'supersedes')).toBe(true);
+  });
+
+  test('rolls back the prune when the supersedes edge fails', async () => {
+    await store.insertNode('01el-rb', {
+      parent_id: null, kind: 'note', source_uri: null,
+      content: 'keep me live', content_hash: 'el-rb', status: 'live',
+      mtime: 0, truncated: 0, original_bytes: 0, metadata: '{}',
+    });
+
+    // keepId references a node that doesn't exist, so the supersedes edge violates
+    // the Edge.src foreign key. The whole transaction — including the prune — must
+    // roll back. On the old sequential (non-transactional) code the prune persisted.
+    await expect(
+      store.atomicPruneAndSupersede('01el-rb', '01el-missing', Date.now()),
+    ).rejects.toThrow();
+
+    expect((await store.getNode('01el-rb'))!.status).toBe('live');
+  });
+});
+
 describe('insertEdge + getEdgesFrom', () => {
   test('round-trip', async () => {
     await store.insertNode('01el-src', {

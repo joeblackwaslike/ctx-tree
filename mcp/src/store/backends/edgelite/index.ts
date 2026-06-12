@@ -1,5 +1,5 @@
-import { openDb } from 'edgelite';
-import type { Db } from 'edgelite';
+import { openDb } from '@edgelite/edgelite';
+import type { Db } from '@edgelite/edgelite';
 import e from '../../../../dbschema/edgelite.js';
 import type { StoreBackend, InsertNodeParams } from '../../interface.js';
 import type { CtxTreeNode, CtxTreeEdge, NodeStatus, EdgeKind, Filters } from '../../types.js';
@@ -141,8 +141,8 @@ class EdgeliteBackend implements StoreBackend {
     return rows.length > 0 ? toCtxTreeNode(rows[0]) : null;
   }
 
-  async updateNodeStatus(id: string, status: NodeStatus): Promise<void> {
-    await this.db.run(
+  async updateNodeStatus(id: string, status: NodeStatus, exec: Db = this.db): Promise<void> {
+    await exec.run(
       e.update(e.Node, (n) => ({
         filter: e.op(n.id, '=', id),
         set: { status, updated_at: Date.now() },
@@ -390,8 +390,8 @@ class EdgeliteBackend implements StoreBackend {
     return result.rows.map(toCtxTreeNode);
   }
 
-  async pruneNode(id: string): Promise<void> {
-    await this.db.run(
+  async pruneNode(id: string, exec: Db = this.db): Promise<void> {
+    await exec.run(
       e.update(e.Node, (n) => ({
         filter: e.op(n.id, '=', id),
         set: { status: 'pruned', content: '', updated_at: Date.now() },
@@ -400,19 +400,17 @@ class EdgeliteBackend implements StoreBackend {
   }
 
   async atomicBatchFilter(decisions: Array<{ id: string; action: 'prune' | 'promote' }>): Promise<void> {
-    // NOTE: Not atomic on this backend. edgelite exposes no public transaction
-    // API (Db only surfaces run/close/path; the pglite handle is internal), so
-    // we apply decisions sequentially — a mid-batch failure can leave partial
-    // writes. The SqliteBackend equivalent wraps these in db.transaction().
-    // Tracked by the edgelite "expose public transaction API" request + the
-    // ctx-tree follow-up to consume it. PGlite itself supports transactions.
-    for (const { id, action } of decisions) {
-      if (action === 'prune') {
-        await this.pruneNode(id);
-      } else {
-        await this.updateNodeStatus(id, 'live');
+    // Atomic via edgelite's transaction API: every prune/promote decision commits
+    // together, or the whole batch rolls back if any write fails mid-way.
+    await this.db.transaction(async (tx) => {
+      for (const { id, action } of decisions) {
+        if (action === 'prune') {
+          await this.pruneNode(id, tx);
+        } else {
+          await this.updateNodeStatus(id, 'live', tx);
+        }
       }
-    }
+    });
   }
 
   async updateNodeSummary(id: string, summary: string): Promise<void> {
@@ -426,8 +424,8 @@ class EdgeliteBackend implements StoreBackend {
 
   // ── Edge CRUD ───────────────────────────────────────────────────────────────
 
-  async insertEdge(edge: Omit<CtxTreeEdge, 'created_at'>): Promise<void> {
-    await this.db.run(
+  async insertEdge(edge: Omit<CtxTreeEdge, 'created_at'>, exec: Db = this.db): Promise<void> {
+    await exec.run(
       e.insert(e.Edge, {
         src_id: edge.src_id,
         dst_id: edge.dst_id,
@@ -806,10 +804,12 @@ class EdgeliteBackend implements StoreBackend {
   }
 
   async atomicPruneAndSupersede(pruneId: string, keepId: string, _now: number): Promise<void> {
-    // EdgeDB transactions are not yet wired in Phase 7; execute sequentially.
-    // getDedupeCandidatePairs() returns [] on this backend so this path is unreachable.
-    await this.pruneNode(pruneId);
-    await this.insertEdge({ src_id: keepId, dst_id: pruneId, kind: 'supersedes' });
+    // Atomic via edgelite's transaction API: the prune and the supersedes edge
+    // commit together, or roll back together if either write fails.
+    await this.db.transaction(async (tx) => {
+      await this.pruneNode(pruneId, tx);
+      await this.insertEdge({ src_id: keepId, dst_id: pruneId, kind: 'supersedes' }, tx);
+    });
   }
 
   // ── Summarizer walker ────────────────────────────────────────────────────────

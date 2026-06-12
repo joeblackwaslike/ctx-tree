@@ -11,7 +11,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.97.0",
     "@modelcontextprotocol/sdk": "^1.10.0",
-    "edgelite": "^0.1.0",
+    "@edgelite/edgelite": "^0.2.0",
     "micromatch": "^4.0.8",
     "openai": "^6.38.0",
     "tree-sitter": "^0.21.1",
