@@ -13,6 +13,9 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
+      # Serialize: the first target creates the extension + version on the Marketplace;
+      # running all targets in parallel races and the losers get "extension already exists".
+      max-parallel: 1
       matrix:
         include:
           - vsce_target: darwin-arm64
