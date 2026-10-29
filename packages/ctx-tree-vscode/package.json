@@ -24,9 +24,9 @@
     "copy-bin": "mkdir -p bin && (cd ../ctx-tree && bun build src/cli.ts --compile --outfile ../ctx-tree-vscode/bin/ctx-tree) && chmod +x bin/ctx-tree",
     "compile": "tsc -p tsconfig.json",
     "test": "bun test src",
-    "build": "npm run copy-ui && npm run copy-bin && npm run compile",
-    "package": "npm run build && vsce package",
-    "publish": "npm run build && vsce publish"
+    "build": "pnpm copy-ui && pnpm copy-bin && pnpm compile",
+    "package": "pnpm build && vsce package",
+    "publish": "pnpm build && vsce publish"
   },
   "devDependencies": {
     "d3": "^7",

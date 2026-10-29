@@ -35,17 +35,19 @@ jobs:
         with:
           bun-version: latest
 
+      - uses: pnpm/action-setup@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
 
       - name: Install extension dependencies
         working-directory: packages/ctx-tree-vscode
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Copy webview UI assets
         working-directory: packages/ctx-tree-vscode
-        run: npm run copy-ui
+        run: pnpm copy-ui
 
       # bun appends .exe automatically for the windows target, matching the
       # `ctx-tree.exe` name the extension looks for on win32.
@@ -58,8 +60,8 @@ jobs:
 
       - name: Compile extension
         working-directory: packages/ctx-tree-vscode
-        run: npm run compile
+        run: pnpm compile
 
       - name: Publish ${{ matrix.vsce_target }} to VS Code Marketplace
         working-directory: packages/ctx-tree-vscode
-        run: npx vsce publish --target ${{ matrix.vsce_target }} --pat ${{ secrets.VSCE_PAT }}
+        run: bunx vsce publish --no-dependencies --target ${{ matrix.vsce_target }} --pat ${{ secrets.VSCE_PAT }}

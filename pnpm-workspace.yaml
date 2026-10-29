@@ -1,0 +1,17 @@
+packages:
+  - 'mcp'
+  - 'packages/ctx-tree'
+  - 'packages/ctx-tree-vscode'
+
+allowBuilds:
+  # tree-sitter grammars ship prebuilt binaries; bun never ran their install scripts either
+  tree-sitter: false
+  tree-sitter-bash: false
+  tree-sitter-go: false
+  tree-sitter-javascript: false
+  tree-sitter-python: false
+  tree-sitter-rust: false
+  tree-sitter-typescript: false
+  # vsce publishes with --pat; neither signature verification nor the keychain is needed
+  '@vscode/vsce-sign': false
+  keytar: false
