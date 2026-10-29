@@ -202,7 +202,7 @@ ctx-tree is built on **[mcp-exec](https://github.com/joeblackwaslike/mcp-exec)**
 ```sh
 git clone https://github.com/joeblackwaslike/ctx-tree
 git config core.hooksPath .githooks   # auto-rebuilds dist on commit
-bun install
+pnpm install
 ```
 
 ---
